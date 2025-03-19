@@ -1,14 +1,14 @@
+rm(list = ls())
 library(tidyverse)
+library(glue)
 library(progressr)
 library(GetoptLong)
-library(ncaahoopR)
 library(readxl)
-library(fuzzyjoin)
+library(writexl)
 library(tictoc)
-library(foreach)
-library(doParallel)
+library(rvest)
+library(furrr)
 
-source(file.path("helper_functions.R"))
 # progressr info
 handlers(handler_pbcol(
     adjust = 1.0,
@@ -16,107 +16,243 @@ handlers(handler_pbcol(
     incomplete = function(s) cli::bg_cyan(cli::col_black(s))
 ))
 
-# can't do more than 2 or overwhelms the server
-my_cores <- 2
-myCluster <- makeCluster(my_cores, # number of cores to use
-    type = "PSOCK", outfile = ""
-)
-registerDoParallel(myCluster)
-
-# type of cluster
-num_seconds_to_sleep_between_teams <- 10
+# Set up parallel processing: adjust workers as needed.
+my_cores <- 4
+plan(multisession, workers = my_cores)
 message("Number of parallel workers: ", my_cores)
 
-# change this to change bracket years
-bracket_year <- str_split(Sys.Date(), pattern = "-", simplify = TRUE)[, 1]
+# Identify bracket year from system date (if relevant)
+start_year <- 2021 # for historical data
+bracket_year <- as.numeric(str_split(Sys.Date(), pattern = "-", simplify = TRUE)[, 1])
+message("Bracket year (from system date): ", bracket_year)
 
-# change this each year
-# REVIEW: Must get the seed list using the scraper for each year
-# read the seed placement data
-extract_text <- function(string) {
-    pattern <- "(?:\\.|\\d)\\s(.*?)\\s\\("
-    result <- str_match(string, pattern)
-    return(result[, 2])
+###############################################################################
+# SCRAPING FUNCTIONS (BartTorvik.com)
+###############################################################################
+
+# Function to scrape the conference assignment table for a given year.
+scrape_conf_assignments <- function(year) {
+    url <- glue::glue(
+        "https://barttorvik.com/tourneytime.php?year={year}&sort=7&conlimit=All",
+        year = year
+    )
+    message("Scraping conf assignments: ", url)
+
+    page <- read_html(url)
+    tbl_region <- page %>%
+        html_element("table") %>%
+        html_table(fill = TRUE)
+
+    final_tbl_region <- tbl_region %>%
+        mutate(
+            Year = year,
+            Region = factor(Region, levels = c("East", "Midwest", "South", "West"))
+        ) %>%
+        arrange(Region, Seed) %>%
+        mutate(across(
+            c(R64, R32, S16, E8, F4, F2, Champ),
+            ~ as.numeric(ifelse(as.character(.) == "✓", "1", as.character(.)))
+        ))
+    return(final_tbl_region)
 }
-seed_placement_cache <- suppressMessages(read_excel(file.path("data", bracket_year, "ncaa_tournament_seed_data_2023.xlsx"), col_names = FALSE) %>%
-    mutate(NCAA = extract_text(...1)) %>%
-    dplyr::select(NCAA) %>%
-    mutate(SEED = row_number()))
 
-# devtools::install_github("lbenz730/ncaahoopR")
+# Function to scrape the detailed BartTorvik data for a given year and region.
+scrape_bart_data <- function(year, region) {
+    # Use year minus one for the begin date to avoid issues in the URL.
+    url <- glue::glue(
+        "https://barttorvik.com/?year={year}",
+        "&sort=&hteam=&t2value=",
+        "&conlimit={region}",
+        "&state=All&begin={year_minus_one}1101",
+        "&end={year}0501",
+        "&top=0&revquad=0&quad=5&venue=All&type=All&mingames=0#",
+        year = year, region = region, year_minus_one = year - 1
+    )
+    message("Scraping Bart data: ", url)
 
-# A data frame for converting between team names from various sites.
-data("ids")
-# A data frame of team color hex codes, pulled from teamcolorcodes.com. Additional data coverage provided by
-data("ncaa_colors")
-# A data frame for converting between team names from various sites.
-data("dict")
+    page <- read_html(url)
+    tbl <- page %>%
+        html_element(xpath = '//*[@id="content"]//table') %>%
+        html_table()
 
-valid_teams <- ids
-team_to_id_mapping <- dict
+    # First row contains column names.
+    colnames_new <- tbl[1, ] %>% as.character()
+    colnames(tbl) <- colnames_new
 
-validated_teams_temp <- stringdist_join(seed_placement_cache, team_to_id_mapping,
-    by = "NCAA", # match based on team
-    mode = "left", # use left join
-    method = "jw", # use jw distance metric
-    max_dist = 0.5,
-    distance_col = "dist"
-) %>%
-    group_by(NCAA.x) %>%
-    slice_min(order_by = dist, n = 1, with_ties = FALSE) %>%
-    mutate(same_name = toupper(NCAA.x) == toupper(NCAA.y), .before = 1)
+    final_tbl <- tbl %>%
+        slice(-1) %>%
+        mutate(
+            Year = year,
+            Region = region,
+            .before = 1
+        ) %>%
+        # Remove duplicate tail rows if present.
+        anti_join(tbl %>% slice_tail(n = 1), by = join_by(
+            Rk, Team, Conf, G, Rec, AdjOE, AdjDE,
+            Barthag, `EFG%`, `EFGD%`, TOR, TORD, ORB, DRB, FTR, FTRD,
+            `2P%`, `2P%D`, `3P%`, `3P%D`, `3PR`, `3PRD`, `Adj T.`, WAB
+        )) %>%
+        mutate(
+            Rk = as.numeric(Rk),
+            G = as.numeric(G),
+            across(`AdjOE`:`WAB`, as.numeric),
+            # Use str_match to capture two groups:
+            #   group 1: the team name (non-greedy until the first run of spaces before a number)
+            #   group 2: the seed number
+            temp = str_match(Team, "^(.*?)\\s+(\\d+)\\s*seed"),
+            Team_clean = str_trim(temp[, 2]),
+            Seed_clean = as.numeric(temp[, 3])
+        ) %>%
+        select(-temp) %>%
+        mutate(
+            Team = Team_clean,
+            Seed = Seed_clean, .before = 5
+        ) %>%
+        select(-Team_clean, -Seed_clean)
 
-# might want to manually validate these matches
-validated_teams_temp %>% filter(!same_name)
+    return(final_tbl)
+}
 
-validated_teams <- validated_teams_temp %>%
-    mutate(TEAM = ESPN) %>%
-    ungroup() %>%
-    dplyr::select(-c(NCAA.x, NCAA.y, dist)) %>%
-    filter(!is.na(SEED)) %>%
-    mutate(SEED = as.integer(SEED)) %>%
-    # in case the website has a team in twice, which has happened
-    distinct()
+###############################################################################
+# UPDATE OR CREATE THE DATABASE OF SCRAPED DATA
+###############################################################################
 
-# add in the ESPN BPI data
-espn_bpi_data <- read_excel(file.path("data", bracket_year, qq("espn-bpi-@{bracket_year}.xlsx"))) %>%
-    dplyr::select(ESPN = TEAM, BPI, BPI_RANK)
+# Define file paths for combined data.
+bart_data_file <- file.path("data", "bart_data_all_years.xlsx")
+conf_assign_file <- file.path("data", "bart_conference_assignments_all_years.xlsx")
 
-# need to fuzzy join on ESPN name for espn_bpi_data
-validated_teams_with_bpi <- stringdist_join(validated_teams, espn_bpi_data,
-    by = "ESPN", # match based on team
-    mode = "left", # use left join
-    method = "jw", # use jw distance metric
-    max_dist = 0.5,
-    distance_col = "dist"
-) %>%
-    group_by(ESPN.x) %>%
-    slice_min(order_by = dist, n = 1, with_ties = FALSE) %>%
-    dplyr::select(TEAM, SEED, BPI, BPI_RANK, ESPN.x, ESPN.y, everything())
+# Read in previously scraped Bart data if available.
+if (file.exists(bart_data_file)) {
+    all_bart_data <- read_xlsx(bart_data_file) %>%
+        arrange(desc(Year))
+    message("Loaded existing Bart data from disk.")
+} else {
+    all_bart_data <- tibble()
+    message("No existing Bart data found. Starting fresh.")
+}
 
-# Scrape NCAA basketball tournament data using ncaahoopR, only use those in the tournament this year
-write_tsv(validated_teams_with_bpi, file.path("data", bracket_year, qq("validated_teams_with_bpi-@{bracket_year}.tsv")))
-teams <- validated_teams_with_bpi$TEAM
+# Read in previously scraped conference assignments if available.
+if (file.exists(conf_assign_file)) {
+    all_conf_assignments <- read_xlsx(conf_assign_file) %>%
+        arrange(desc(Year))
+    message("Loaded existing conference assignments from disk.")
+} else {
+    all_conf_assignments <- tibble()
+    message("No existing conference assignments found. Starting fresh.")
+}
 
-# Set the years to scrape
-years_seq_vec <- seq(2016, 2021, by = 1)
-years <- tibble(year = years_seq_vec) %>%
-    mutate(
-        end_season_year = year + 1,
-        season = str_c(year, substr(end_season_year, 3, 4), sep = "-")
+# Define the range of years you want to have in your database.
+# (Adjust the start year as appropriate for your data history.)
+years_to_check <- seq(start_year, bracket_year)
+
+# Identify which years are missing in the Bart data.
+existing_years <- unique(all_bart_data$Year)
+years_missing <- setdiff(years_to_check, existing_years)
+
+if (length(years_missing) > 0) {
+    message("Missing Bart data for years: ", paste(years_missing, collapse = ", "))
+    new_bart_data <- map_dfr(years_missing, function(year) {
+        regions <- c("East", "West", "Midwest", "South")
+        future_map_dfr(regions, function(region) {
+            tryCatch(
+                {
+                    scrape_bart_data(year, region)
+                },
+                error = function(e) {
+                    warning("Failed to scrape Bart data for year=", year, ", region=", region, ". Error: ", e)
+                    NULL
+                }
+            )
+        })
+    })
+    all_bart_data <- bind_rows(all_bart_data, new_bart_data) %>%
+        arrange(desc(Year))
+    write_xlsx(all_bart_data, bart_data_file)
+    message("Updated Bart data saved to disk.")
+} else {
+    message("All Bart data for years ", start_year, " to ", bracket_year, " are already scraped.")
+}
+
+# Repeat similar logic for conference assignments.
+existing_conf_years <- unique(all_conf_assignments$Year)
+conf_years_missing <- setdiff(years_to_check, existing_conf_years)
+
+if (length(conf_years_missing) > 0) {
+    message("Missing conference assignments for years: ", paste(conf_years_missing, collapse = ", "))
+    new_conf_assignments <- map_dfr(conf_years_missing, function(year) {
+        tryCatch(
+            {
+                scrape_conf_assignments(year)
+            },
+            error = function(e) {
+                warning("Failed to scrape conference assignments for year=", year, ". Error: ", e)
+                NULL
+            }
+        )
+    })
+    all_conf_assignments <- bind_rows(all_conf_assignments, new_conf_assignments) %>%
+        arrange(desc(Year))
+    write_xlsx(all_conf_assignments, conf_assign_file)
+    message("Updated conference assignments saved to disk.")
+} else {
+    message("All conference assignments for years ", start_year, " to ", bracket_year, " are already scraped.")
+}
+
+###############################################################################
+# BUILD THE BAYESIAN BRACKET SELECTOR DATA
+###############################################################################
+
+# Here we combine the Bart data with the conference assignments.
+# (Assuming that the Team names are consistent across datasets.)
+build_bayesian_bracket_selector <- function(bart_data, conf_assignments) {
+    # Merge by Year and Team.
+    # bart_data = all_bart_data; conf_assignments = all_conf_assignments
+    combined_data <- left_join(bart_data, conf_assignments,
+        by = c("Year", "Team", "Seed", "Region", "Conf")
     )
 
-tic()
-# with_progress(expr = {
-res <- get_game_info_loop(
-    teams,
-    years,
-    bracket_year,
-    validated_teams_with_bpi,
-    num_sec = num_seconds_to_sleep_between_teams
-)
-# })
-toc()
+    # Generate some priors
+    combined_data <- combined_data %>%
+        mutate(
+            # Experience_Index = 0.1 * R32 + 0.2 * S16 + 0.4 * E8 +
+            #     0.7 * F4 + 1.0 * F2 + 1.5 * Champ,
+            Upset_Factor = `3PR` * (sd(`3P%`) / mean(`3P%`, na.rm = TRUE)),
+            Turnover_Edge = TORD - TOR,
+            # Clutch Index Calculation
+            Clutch_Index = (0.1 * R32) + (0.2 * S16) + (0.4 * E8) +
+                (0.7 * F4) + (1.0 * F2) + (1.5 * Champ) +
+                (0.5 * Turnover_Edge) + (0.3 * FTR) +
+                (0.4 * (`EFG%` - `EFGD%`)),
 
-# plan(sequential)
-stopCluster(myCluster)
+            # 2) A weighted measure that centers AdjOE and AdjDE around ~100 and
+            #    also includes “Barthag” (Bart Torvik’s overall team power metric).
+            #    Feel free to tweak weights as desired.
+            combined_metric = 0.5 * (AdjOE - 100) - 0.5 * (AdjDE - 100) + 5 * (Barthag - 0.5),
+
+            # 3) Convert Barthag (which is like an expected win%) to log-odds.
+            #    This is often a convenient form for input into Bayesian models.
+            #    We add a tiny epsilon (1e-9) to avoid division-by-zero if Barthag is 1.0
+            barthag_logit = log((Barthag + 1e-9) / (1 - Barthag + 1e-9)),
+
+            # 4) Incorporate WAB (Wins Above Bubble) as a simple additive factor.
+            #    For instance, you could treat WAB as a “bonus” that shifts raw_strength upward.
+            #    Or combine it with other metrics in a formula.
+            overall_strength = (AdjOE - 100) - (AdjDE - 100) + WAB
+        )
+
+    conf_strength <- combined_data %>%
+        group_by(Conf) %>%
+        summarize(Conf_Strength = mean(R32, na.rm = TRUE), by = "Conf")
+    # In your full Bayesian model, you would use these columns to define your priors
+    # and then simulate each matchup accordingly.
+    return(combined_data %>% left_join(conf_strength, by = join_by(Conf)))
+}
+
+
+bayes_model_data <- build_bayesian_bracket_selector(all_bart_data, all_conf_assignments)
+skimr::skim(bayes_model_data)
+write_xlsx(bayes_model_data, file.path("data", "bayesian_model_data.xlsx"))
+message("Bayesian model data prepared and saved.")
+
+
+plan(sequential) # Reset to seque

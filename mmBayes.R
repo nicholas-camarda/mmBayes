@@ -1,262 +1,512 @@
+# -------------------------------------------------------------------
+# 1) Load and PREPARE your validated_teams_with_bpi data
+# -------------------------------------------------------------------
+rm(list = ls())
 library(tidyverse)
+library(ggrepel)
 library(rstan)
 library(future)
 library(progressr)
 library(rstanarm)
 library(GetoptLong)
 library(readxl)
-library(ncaahoopR)
+library(writexl)
 library(tictoc)
 library(pROC)
-library(fuzzyjoin)
+library(ggplot2)
 
-tic()
-source(file.path("helper_functions.R"))
-#' General procedure:
-# 1. Prepare the data: the data should include all the matchups in the tournament, with the necessary variables
-# (TEAM, opponent, home, game_id, season, BPI, BPI_RANK, SEED, FGM, FGA, FG_PCT, 3PTM, 3PTA, 3PT_PCT, FTM, FTA, FT_PCT, OREB,
-# DREB, REB, AST, STL, BLK, TO, PF, PTS).
+#' * Make sure to run load.R first! *
 
-# 2. Fit the model: use the stan_glm function to fit a logistic regression model to the data, with the won_boolean variable as
-# the response, and the other variables as predictors. Use the binomial() family to specify the logistic regression model.
-# Use the same prior specifications as in the provided code.
-
-# 3. Generate posterior predictive samples: use the posterior_predict function to generate posterior predictive samples from the model.
-# The output will be a matrix with one row per posterior predictive sample, and one column per observation (i.e., per game).
-
-# 4. Simulate the tournament: for each posterior predictive sample, simulate the tournament by randomly assigning winners for each matchup
-# based on the predicted probabilities of winning from the logistic regression model.
-
-# 5. Calculate the tournament probabilities: for each team, calculate the proportion of posterior predictive samples in which that
-# team wins the tournament.
-
-# 6. Identify the top 5 most likely brackets: for each posterior predictive sample, identify the bracket (i.e., the set of winners for
-# each matchup) that maximizes the total number of correct predictions. Keep track of the frequency of each bracket across all
-# posterior predictive samples, and identify the top 5 most likely brackets.
-
-# 7. Output the results: present the top 5 most likely brackets and their corresponding probabilities.
-
-
-# progressr info
-handlers(handler_pbcol(
-    adjust = 1.0,
-    complete = function(s) cli::bg_red(cli::col_black(s)),
-    incomplete = function(s) cli::bg_cyan(cli::col_black(s))
-))
-
-# STAN options
-my_cores <- 4
-num_chains <- my_cores
-options(mc.cores = my_cores)
-rstan_options(auto_write = FALSE)
-perform_variable_selection <- TRUE
-
-# change this for different bracket years; default is current year
+# Gets the bracket year
 bracket_year <- str_split(Sys.Date(), pattern = "-", simplify = TRUE)[, 1]
 
-all_team_cached_data_fn <- file.path("data", bracket_year, "all_team_cached_data.rds")
-dir.create(file.path("data", bracket_year), showWarnings = FALSE, recursive = TRUE)
+# Prior metrics
+metrics_to_use <- c(
+    "overall_strength", "barthag_logit", "AdjOE", "AdjDE", 
+    "Clutch_Index", "Conf_Strength", "Upset_Factor", "Turnover_Edge"
+)
 
-if (!file.exists(all_team_cached_data_fn)) {
-    message("Loading scraped data from cached folders [ generated from load.R ]...")
-    loaded_data <- tibble(name = dir(file.path("cache", bracket_year), full.names = TRUE)) %>%
-        mutate(
-            TEAM = dir(file.path("cache", bracket_year)),
-            data = map(name, .f = function(f) {
-                fns <- dir(f, full.names = TRUE, recursive = TRUE)
-                dat <- map(fns, .f = function(x) {
-                    res <- read_tsv(x, show_col_types = FALSE)
-                    return(res)
-                }) %>% bind_rows()
-                return(dat)
-            })
-        ) %>%
-        dplyr::select(-name)
+# Run regional simulations
+n_draws <- 100000
+sd_value <- 10
+priors_file <- sprintf("priors/priors_%s.rds", bracket_year)
+data_fn <- "data/bayesian_model_data.xlsx"
 
-    message("Writing scraped data to file...")
-    write_rds(x = loaded_data, file = all_team_cached_data_fn, compress = "gz")
-} else {
-    message("Loading scraped data from cached file...")
-    loaded_data <- read_rds(all_team_cached_data_fn)
-}
-message("Done!")
 
-##
-## get validated team set and merge with loaded data
-validated_team_set_df <- read_tsv(file.path("data", bracket_year, qq("validated_teams_with_bpi-@{bracket_year}.tsv")), show_col_types = FALSE)
-#####
+historical_data <- read_excel(data_fn) %>%
+    filter(Year != bracket_year) %>%
+    mutate(R64 = as.factor(if_else(R64 == 1, 1, 0)))
 
-merged_init_data <- inner_join(loaded_data, validated_team_set_df, by = "TEAM") %>%
-    dplyr::select(TEAM, BPI, BPI_RANK, SEED, data)
+data_init <- read_excel(data_fn) %>%
+    filter(Year == bracket_year, R64 > 0.5)
 
-#' inspect if there was something wrong with the merge and we lost teams
-stopifnot(merged_init_data %>% distinct(TEAM) %>% nrow() == nrow(res))
 
-message("Organizing full dataset...")
-all_data <- merged_init_data %>%
-    mutate(SEED = as.integer(SEED)) %>%
-    unnest(data) %>%
-    group_by(TEAM, opponent, home, game_id, season, won_boolean, BPI, BPI_RANK, SEED) %>%
-    summarise(
-        FGM = sum(FGM), # field goals made
-        FGA = sum(FGA), # field goals attempted
-        FG_PCT = mean(FGM / FGA), # FG percent
-        `3PTM` = sum(`3PTM`), # 3 point made
-        `3PTA` = sum(`3PTA`), # 3 point attempted
-        `3PT_PCT` = mean(`3PTM` / `3PTA`), # 3 point percent
-        FTM = sum(FTM), # free throws made
-        FTA = sum(FTA), # free throws attempted
-        FT_PCT = mean(FTM / FTA), # free throw percent
-        OREB = sum(OREB), # offensive rebound
-        DREB = sum(DREB), # defensive rebound
-        REB = sum(REB), # total rebounds
-        AST = sum(AST), # assists
-        STL = sum(STL), # steals
-        BLK = sum(BLK), # blocks
-        TO = sum(TO), # turn overs
-        PF = sum(PF), # personal fouls
-        PTS = sum(PTS), # team total points
-        .groups = "keep"
-    ) %>%
-    ungroup() %>%
-    arrange(TEAM, season)
+# -------------------------------------------------------------------
+# 2) Derive explicit bayesian priors
+# -------------------------------------------------------------------
+derive_explicit_priors <- function(historical_data) {
+    # Scale predictors for stability
+    # historical_data_scaled <- historical_data %>%
+    #     mutate(across(c(overall_strength, barthag_logit, AdjOE, AdjDE), scale)) # combined_metric,
 
-# separate the data out into training and testing data, to evaluate the performance of our model
-message("Splitting into training and testing data...")
-train_indices <- sample(seq_len(nrow(all_data)), size = 0.8 * nrow(all_data))
-train_data <- all_data[train_indices, ]
-test_data <- all_data[-train_indices, ]
-
-set.seed(1234)
-cached_model_fn <- file.path("model_cache", bracket_year, str_c(qq("training_model_cache-@{bracket_year}.rds")))
-dir.create(file.path("model_cache", bracket_year), showWarnings = FALSE, recursive = TRUE)
-
-if (!file.exists(cached_model_fn)) {
-    message("Fitting training model to evaluate performance...")
-    tic()
-    if (perform_variable_selection) {
-        message("Performing variable selection with correlation...")
-
-        numeric_data <- all_data[, sapply(all_data, is.numeric)]
-        cor_matrix <- cor(numeric_data[, !(names(numeric_data) %in% c("home", "game_id", "season", "won_boolean"))], use = "complete.obs")
-        all_variables <- colnames(cor_matrix)
-
-        #' function to identify pairs of variables with correlation higher than a given threshold and exclude one variable from each pair
-        exclude_highly_correlated <- function(cor_matrix, threshold = 0.7) {
-            correlated_pairs <- which(abs(cor_matrix) > threshold & cor_matrix != 1, arr.ind = TRUE)
-            exclude_vars <- unique(correlated_pairs[, 1])
-            return(colnames(cor_matrix)[exclude_vars])
-        }
-
-        excluded_vars <- exclude_highly_correlated(cor_matrix, 0.7)
-
-        #' @note for help creating the formula correctly, for any variable that starts with a number
-        add_backticks <- function(x) {
-            sapply(x, function(element) {
-                if (grepl("^[0-9]", element)) {
-                    paste0("`", element, "`")
-                } else {
-                    element
-                }
-            })
-        }
-
-        # Select top variables, create a formula
-        important_variables <- add_backticks(setdiff(all_variables, excluded_vars))
-        formula <- as.formula(paste("won_boolean ~", paste(important_variables, collapse = " + ")))
-
-        message("Fitting L1 LASSO regularized model to further select important variables...")
-        # Run LASSO L1 penalty regularized regression to further select important variables
-        model <- stan_glm(formula,
-            data = train_data,
-            family = binomial(),
-            prior = laplace(), # regularization
-            QR = FALSE,
-            cores = my_cores,
-            chains = num_chains
-        )
-    } else {
-        message("Using default important variables. Fitting model on training data...")
-        formula <- "won_boolean ~ TEAM + opponent + home + BPI_RANK + SEED + FG_PCT + `3PT_PCT` + FT_PCT + REB + AST + STL + BLK + TO + PF"
-        model <- stan_glm(
-            formula = formula,
-            family = binomial(),
-            data = train_data,
-            prior_intercept = normal(0, 2.5),
-            prior = normal(0, 2.5),
-            prior_aux = normal(0, 2.5),
-            QR = FALSE,
-            cores = my_cores,
-            chains = num_chains
-        )
-    }
-    toc()
-    write_rds(model, file = cached_model_fn, compress = "gz")
-} else {
-    message("Loading cached model...")
-    model <- read_rds(cached_model_fn)
-}
-message("Done!")
-
-# assess model performance
-posterior_predict_test <- posterior_predict(model, newdata = test_data)
-# calculate the predicted probabilities of winning for each game in the test dataset by taking the mean of the posterior predictive samples:
-predicted_probabilities <- colMeans(posterior_predict_test)
-
-# Create the ROC object
-roc_obj <- roc(test_data$won_boolean, predicted_probabilities)
-auroc <- auc(roc_obj)
-
-# Save the plot to a PNG file
-message("Writing performance file...")
-dir.create(file.path("performance", bracket_year), showWarnings = FALSE, recursive = TRUE)
-png(file.path("performance", bracket_year, qq("training_model-roc_curve-@{bracket_year}.png")), width = 800, height = 600)
-plot(roc_obj, main = "ROC Curve", xlab = "False Positive Rate", ylab = "True Positive Rate", col = "#1c61b6", lwd = 3)
-text(0.7, 0.3, paste("AUC =", round(auroc, 3)), cex = 1.2, col = "black")
-abline(0, 1, lty = 2, col = "gray")
-dev.off()
-message("Done!")
-
-# retrain the data on the full dataset after assessing performance
-cached_full_model_fn <- file.path("model_cache", bracket_year, str_c(qq("FINAL_model_cache-@{bracket_year}.rds")))
-if (!file.exists(cached_full_model_fn)) {
-    message("Fitting full model now...")
-    model_full <- stan_glm(formula,
-        data = all_data,
+    formula_input <- as.formula(paste("Champ ~", paste(metrics_to_use, collapse = " + "), "+ (1 | Conf)"))
+    model <- stan_glmer(
+        formula = formula_input,
+        data = historical_data,
         family = binomial(),
-        prior = laplace(),
-        seed = 1234,
-        QR = FALSE,
-        chains = 4,
-        cores = my_cores
+        prior = normal(0, 2.5),
+        prior_intercept = normal(0, 5),
+        chains = 4, iter = 4000, seed = 123
     )
-    write_rds(x = model_full, cached_full_model_fn, compress = "gz")
+    # Check convergence explicitly:
+    stan_summary <- summary(model)
+    rhat_values <- stan_summary[, "Rhat"]
+
+    if (any(rhat_values > 1.01, na.rm = TRUE)) {
+        warning("Rhat indicates convergence problems; consider increasing iterations or checking priors/data.")
+    } else {
+        message("All Rhats < 1.01: Good convergence.")
+    }
+
+    # Extract posterior summaries explicitly
+    posterior_summary <- summary(model, probs = c(0.025, 0.975))
+    priors <- posterior_summary[, c("mean", "sd")]
+    return(priors)
+}
+
+# Check if priors already exist for this year:
+if (file.exists(priors_file)) {
+    message("Loading existing priors for year: ", bracket_year)
+    priors <- readRDS(priors_file)
 } else {
-    message("Detected cached model. Loading full model...")
-    model_full <- read_rds(cached_full_model_fn)
-}
-message("Done!")
-
-# Generate posterior predictive samples
-# The posterior_samples output is a matrix with one row per posterior predictive sample and one column per observation (i.e., per game).
-posterior_samples <- posterior_predict(model_full, newdata = all_data)
-num_samples <- dim(posterior_samples)[1]
-
-
-# TODO: HELP HERE!!
-seeds_df <- all_data %>% distinct(TEAM, SEED)
-seeds <- seeds_df$SEED
-names(seeds) <- seeds_df$TEAM
-# Assuming the 'seeds' variable contains the team names and their seed placements
-initial_matchups_data <- generate_initial_matchups(seeds)
-
-brackets <- list()
-for (i in 1:num_samples) {
-    bracket <- simulate_tournament(posterior_samples[i, ], all_data)
-    brackets[[i]] <- bracket
+    message("Generating new priors for year: ", bracket_year)
+    priors <- derive_explicit_priors(historical_data)
+    dir.create("priors", showWarnings = FALSE) # ensure directory exists
+    saveRDS(priors, priors_file)
 }
 
-bracket_freq <- table(sapply(brackets, toString))
-top_5_brackets <- head(sort(bracket_freq, decreasing = TRUE), 5)
+# -------------------------------------------------------------------
+# 2) Compute a Composite Strength measure from many columns
+# -------------------------------------------------------------------
+# Here we take a set of “relevant” numeric columns (adjust as needed)
+compute_team_strength <- function(team) {
+    # List of columns to use in the composite strength. (Adjust as needed.)
+    # Up in front of script for easy access
+    available <- metrics_to_use[metrics_to_use %in% names(team)]
+    # Compute the composite as the mean of the available metrics (after converting to numeric)
+    composite <- mean(as.numeric(team[available]), na.rm = TRUE)
+    return(composite)
+}
 
-print(top_5_brackets)
+# -------------------------------------------------------------------
+# 3) Simulate a single matchup using a Bayesian draws approach
+#    (and compute credible intervals)
+# -------------------------------------------------------------------
+simulate_matchup <- function(teamA, teamB, round_name, matchup_number, priors, draws = 1000, sd = 10) {
+
+    # Compute composite strengths for each team from all available metrics.
+    strength_A <- compute_team_strength(teamA)
+    strength_B <- compute_team_strength(teamB)
+
+    # # Basic deterministic win probability from the logistic function:
+    # diff <- strength_A - strength_B
+    # win_prob_det <- 1 / (1 + exp(-diff / sd))
+
+    # # Now simulate draws to capture uncertainty:
+    # draws_A <- rnorm(draws, mean = strength_A, sd = sd)
+    # draws_B <- rnorm(draws, mean = strength_B, sd = sd)
+    # win_draws <- 1 / (1 + exp(-(draws_A - draws_B) / sd))
+    # win_prob_sim <- mean(win_draws)
+
+    # # Combine the deterministic and simulated win probabilities.
+    # # (For example, we take the average; you might choose a different combination rule.)
+    # win_prob_final <- (win_prob_det + win_prob_sim) / 2
+
+    # Explicit Bayesian predictive draws using priors
+    # When creating beta_draws, ensure consistent naming:
+    beta_names <- metrics_to_use
+    beta_means <- priors[beta_names, "mean"]
+    beta_sds <- priors[beta_names, "sd"]
+
+    beta_draws <- sapply(seq_along(beta_means), function(i) rnorm(draws, beta_means[i], beta_sds[i]))
+    colnames(beta_draws) <- beta_names
+
+    # Extract explicit intercept and random effect priors
+    intercept_mean <- priors["(Intercept)", "mean"]
+    intercept_sd <- priors["(Intercept)", "sd"]
+
+    conf_effect_mean_A <- priors[paste0("b[(Intercept) Conf:", teamA$Conf, "]"), "mean"]
+    conf_effect_sd_A <- priors[paste0("b[(Intercept) Conf:", teamA$Conf, "]"), "sd"]
+
+    conf_effect_mean_B <- priors[paste0("b[(Intercept) Conf:", teamB$Conf, "]"), "mean"]
+    conf_effect_sd_B <- priors[paste0("b[(Intercept) Conf:", teamB$Conf, "]"), "sd"]
+
+    # Simulate intercept and conference random effects draws explicitly
+    intercept_draws <- rnorm(draws, intercept_mean, intercept_sd)
+    conf_draws_A <- rnorm(draws, conf_effect_mean_A, conf_effect_sd_A)
+    conf_draws_B <- rnorm(draws, conf_effect_mean_B, conf_effect_sd_B)
+
+    # Team vectors (no scaling)
+    teamA_vector <- teamA %>%
+        select(all_of(beta_names)) %>%
+        as.numeric()
+    teamB_vector <- teamB %>%
+        select(all_of(beta_names)) %>%
+        as.numeric()
+
+    # Explicit linear predictor with intercept, random effects, and fixed effects
+    draws_A <- intercept_draws + conf_draws_A + rowSums(sweep(beta_draws, 2, teamA_vector, "*"))
+    draws_B <- intercept_draws + conf_draws_B + rowSums(sweep(beta_draws, 2, teamB_vector, "*"))
+
+    # Convert to probabilities explicitly:
+    win_draws <- plogis(draws_A - draws_B)
+    win_prob_final <- mean(win_draws)
+
+    # Compute credible intervals from the draws:
+    lower_bound <- quantile(win_draws, 0.025)
+    upper_bound <- quantile(win_draws, 0.975)
+
+    # Determine the winner:
+    winner <- if (win_prob_final >= 0.5) teamA$Team else teamB$Team
+
+    # Return a tibble with detailed matchup information.
+    res <- data.frame(
+        round = round_name,
+        matchup_number = matchup_number,
+        teamA = teamA$Team,
+        teamA_composite = strength_A,
+        teamB = teamB$Team,
+        teamB_composite = strength_B,
+        win_prob_A = round(win_prob_final, 2),
+        # win_prob_lower = round(lower_bound, 2),
+        # win_prob_upper = round(upper_bound, 2),
+        winner = winner
+    ) %>% as_tibble()
+    return(res)
+}
+
+# -------------------------------------------------------------------
+# 4) Predict which team from each Region/Seed slot reaches the Round of 64.
+#     Here we assume that if a given seed slot has more than one team,
+#     they are playing a play-in game.
+# -------------------------------------------------------------------
+predict_r64_in_region <- function(data, draws = 1000, sd = 10) {
+    # Keep only needed columns and rename the composite metric column
+    combined <- data %>%
+        select(Year, Team, Seed, Region, Champ, all_of(metrics_to_use), Conf) # need to include Conf here as (1 | Conf) is in bayesian model
+    # Group by Region and Seed. For each slot:
+    predictions <- combined %>%
+        group_by(Region, Seed) %>%
+        group_modify(~ {
+            slot <- unique(.x$Seed)
+            reg <- unique(.x$Region)
+
+            if (nrow(.x) == 1) {
+                # Only one team in this Region/Seed slot wins by default.
+                .x <- .x %>% mutate(predicted_R64 = 1)
+            } else if (nrow(.x) == 2) {
+                # Two teams: simulate a play-in matchup.
+                sim <- simulate_matchup(.x[1, ], .x[2, ], "Play-In", 0, priors, draws, sd)
+                message("Region: ", reg, " Seed: ", slot, " - Play-In matchup: ", sim$teamA, " vs ", sim$teamB, " | Winner: ", sim$winner)
+                .x <- .x %>% mutate(predicted_R64 = if_else(Team == sim$winner, 1, 0))
+            } else {
+                # More than two teams: choose the one with the highest composite strength.
+                composite_values <- sapply(1:nrow(.x), function(i) compute_team_strength(.x[i, ]))
+                winner <- .x %>%
+                    slice(which.max(composite_values)) %>%
+                    pull(Team)
+                message("Region: ", reg, " Seed: ", slot, " - Multiple teams: predicted winner is ", winner)
+                .x <- .x %>% mutate(predicted_R64 = if_else(Team == winner, 1, 0))
+            }
+            .x
+        }) %>%
+        ungroup()
+    return(predictions)
+}
+
+# -------------------------------------------------------------------
+# 5) Regional Bracket Simulation using Bayesian draws (with fixed seed issues handled)
+# -------------------------------------------------------------------
+# Here we assume the bracket order is the standard 1 vs 16, 8 vs 9, etc.
+fix_region_seeds <- function(region_teams, draws = 1000, sd = 10) {
+    expected <- 1:16
+    actual <- region_teams$Seed
+    missing <- setdiff(expected, unique(actual))
+    dup_seeds <- names(which(table(actual) > 1))
+
+    if (length(missing) == 0 && length(dup_seeds) == 0) {
+        return(region_teams %>% mutate(Assigned_Seed = Seed))
+    }
+    if (length(missing) == 1 && length(dup_seeds) == 1) {
+        dup_val <- as.numeric(dup_seeds)
+        missing_val <- missing[1]
+        dup_indices <- which(region_teams$Seed == dup_val)
+        if (length(dup_indices) != 2) stop("Unexpected number of duplicate entries found.")
+        team1 <- region_teams[dup_indices[1], , drop = FALSE]
+        team2 <- region_teams[dup_indices[2], , drop = FALSE]
+        play_in_result <- simulate_matchup(team1, team2, "Seed Play-In", 0, priors, draws, sd)
+        if (play_in_result$win_prob_A > 0.5) {
+            region_teams$Assigned_Seed <- region_teams$Seed
+            region_teams$Assigned_Seed[dup_indices[1]] <- dup_val
+            region_teams$Assigned_Seed[dup_indices[2]] <- missing_val
+            message("Seed Play-In: ", team1$Team, " wins over ", team2$Team)
+        } else {
+            region_teams$Assigned_Seed <- region_teams$Seed
+            region_teams$Assigned_Seed[dup_indices[1]] <- missing_val
+            region_teams$Assigned_Seed[dup_indices[2]] <- dup_val
+            message("Seed Play-In: ", team2$Team, " wins over ", team1$Team)
+        }
+        return(region_teams)
+    } else {
+        warning("More complex seed issues detected; manual assignment may be needed.")
+        return(region_teams %>% mutate(Assigned_Seed = Seed))
+    }
+}
+
+simulate_region_bayesian <- function(region_teams, draws = 1000, sd = 10) {
+    # region_teams = teams_East; draws = 1000; sd = 10
+    region_teams <- fix_region_seeds(region_teams, draws, sd)
+    region_teams <- region_teams %>% arrange(Assigned_Seed)
+    bracket_order <- c(1, 16, 8, 9, 5, 12, 4, 13, 6, 11, 3, 14, 7, 10, 2, 15)
+    ordered <- region_teams[match(bracket_order, region_teams$Assigned_Seed), ]
+    region_name <- unique(region_teams$Region)
+    message(qq("Simulating region: @{region_name}"))
+
+    # --- Round of 16 ---
+    matchups_R16 <- list()
+    winners_R16 <- list()
+    matchup_number <- 1
+    for (i in seq(1, 16, by = 2)) {
+        teamA <- ordered[i, , drop = FALSE]
+        teamB <- ordered[i + 1, , drop = FALSE]
+        result <- simulate_matchup(teamA, teamB, "Round of 16", matchup_number, priors, draws, sd)
+        matchups_R16[[matchup_number]] <- result
+        if (result$win_prob_A > 0.5) {
+            winners_R16[[matchup_number]] <- teamA
+        } else {
+            winners_R16[[matchup_number]] <- teamB
+        }
+        matchup_number <- matchup_number + 1
+    }
+    round16_df <- bind_rows(matchups_R16)
+    winners_R16 <- bind_rows(winners_R16)
+
+    # --- Round of 8 ---
+    matchups_R8 <- list()
+    winners_R8 <- list()
+    matchup_number <- 1
+    for (i in seq(1, nrow(winners_R16), by = 2)) {
+        result <- simulate_matchup(winners_R16[i, ], winners_R16[i + 1, ], "Round of 8", matchup_number, priors, draws, sd)
+        matchups_R8[[matchup_number]] <- result
+        if (result$win_prob_A > 0.5) {
+            winners_R8[[matchup_number]] <- winners_R16[i, ]
+        } else {
+            winners_R8[[matchup_number]] <- winners_R16[i + 1, ]
+        }
+        matchup_number <- matchup_number + 1
+    }
+    round8_df <- bind_rows(matchups_R8)
+    winners_R8 <- bind_rows(winners_R8)
+
+    # --- Round of 4 ---
+    matchups_R4 <- list()
+    winners_R4 <- list()
+    matchup_number <- 1
+    for (i in seq(1, nrow(winners_R8), by = 2)) {
+        result <- simulate_matchup(winners_R8[i, ], winners_R8[i + 1, ], "Round of 4", matchup_number, priors, draws, sd)
+        matchups_R4[[matchup_number]] <- result
+        if (result$win_prob_A > 0.5) {
+            winners_R4[[matchup_number]] <- winners_R8[i, ]
+        } else {
+            winners_R4[[matchup_number]] <- winners_R8[i + 1, ]
+        }
+        matchup_number <- matchup_number + 1
+    }
+    round4_df <- bind_rows(matchups_R4)
+    winners_R4 <- bind_rows(winners_R4)
+
+    # --- Elite 8 (Region Final) ---
+    round2_df <- simulate_matchup(winners_R4[1, ], winners_R4[2, ], "Elite 8", 1, priors, draws, sd)
+    region_champion <- if (round2_df$win_prob_A > 0.5) winners_R4[1, ] else winners_R4[2, ]
+
+    list(
+        round_of_16 = round16_df,
+        round_of_8 = round8_df,
+        round_of_4 = round4_df,
+        elite_8 = round2_df,
+        champion = region_champion,
+        seed_assignment = unique(region_teams$Assigned_Seed)
+    )
+}
+
+
+# Run the prediction function and then filter to 64 teams.
+predicted_R64 <- predict_r64_in_region(data_init, draws = 10000, sd = 10)
+data_final <- predicted_R64 %>%
+    filter(predicted_R64 == 1) %>%
+    left_join(data_init) %>%
+    suppressMessages()
+
+if (nrow(data_final) != 64) {
+    warning("The final dataset does not contain 64 teams; found ", nrow(data_final), " teams.")
+} else {
+    message("Final dataset contains 64 teams.")
+}
+
+# Partition teams by region:
+teams_East <- data_final %>%
+    filter(Region == "East") %>%
+    arrange(Seed)
+teams_South <- data_final %>%
+    filter(Region == "South") %>%
+    arrange(Seed)
+teams_West <- data_final %>%
+    filter(Region == "West") %>%
+    arrange(Seed)
+teams_Midwest <- data_final %>%
+    filter(Region == "Midwest") %>%
+    arrange(Seed)
+
+
+res_East <- simulate_region_bayesian(region_teams = teams_East, draws = n_draws, sd = sd_value)
+res_South <- simulate_region_bayesian(teams_South, draws = n_draws, sd = sd_value)
+res_West <- simulate_region_bayesian(teams_West, draws = n_draws, sd = sd_value)
+res_Midwest <- simulate_region_bayesian(teams_Midwest, draws = n_draws, sd = sd_value)
+
+# Extract regional champions:
+champ_East <- res_East$champion
+champ_South <- res_South$champion
+champ_West <- res_West$champion
+champ_Midwest <- res_Midwest$champion
+
+# -------------------------------------------------------------------
+# 6) Full 64-Team Bracket: Final Four and Championship Simulation
+# -------------------------------------------------------------------
+final_four_matchup1 <- simulate_matchup(champ_East, champ_South, "Final Four", 1, priors, draws = n_draws, sd = sd_value)
+final_four_matchup2 <- simulate_matchup(champ_West, champ_Midwest, "Final Four", 2, priors, draws = n_draws, sd = sd_value)
+winner_semifinal1 <- if (final_four_matchup1$win_prob_A > 0.5) champ_East else champ_South
+winner_semifinal2 <- if (final_four_matchup2$win_prob_A > 0.5) champ_West else champ_Midwest
+championship_matchup <- simulate_matchup(winner_semifinal1, winner_semifinal2, "Championship", 1, priors, draws = n_draws, sd = sd_value)
+national_champion <- if (championship_matchup$win_prob_A > 0.5) winner_semifinal1 else winner_semifinal2
+
+# -------------------------------------------------------------------
+# 7) Plotting: Create and save a stacked barplot for win probabilities
+#     for each team in each matchup (for all rounds)
+# -------------------------------------------------------------------
+# Combine matchup data from all rounds and regions.
+# (You may adjust which rounds to include, here we include Round of 16, Round of 8, Round of 4 and Elite 8.)
+# Combine matchups from all regions and rounds, including Final Four and Championship
+all_matchups <- bind_rows(
+    res_East$round_of_16 %>% mutate(Region = "East", Round = "Round of 16"),
+    res_East$round_of_8 %>% mutate(Region = "East", Round = "Round of 8"),
+    res_East$round_of_4 %>% mutate(Region = "East", Round = "Round of 4"),
+    res_East$elite_8 %>% mutate(Region = "East", Round = "Elite 8"),
+    res_South$round_of_16 %>% mutate(Region = "South", Round = "Round of 16"),
+    res_South$round_of_8 %>% mutate(Region = "South", Round = "Round of 8"),
+    res_South$round_of_4 %>% mutate(Region = "South", Round = "Round of 4"),
+    res_South$elite_8 %>% mutate(Region = "South", Round = "Elite 8"),
+    res_West$round_of_16 %>% mutate(Region = "West", Round = "Round of 16"),
+    res_West$round_of_8 %>% mutate(Region = "West", Round = "Round of 8"),
+    res_West$round_of_4 %>% mutate(Region = "West", Round = "Round of 4"),
+    res_West$elite_8 %>% mutate(Region = "West", Round = "Elite 8"),
+    res_Midwest$round_of_16 %>% mutate(Region = "Midwest", Round = "Round of 16"),
+    res_Midwest$round_of_8 %>% mutate(Region = "Midwest", Round = "Round of 8"),
+    res_Midwest$round_of_4 %>% mutate(Region = "Midwest", Round = "Round of 4"),
+    res_Midwest$elite_8 %>% mutate(Region = "Midwest", Round = "Elite 8"),
+
+    # Final Four matchups
+    final_four_matchup1 %>% mutate(Region = "Final Four", Round = "Semifinal"),
+    final_four_matchup2 %>% mutate(Region = "Final Four", Round = "Semifinal"),
+
+    # Championship matchup
+    championship_matchup %>% mutate(Region = "Final Four", Round = "Championship")
+) %>%
+    mutate(
+        Round = factor(Round, levels = c("Round of 16", "Round of 8", "Round of 4", "Elite 8", "Semifinal", "Championship")),
+        Region = factor(Region, levels = c("East", "South", "West", "Midwest", "Final Four"))
+    )
+
+# For each matchup, calculate team B’s win probability as 1 - win_prob_A.
+# Then, pivot the data longer so that each matchup produces two rows: one for teamA and one for teamB.
+stacked_data <- all_matchups %>%
+    mutate(teamB_win_prob = 1 - win_prob_A) %>%
+    pivot_longer(
+        cols = c(teamA, teamB),
+        names_to = "side",
+        values_to = "Team"
+    ) %>%
+    mutate(win_prob = if_else(side == "teamA", win_prob_A, teamB_win_prob))
+
+# List of rounds for separate plots
+rounds <- unique(stacked_data$Round)
+
+# Generate and save separate plots for each round
+for (rnd in rounds) {
+    round_plot <- stacked_data %>%
+        filter(Round == rnd) %>%
+        ggplot(aes(x = factor(matchup_number), y = win_prob, fill = Team)) +
+        geom_bar(stat = "identity", color = "black") +
+        facet_wrap(~Region, scales = "free_x") +
+        labs(
+            title = paste("Win Probabilities by Team -", rnd),
+            x = "Matchup Number",
+            y = "Win Probability"
+        ) +
+        theme_bw() +
+        theme(
+            axis.text.x = element_text(angle = 45, hjust = 1),
+            legend.position = "right"
+        )
+    # scale_fill_manual(values = unname(pals::cols25()))
+
+    # Display plot
+    print(round_plot)
+
+    # Save each round's plot separately
+    ggsave(
+        filename = paste0("plots/win_probabilities_", gsub(" ", "_", rnd), ".png"),
+        plot = round_plot, width = 8, height = 6
+    )
+}
+
+# You could similarly create plots for later rounds if desired.
+
+# -------------------------------------------------------------------
+# 8) Output: Detailed Bracket Results
+# -------------------------------------------------------------------
+cat("\n=== EAST REGION MATCHUPS ===\n")
+print(res_East$round_of_16)
+print(res_East$round_of_8)
+print(res_East$round_of_4)
+print(res_East$elite_8)
+cat("East Region Champion: ", champ_East$Team, "\n\n")
+
+cat("=== SOUTH REGION MATCHUPS ===\n")
+print(res_South$round_of_16)
+print(res_South$round_of_8)
+print(res_South$round_of_4)
+print(res_South$elite_8)
+cat("South Region Champion: ", champ_South$Team, "\n\n")
+
+cat("=== WEST REGION MATCHUPS ===\n")
+print(res_West$round_of_16)
+print(res_West$round_of_8)
+print(res_West$round_of_4)
+print(res_West$elite_8)
+cat("West Region Champion: ", champ_West$Team, "\n\n")
+
+cat("=== MIDWEST REGION MATCHUPS ===\n")
+print(res_Midwest$round_of_16)
+print(res_Midwest$round_of_8)
+print(res_Midwest$round_of_4)
+print(res_Midwest$elite_8)
+cat("Midwest Region Champion: ", champ_Midwest$Team, "\n\n")
+
+cat("=== FINAL FOUR MATCHUPS ===\n")
+print(final_four_matchup1)
+print(final_four_matchup2)
+cat("Semifinal Winners: ", winner_semifinal1$Team, " and ", winner_semifinal2$Team, "\n\n")
+
+cat("=== CHAMPIONSHIP MATCHUP ===\n")
+print(championship_matchup)
+cat("National Champion: ", national_champion$Team, "\n")

@@ -1,9 +1,80 @@
+
+my_get_game_ids <- function(team, season = current_season) {
+    if (is.na(team)) {
+        stop("team is missing with no default")
+    }
+    if (!"ncaahoopR" %in% .packages()) {
+        ids <- create_ids_df()
+    }
+    base_url <- "https://www.espn.com/mens-college-basketball/team/schedule/_/id/"
+    url <- paste0(
+        base_url, ids$id[ids$team == team], "/season/",
+        as.numeric(substring(season, 1, 4)) + 1
+    )
+    x <- RCurl::getURL(url)
+    x <- strsplit(x, "gameId")[[1]]
+    game_ids <- gsub("[^0-9]*", "", gsub("\".*", "", x))[-1]
+    matches <- stringr::str_match_all(
+        x,
+        "<span[^>]*>((Mon|Tue|Wed|Thu|Fri|Sat|Sun),\\s+[A-Za-z]+\\s+\\d+)"
+    )
+    dates <- unlist(lapply(matches, function(m) m[, 2]))
+    game_ids <- game_ids[!duplicated(game_ids)]
+    played_dates <- purrr::map_chr(dates, dplyr::last)
+    played_dates <- played_dates[!is.na(played_dates)]
+    unplayed_dates <- unlist(purrr::map(dates, ~ {
+        if (length(.x) > 1) {
+            .x[1:(length(.x) - 1)]
+        }
+    }))
+
+    # Wrap the game_ids subsetting in a tryCatch to handle edge cases
+    game_ids <- tryCatch(
+        {
+            if (length(unplayed_dates) == 0 & length(game_ids) > length(played_dates)) {
+                delta <- length(game_ids) - length(played_dates)
+                indices <- 1:(length(played_dates) - delta + 1)
+                if (min(indices) <= 0) {
+                    warning("Calculated indices are invalid (negative or zero); returning empty game_ids")
+                    character(0)
+                } else {
+                    game_ids[c(indices, length(game_ids))]
+                }
+            } else if (length(unplayed_dates) > 0) {
+                unique(c(
+                    game_ids[1:length(played_dates)],
+                    game_ids[(length(game_ids) - length(unplayed_dates) + 1):length(game_ids)]
+                ))
+            } else {
+                game_ids
+            }
+        },
+        error = function(e) {
+            warning("Error encountered while processing game_ids: ", e$message)
+            character(0)
+        }
+    )
+
+    df_id <- dplyr::tibble(
+        game_id = game_ids[seq_along(c(played_dates, unplayed_dates))],
+        date = c(played_dates, unplayed_dates)
+    )
+    df_id <- dplyr::mutate(df_id, year = ifelse(grepl("Nov|Dec", date),
+        substring(season, 1, 4),
+        paste0("20", substring(season, 6, 7))
+    ))
+    df_id <- dplyr::mutate(df_id, date = as.Date(paste(year, date), "%Y %a, %b %d"))
+    df_id <- dplyr::arrange(df_id, date)
+    game_ids <- df_id$game_id
+    return(game_ids)
+}
+
 #' @note retry this if it returns an empty character string
 #' (probably due to frying the server / network bandwidth)
 get_game_ids_retry <- function(team, year, n_tries = 10) {
     game_ids <- character(0)
     for (i in 1:n_tries) {
-        game_ids <- ncaahoopR::get_game_ids(team = team, season = year)
+        game_ids <- my_get_game_ids(team = team, season = year)
         if (!identical(game_ids, character(0))) {
             break
         }
@@ -36,10 +107,10 @@ scrape_data <- function(team, year, bracket_year, validated_teams_with_bpi) {
     # team = "UConn"; year = "2017-18"
     # team = "Princeton"; year = "2016-17"
 
-
+    library(ncaahoopR)
     data <- lapply(game_ids, FUN = function(g) {
         # print(g)
-        # g = game_ids[2]
+        # g = game_ids[1]
         # extract team level data for that game
 
         #' @note get the boxscore safely by wrapping in tryCatch
@@ -61,6 +132,9 @@ scrape_data <- function(team, year, bracket_year, validated_teams_with_bpi) {
 
         lst_res <- get_boxscore_safely(g)
 
+        if (is.null(lst_res)) {
+            return(tibble())
+        }
         #' @note The team names are ESPN_PBP, so they need to be matched to NCAA/ESPN names
         #' @param lst lst of data frames, returned from get_boxscore function
         #' @param team the team name in question, character
@@ -100,7 +174,7 @@ scrape_data <- function(team, year, bracket_year, validated_teams_with_bpi) {
 
         # if the game_id results in no boxscore, return an empty tibble
         # to avoid breaking everything
-        if (is.null(lst_res) || is.null(ref_team_idx)) {
+        if (is.null(ref_team_idx)) {
             # print(g)
             return(tibble())
         }
@@ -141,7 +215,7 @@ scrape_data <- function(team, year, bracket_year, validated_teams_with_bpi) {
     # data$season <- year
 
     # write the the player level statistics to file, to be compressed to team level statistics later on
-    dir_to_write <- file.path("cache", bracket_year, team)
+    dir_to_write <- file.path("cache", team)
     dir.create(dir_to_write, showWarnings = FALSE, recursive = TRUE)
     write_tsv(data, file = file.path(dir_to_write, qq("@{team}_@{year}.tsv")))
 }
@@ -150,24 +224,52 @@ scrape_data <- function(team, year, bracket_year, validated_teams_with_bpi) {
 get_game_info_loop <- function(teams, years, bracket_year = 2023, validated_teams_with_bpi, num_sec = 5) {
     message("Scraping NCAA data using ncaahoopR")
 
-    final_teams_temp <- tibble(name = dir(file.path("cache", bracket_year), full.names = TRUE)) %>%
-        mutate(team_name = dir(file.path("cache", bracket_year))) %>%
-        mutate(num_fns = map_int(name, .f = function(f) {
-            dir(f, recursive = TRUE) %>% length()
-        })) %>%
-        filter(num_fns == nrow(years)) %>%
-        .$team_name
+    all_seasons <- years$season
 
-    final_teams <- setdiff(teams, final_teams_temp)
+    final_teams_temp <- tibble(name = validated_teams_with_bpi$TEAM) %>%
+        mutate(
+            num_fns = map_int(name, .f = function(f) {
+                dir(file.path("cache", f), recursive = TRUE) %>% length()
+            }),
+            n_years = map(name, .f = function(x) {
+                res <- str_extract(dir(file.path("cache", x), recursive = TRUE, full.names = TRUE), "[0-9]{4}-[0-9]{2}")
+                if (length(res) == 0) {
+                    return(NA)
+                }
+                return(res)
+            })
+        ) %>%
+        group_by(name) %>%
+        unnest(n_years) %>%
+        # Create a new column that checks for each group if all seasons are present
+        mutate(all_seasons_present = all(all_seasons %in% n_years)) %>%
+        # Then you filter out the teams with all seasons present
+        filter(!all_seasons_present) %>%
+        # Optionally, you can remove the 'all_seasons_present' column if you don't need it anymore
+        select(-all_seasons_present)
+
+    final_teams <- final_teams_temp %>%
+        .$name %>%
+        unique()
+
     # pb <- progressr::progressor(steps = length(final_teams) * nrow(years))
 
     # final_teams <- teams
 
     message("Teams to analyze:")
     print(final_teams)
+    print(years)
+
+    # walk(final_teams, .f = function(t) {
+    #     walk(years$season, .f = function(y) {
+    #         # t <- final_teams[1]; team <- t
+    #         # y <- years$season[1]; year <- y
+    #         scrape_data(team = t, year = y, bracket_year, validated_teams_with_bpi)
+    #     })
+    # })
 
     # important: always future the outer loop!
-    not_used_result <- foreach(x = seq_along(final_teams)) %dopar% {
+    not_used_result <- foreach(idx = seq_along(final_teams)) %dopar% {
         library(tidyverse)
         library(GetoptLong)
         library(ncaahoopR)
@@ -178,9 +280,9 @@ get_game_info_loop <- function(teams, years, bracket_year = 2023, validated_team
         library(doParallel)
 
         source(file.path("helper_functions.R"))
-
-        t <- final_teams[x]
-        # message(t)
+        # idx <- 1
+        t <- final_teams[idx]
+        message(t)
         for (y in years$season) {
             message(qq("\nTeam = @{t} for year @{y}\n"))
             # y = years$season[1]
