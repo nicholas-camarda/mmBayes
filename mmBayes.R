@@ -352,7 +352,8 @@ simulate_region_bayesian <- function(region_teams, draws = 1000, sd = 10) {
 
     # --- Elite 8 (Region Final) ---
     round2_df <- simulate_matchup(winners_R4[1, ], winners_R4[2, ], "Elite 8", 1, priors, draws, sd)
-    region_champion <- if (round2_df$win_prob_A > 0.5) winners_R4[1, ] else winners_R4[2, ]
+    # region_champion <- if (round2_df$win_prob_A > 0.5) winners_R4[1, ] else winners_R4[2, ]
+    region_champion <- if (runif(1) < round2_df$win_prob_A) winners_R4[1, ] else winners_R4[2, ]
 
     list(
         round_of_16 = round16_df,
