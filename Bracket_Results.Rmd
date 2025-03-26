@@ -1,0 +1,80 @@
+# Bayesian Bracket Results
+
+## South Region Matchups
+
+```{r}
+# Shift + CMD + K to knit the document
+library(readxl)
+library(knitr)
+
+# Read and display all sheets as tables
+res_south1 <- read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 1)
+kable(res_south1)
+
+res_south2 <- read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 2)
+kable(res_south2)
+
+res_south3 <- read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 3)
+kable(res_south3)
+
+res_south4 <- read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 4)
+kable(res_south4)
+```
+
+## East Region Matchups
+
+```{r}
+res_east1 <- read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 1)
+kable(res_east1)
+
+res_east2 <- read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 2)
+kable(res_east2)
+
+res_east3 <- read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 3)
+kable(res_east3)
+
+res_east4 <- read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 4)
+kable(res_east4)
+```
+
+## West Region Matchups
+
+```{r}
+res_west1 <- read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 1)
+kable(res_west1)
+
+res_west2 <- read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 2)
+kable(res_west2)
+
+res_west3 <- read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 3)
+kable(res_west3)
+
+res_west4 <- read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 4)
+kable(res_west4)
+```
+
+## Midwest Region Matchups
+
+```{r}
+res_midwest1 <- read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 1)
+kable(res_midwest1)
+
+res_midwest2 <- read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 2)
+kable(res_midwest2)
+
+res_midwest3 <- read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 3)
+kable(res_midwest3)
+
+res_midwest4 <- read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 4)
+kable(res_midwest4)
+```
+
+## Final Four and Championship
+
+```{r}
+res_final_four1 <- read_xlsx(file.path('bracket_results', 'Final_Four_and_Championship.xlsx'), sheet = 1)
+kable(res_final_four1)
+
+res_final_four2 <- read_xlsx(file.path('bracket_results', 'Final_Four_and_Championship.xlsx'), sheet = 2)
+kable(res_final_four2)
+```

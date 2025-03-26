@@ -170,10 +170,10 @@ simulate_matchup <- function(teamA, teamB, round_name, matchup_number, priors, d
     upper_bound <- quantile(win_draws, 0.975)
 
     # Determine the winner using deterministic procedure:
-    # winner <- if (win_prob_final >= 0.5) teamA$Team else teamB$Team
+    winner <- if (win_prob_final >= 0.5) teamA$Team else teamB$Team
 
     # Determine the winner using stochastic procedure, with real probability of upset:
-    winner <- if (runif(1) < win_prob_final) teamA$Team else teamB$Team
+    # winner <- if (runif(1) < win_prob_final) teamA$Team else teamB$Team
 
     # Return a tibble with detailed matchup information.
     res <- data.frame(
@@ -214,10 +214,7 @@ predict_r64_in_region <- function(data, draws = 1000, sd = 10) {
                 # Two teams: simulate a play-in matchup.
                 sim <- simulate_matchup(.x[1, ], .x[2, ], "Play-In", 0, priors, draws, sd)
                 message("Region: ", reg, " Seed: ", slot, " - Play-In matchup: ", sim$teamA, " vs ", sim$teamB, " | Winner: ", sim$winner)
-                # .x <- .x %>% mutate(predicted_R64 = if_else(Team == winner, 1, 0))
-                win_prob <- sim$win_prob_A
-                chosen_winner <- if (runif(1) < win_prob) sim$teamA else sim$teamB
-                .x <- .x %>% mutate(predicted_R64 = if_else(Team == chosen_winner, 1, 0))
+                .x <- .x %>% mutate(predicted_R64 = if_else(Team == sim$winner, 1, 0))
             } else {
                 # More than two teams: choose the one with the highest composite strength.
                 composite_values <- sapply(1:nrow(.x), function(i) compute_team_strength(.x[i, ]))
@@ -225,10 +222,7 @@ predict_r64_in_region <- function(data, draws = 1000, sd = 10) {
                     slice(which.max(composite_values)) %>%
                     pull(Team)
                 message("Region: ", reg, " Seed: ", slot, " - Multiple teams: predicted winner is ", winner)
-                # .x <- .x %>% mutate(predicted_R64 = if_else(Team == winner, 1, 0))
-                win_prob <- sim$win_prob_A
-                chosen_winner <- if (runif(1) < win_prob) sim$teamA else sim$teamB
-                .x <- .x %>% mutate(predicted_R64 = if_else(Team == chosen_winner, 1, 0))
+                .x <- .x %>% mutate(predicted_R64 = if_else(Team == winner, 1, 0))
             }
             .x
         }) %>%
@@ -257,8 +251,7 @@ fix_region_seeds <- function(region_teams, draws = 1000, sd = 10) {
         team1 <- region_teams[dup_indices[1], , drop = FALSE]
         team2 <- region_teams[dup_indices[2], , drop = FALSE]
         play_in_result <- simulate_matchup(team1, team2, "Seed Play-In", 0, priors, draws, sd)
-        # if (play_in_result$win_prob_A > 0.5) {
-        if (runif(1) < play_in_result$win_prob_A) {
+        if (play_in_result$win_prob_A > 0.5) {
             region_teams$Assigned_Seed <- region_teams$Seed
             region_teams$Assigned_Seed[dup_indices[1]] <- dup_val
             region_teams$Assigned_Seed[dup_indices[2]] <- missing_val
@@ -276,12 +269,6 @@ fix_region_seeds <- function(region_teams, draws = 1000, sd = 10) {
     }
 }
 
-#' Simulate a region's bracket
-#' 
-#' @param region_teams A dataframe of teams in the region
-#' @param draws Number of draws to simulate
-#' @param sd Standard deviation for the normal distribution
-#' @return A list with round of 16, round of 8, round of 4, and championship matchups
 simulate_region_bayesian <- function(region_teams, draws = 1000, sd = 10) {
     # region_teams = teams_East; draws = 1000; sd = 10
     region_teams <- fix_region_seeds(region_teams, draws, sd)
@@ -300,13 +287,11 @@ simulate_region_bayesian <- function(region_teams, draws = 1000, sd = 10) {
         teamB <- ordered[i + 1, , drop = FALSE]
         result <- simulate_matchup(teamA, teamB, "Round of 16", matchup_number, priors, draws, sd)
         matchups_R16[[matchup_number]] <- result
-        # if (result$win_prob_A > 0.5) {
-        #     winners_R16[[matchup_number]] <- teamA
-        # } else {
-        #     winners_R16[[matchup_number]] <- teamB
-        # }
-        chosen_winner <- if (runif(1) < result$win_prob_A) teamA else teamB
-        winners_R16[[matchup_number]] <- chosen_winner
+        if (result$win_prob_A > 0.5) {
+            winners_R16[[matchup_number]] <- teamA
+        } else {
+            winners_R16[[matchup_number]] <- teamB
+        }
         matchup_number <- matchup_number + 1
     }
     round16_df <- bind_rows(matchups_R16)
@@ -319,13 +304,11 @@ simulate_region_bayesian <- function(region_teams, draws = 1000, sd = 10) {
     for (i in seq(1, nrow(winners_R16), by = 2)) {
         result <- simulate_matchup(winners_R16[i, ], winners_R16[i + 1, ], "Round of 8", matchup_number, priors, draws, sd)
         matchups_R8[[matchup_number]] <- result
-        # if (result$win_prob_A > 0.5) {
-        #     winners_R8[[matchup_number]] <- winners_R16[i, ]
-        # } else {
-        #     winners_R8[[matchup_number]] <- winners_R16[i + 1, ]
-        # }
-        chosen_winner <- if (runif(1) < result$win_prob_A) teamA else teamB
-        winners_R8[[matchup_number]] <- chosen_winner
+        if (result$win_prob_A > 0.5) {
+            winners_R8[[matchup_number]] <- winners_R16[i, ]
+        } else {
+            winners_R8[[matchup_number]] <- winners_R16[i + 1, ]
+        }
         matchup_number <- matchup_number + 1
     }
     round8_df <- bind_rows(matchups_R8)
@@ -338,13 +321,11 @@ simulate_region_bayesian <- function(region_teams, draws = 1000, sd = 10) {
     for (i in seq(1, nrow(winners_R8), by = 2)) {
         result <- simulate_matchup(winners_R8[i, ], winners_R8[i + 1, ], "Round of 4", matchup_number, priors, draws, sd)
         matchups_R4[[matchup_number]] <- result
-        # if (result$win_prob_A > 0.5) {
-        #     winners_R4[[matchup_number]] <- winners_R8[i, ]
-        # } else {
-        #     winners_R4[[matchup_number]] <- winners_R8[i + 1, ]
-        # }
-        chosen_winner <- if (runif(1) < result$win_prob_A) teamA else teamB
-        winners_R4[[matchup_number]] <- chosen_winner
+        if (result$win_prob_A > 0.5) {
+            winners_R4[[matchup_number]] <- winners_R8[i, ]
+        } else {
+            winners_R4[[matchup_number]] <- winners_R8[i + 1, ]
+        }
         matchup_number <- matchup_number + 1
     }
     round4_df <- bind_rows(matchups_R4)
@@ -352,8 +333,7 @@ simulate_region_bayesian <- function(region_teams, draws = 1000, sd = 10) {
 
     # --- Elite 8 (Region Final) ---
     round2_df <- simulate_matchup(winners_R4[1, ], winners_R4[2, ], "Elite 8", 1, priors, draws, sd)
-    # region_champion <- if (round2_df$win_prob_A > 0.5) winners_R4[1, ] else winners_R4[2, ]
-    region_champion <- if (runif(1) < round2_df$win_prob_A) winners_R4[1, ] else winners_R4[2, ]
+    region_champion <- if (round2_df$win_prob_A > 0.5) winners_R4[1, ] else winners_R4[2, ]
 
     list(
         round_of_16 = round16_df,
@@ -382,11 +362,13 @@ if (nrow(data_final) != 64) {
 dir.create("diagnostics", showWarnings = FALSE)
 team_strengths <- data_final %>%
     rowwise() %>%
-    mutate(composite_strength = compute_team_strength(pick(everything())), .before =1) %>%
+    mutate(composite_strength = compute_team_strength(cur_data())) %>%
     ungroup() %>%
     arrange(desc(composite_strength))
+
 # Save a quick summary:
 write_xlsx(team_strengths, "diagnostics/team_strength_summary.xlsx")
+
 
 ggplot(team_strengths, aes(x = reorder(Team, composite_strength), y = composite_strength)) +
     geom_col(fill = "steelblue") +
@@ -425,10 +407,10 @@ champ_Midwest <- res_Midwest$champion
 # -------------------------------------------------------------------
 # 6) Full 64-Team Bracket: Final Four and Championship Simulation
 # -------------------------------------------------------------------
-final_four_matchup1 <- simulate_matchup(champ_East, champ_South, "Final Four", 1, priors, draws = n_draws, sd = sd_value)
-final_four_matchup2 <- simulate_matchup(champ_West, champ_Midwest, "Final Four", 2, priors, draws = n_draws, sd = sd_value)
-winner_semifinal1 <- if (final_four_matchup1$win_prob_A > 0.5) champ_East else champ_South
-winner_semifinal2 <- if (final_four_matchup2$win_prob_A > 0.5) champ_West else champ_Midwest
+final_four_matchup1 <- simulate_matchup(champ_West, champ_South, "Final Four West vs South", 1, priors, draws = n_draws, sd = sd_value)
+final_four_matchup2 <- simulate_matchup(champ_East, champ_Midwest, "Final Four East vs Midwest", 2, priors, draws = n_draws, sd = sd_value)
+winner_semifinal1 <- if (final_four_matchup1$win_prob_A > 0.5) champ_West else champ_South
+winner_semifinal2 <- if (final_four_matchup2$win_prob_A > 0.5) champ_East else champ_Midwest
 championship_matchup <- simulate_matchup(winner_semifinal1, winner_semifinal2, "Championship", 1, priors, draws = n_draws, sd = sd_value)
 national_champion <- if (championship_matchup$win_prob_A > 0.5) winner_semifinal1 else winner_semifinal2
 
@@ -462,11 +444,11 @@ if (n_addtl_brackets > 0) {
         champ_West <- res_West$champion
         champ_Midwest <- res_Midwest$champion
 
-        semifinal1 <- simulate_matchup(champ_East, champ_South, "Final Four", 1, priors, draws = n_draws, sd = sd_value)
-        semifinal2 <- simulate_matchup(champ_West, champ_Midwest, "Final Four", 2, priors, draws = n_draws, sd = sd_value)
+        semifinal1 <- simulate_matchup(champ_West, champ_South, "Final Four West vs South", 1, priors, draws = n_draws, sd = sd_value)
+        semifinal2 <- simulate_matchup(champ_East, champ_Midwest, "Final Four East vs Midwest", 2, priors, draws = n_draws, sd = sd_value)
 
-        winner1 <- if (semifinal1$win_prob_A > 0.5) champ_East else champ_South
-        winner2 <- if (semifinal2$win_prob_A > 0.5) champ_West else champ_Midwest
+        winner1 <- if (semifinal1$win_prob_A > 0.5) champ_West else champ_South
+        winner2 <- if (semifinal2$win_prob_A > 0.5) champ_East else champ_Midwest
 
         championship <- simulate_matchup(winner1, winner2, "Championship", 1, priors, draws = n_draws, sd = sd_value)
 
@@ -546,12 +528,15 @@ stacked_data <- all_matchups %>%
     ) %>%
     mutate(win_prob = if_else(side == "teamA", win_prob_A, teamB_win_prob))
 
-write_xlsx(stacked_data, file.path(output_dir, "stacked_results.xlsx"))
+# List of rounds for separate plots
+rounds <- unique(stacked_data$Round)
+
 
 # Create directory to store results
 output_dir <- "bracket_results"
 dir.create(output_dir, showWarnings = FALSE)
 
+write_xlsx(stacked_data, file.path(output_dir, "stacked_results.xlsx"))
 
 # Save region matchups to Excel files
 write_xlsx(list(
