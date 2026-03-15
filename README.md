@@ -34,17 +34,12 @@ The active workflow requires `rstanarm`, `bayesplot`, and `loo`. If those
 packages are unavailable, the runner should fail immediately rather than falling
 back to a different modeling path.
 
-Legacy scripts are archived under `archive/legacy-runtime/` for reference only and are not part of
-the active execution path.
-
 ## Repository Layout
 
 - `R/`: active package runtime
 - `scripts/`: supported command-line entrypoints
 - `tests/`: automated tests and fixtures
-- `docs/reference/`: background papers and legacy writeups worth keeping
-- `archive/legacy-analysis/`: old rendered reports, spreadsheets, and diagnostics
-- `archive/legacy-runtime/`: superseded scripts kept only for historical reference
+- `docs/reference/`: background papers and supporting reference material
 
 ## Modeling Design
 
