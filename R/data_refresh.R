@@ -614,10 +614,23 @@ update_tournament_data <- function(start_year = NULL, bracket_year = as.integer(
     historical_years <- seq.int(start_year, bracket_year)
     historical_years <- historical_years[historical_years != 2020L]
 
-    bart_data <- purrr::map_dfr(historical_years, scrape_bart_data)
+    logger::log_info(
+        "Starting canonical data refresh for bracket year {bracket_year} across years {min(historical_years)}-{max(historical_years)}"
+    )
 
-    conf_assignments <- purrr::map_dfr(historical_years, scrape_conf_assignments)
+    bart_data <- purrr::map_dfr(historical_years, function(year) {
+        logger::log_info("Refreshing Bart ratings for {year}")
+        scrape_bart_data(year)
+    })
+
+    conf_assignments <- purrr::map_dfr(historical_years, function(year) {
+        logger::log_info("Refreshing tournament roster for {year}")
+        scrape_conf_assignments(year)
+    })
+
+    logger::log_info("Joining tournament rosters to year-wide Bart ratings")
     team_features <- build_team_feature_dataset(bart_data, conf_assignments)
+    logger::log_info("Built canonical team feature dataset with {nrow(team_features)} rows")
 
     available_feature_years <- unique(suppressWarnings(as.integer(team_features$Year)))
     available_feature_years <- available_feature_years[!is.na(available_feature_years)]
@@ -625,12 +638,23 @@ update_tournament_data <- function(start_year = NULL, bracket_year = as.integer(
         historical_years[historical_years < bracket_year],
         available_feature_years
     )
-    tournament_results <- purrr::map_dfr(completed_years, scrape_tournament_results)
+    logger::log_info(
+        "Refreshing explicit tournament game results for completed years: {paste(completed_years, collapse = ', ')}"
+    )
+    tournament_results <- purrr::map_dfr(completed_years, function(year) {
+        logger::log_info("Refreshing tournament results for {year}")
+        scrape_tournament_results(year)
+    })
 
+    logger::log_info("Running canonical data quality checks")
     assert_canonical_data_quality(team_features, tournament_results)
+    logger::log_info("Canonical data quality checks passed; writing refreshed files")
 
     writexl::write_xlsx(team_features, team_features_file)
     writexl::write_xlsx(tournament_results, game_results_file)
+
+    logger::log_info("Wrote team features to {team_features_file}")
+    logger::log_info("Wrote tournament results to {game_results_file}")
 
     list(
         team_features = team_features_file,

@@ -92,15 +92,22 @@ load_project_config <- function(path = "config.yml") {
 #' Initialize logging for the current run
 #'
 #' @param log_path Path to the log file for the current run.
+#' @param tee_to_console Whether to also stream logs to the terminal.
 #'
-#' @return Invisibly configures the package logger for file-based logging.
+#' @return Invisibly configures the package logger appenders.
 #' @export
-initialize_logging <- function(log_path = "tournament_simulation.log") {
+initialize_logging <- function(log_path = "tournament_simulation.log", tee_to_console = TRUE) {
     log_dir <- dirname(log_path)
     if (!identical(log_dir, ".") && !dir.exists(log_dir)) {
         dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
     }
 
     logger::log_threshold(logger::INFO)
-    logger::log_appender(logger::appender_file(log_path))
+    appender <- if (isTRUE(tee_to_console)) {
+        logger::appender_tee(log_path)
+    } else {
+        logger::appender_file(log_path)
+    }
+
+    logger::log_appender(appender)
 }
