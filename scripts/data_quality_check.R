@@ -4,6 +4,37 @@ suppressPackageStartupMessages({
     library(stringr)
 })
 
+snapshot_directory_state <- function(path) {
+    if (!dir.exists(path)) {
+        return(data.frame(
+            file = character(),
+            size = numeric(),
+            mtime = numeric(),
+            stringsAsFactors = FALSE
+        ))
+    }
+
+    files <- list.files(path, recursive = TRUE, full.names = TRUE, include.dirs = FALSE)
+    if (length(files) == 0) {
+        return(data.frame(
+            file = character(),
+            size = numeric(),
+            mtime = numeric(),
+            stringsAsFactors = FALSE
+        ))
+    }
+
+    info <- file.info(files)
+    data.frame(
+        file = normalizePath(files, winslash = "/", mustWork = FALSE),
+        size = info$size,
+        mtime = as.numeric(info$mtime),
+        stringsAsFactors = FALSE
+    )
+}
+
+archive_before <- snapshot_directory_state("archive")
+
 team_path <- "data/pre_tournament_team_features.xlsx"
 results_path <- "data/tournament_game_results.xlsx"
 
@@ -93,3 +124,24 @@ if (nrow(dup_games) > 0) {
 
 missing_result_years_in_teams <- setdiff(unique(results$Year), unique(teams$Year))
 cat("result_years_missing_in_team_features=", if (length(missing_result_years_in_teams) == 0) "none" else paste(missing_result_years_in_teams, collapse = ","), "\n", sep = "")
+
+archive_after <- snapshot_directory_state("archive")
+archive_changes <- dplyr::full_join(
+    dplyr::rename(archive_before, size_before = size, mtime_before = mtime),
+    dplyr::rename(archive_after, size_after = size, mtime_after = mtime),
+    by = "file"
+) %>%
+    dplyr::filter(
+        is.na(size_before) |
+            is.na(size_after) |
+            size_before != size_after |
+            mtime_before != mtime_after
+    )
+
+if (nrow(archive_changes) > 0) {
+    cat("archive_changed=true\n")
+    print(utils::head(archive_changes, 20))
+    quit(save = "no", status = 2)
+}
+
+cat("archive_changed=false\n")

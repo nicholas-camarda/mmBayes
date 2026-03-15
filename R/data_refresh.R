@@ -305,24 +305,22 @@ scrape_tournament_results <- function(year) {
         .[nzchar(.)]
 
     region_alias <- c("East", "West", "South", "Midwest", "National")
-    section <- NULL
-    regional_counter <- 0L
-    national_counter <- 0L
+    bracket_started <- FALSE
     first_four_counter <- 0L
+    main_bracket_counter <- 0L
+    national_counter <- 0L
+    regional_order <- c("East", "Midwest", "South", "West")
+    current_region_index <- 1L
+    current_region_counter <- 0L
     pending_game_team <- NULL
     next_game_is_first_four <- FALSE
     results <- list()
 
     for (line in lines) {
         if (line %in% region_alias) {
-            section <- line
+            bracket_started <- TRUE
             pending_game_team <- NULL
             next_game_is_first_four <- FALSE
-            if (line == "National") {
-                national_counter <- 0L
-            } else {
-                regional_counter <- 0L
-            }
             next
         }
 
@@ -331,15 +329,23 @@ scrape_tournament_results <- function(year) {
             stringr::regex("^(East|West|South|Midwest)\\s+First Four$", ignore_case = TRUE)
         )[, 2]
         if (!is.na(first_four_region)) {
-            section <- first_four_region
+            bracket_started <- TRUE
+            matched_region_index <- match(first_four_region, regional_order)
+            if (!is.na(matched_region_index)) {
+                current_region_index <- matched_region_index
+                current_region_counter <- 0L
+                main_bracket_counter <- (matched_region_index - 1L) * 15L
+            }
             pending_game_team <- NULL
             next_game_is_first_four <- TRUE
             next
         }
 
-        if (is.null(section)) {
+        if (!bracket_started) {
             next
         }
+
+        is_dayton_play_in <- grepl("at Dayton, OH", line, fixed = TRUE)
 
         parsed <- parse_tournament_game_line(line)
         if (is.null(parsed)) {
@@ -366,7 +372,9 @@ scrape_tournament_results <- function(year) {
             pending_game_team <- NULL
         }
 
-        if (isTRUE(next_game_is_first_four)) {
+        is_equal_seed_play_in <- identical(parsed$teamA_seed, parsed$teamB_seed)
+
+        if (isTRUE(next_game_is_first_four) || is_dayton_play_in || is_equal_seed_play_in) {
             first_four_counter <- first_four_counter + 1L
             results[[length(results) + 1L]] <- parsed %>%
                 dplyr::mutate(
@@ -380,7 +388,41 @@ scrape_tournament_results <- function(year) {
             next
         }
 
-        if (identical(section, "National")) {
+        main_bracket_counter <- main_bracket_counter + 1L
+
+        if (main_bracket_counter <= 60L) {
+            expected_region_index <- as.integer((main_bracket_counter - 1L) %/% 15L) + 1L
+            if (expected_region_index != current_region_index) {
+                current_region_index <- expected_region_index
+                current_region_counter <- 0L
+            }
+
+            current_region_counter <- current_region_counter + 1L
+            current_region <- regional_order[current_region_index]
+            round_name <- results_round_label(current_region, current_region_counter)
+            round_game_index <- dplyr::case_when(
+                round_name == "Round of 64" ~ current_region_counter,
+                round_name == "Round of 32" ~ current_region_counter - 8L,
+                round_name == "Sweet 16" ~ current_region_counter - 12L,
+                TRUE ~ 1L
+            )
+
+            results[[length(results) + 1L]] <- parsed %>%
+                dplyr::mutate(
+                    Year = as.character(year),
+                    region = current_region,
+                    round = round_name,
+                    game_index = round_game_index,
+                    winner = ifelse(teamA_score > teamB_score, teamA, teamB)
+                )
+            next
+        }
+
+        if (main_bracket_counter > 63L) {
+            next
+        }
+
+        if (main_bracket_counter > 60L) {
             national_counter <- national_counter + 1L
             results[[length(results) + 1L]] <- parsed %>%
                 dplyr::mutate(
@@ -391,26 +433,6 @@ scrape_tournament_results <- function(year) {
                     winner = ifelse(teamA_score > teamB_score, teamA, teamB)
                 )
             next
-        }
-
-        if (section %in% c("East", "West", "South", "Midwest")) {
-            regional_counter <- regional_counter + 1L
-            round_name <- results_round_label(section, regional_counter)
-            round_game_index <- dplyr::case_when(
-                round_name == "Round of 64" ~ regional_counter,
-                round_name == "Round of 32" ~ regional_counter - 8L,
-                round_name == "Sweet 16" ~ regional_counter - 12L,
-                TRUE ~ 1L
-            )
-
-            results[[length(results) + 1L]] <- parsed %>%
-                dplyr::mutate(
-                    Year = as.character(year),
-                    region = section,
-                    round = round_name,
-                    game_index = round_game_index,
-                    winner = ifelse(teamA_score > teamB_score, teamA, teamB)
-                )
         }
     }
 
@@ -449,7 +471,12 @@ update_tournament_data <- function(start_year = NULL, bracket_year = as.integer(
     conf_assignments <- purrr::map_dfr(historical_years, scrape_conf_assignments)
     team_features <- build_team_feature_dataset(bart_data, conf_assignments)
 
-    completed_years <- historical_years[historical_years < bracket_year]
+    available_feature_years <- unique(suppressWarnings(as.integer(team_features$Year)))
+    available_feature_years <- available_feature_years[!is.na(available_feature_years)]
+    completed_years <- intersect(
+        historical_years[historical_years < bracket_year],
+        available_feature_years
+    )
     tournament_results <- purrr::map_dfr(completed_years, scrape_tournament_results)
 
     writexl::write_xlsx(team_features, team_features_file)
