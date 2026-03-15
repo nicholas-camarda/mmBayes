@@ -1,6 +1,15 @@
 default:
-  data:
-    path: "data/bayesian_model_data.xlsx"
+  data_path: "data/bayesian_model_data.xlsx"
+  metrics_to_use:
+    - overall_strength
+    - barthag_logit
+    - AdjOE
+    - AdjDE
+    - Clutch_Index
+    - Conf_Strength
+    - Upset_Factor
+    - Turnover_Edge
+  model:
     required_metrics:
       - overall_strength
       - barthag_logit
@@ -10,17 +19,8 @@ default:
       - Conf_Strength
       - Upset_Factor
       - Turnover_Edge
-    derived_metrics:
-      - seed_strength
-      - conf_power
-      - historical_performance
-  model:
-    n_draws: 10000
-    random_seed: 123
-    chains: 4
-    iter: 5000
-    warmup: 1000
+    random_seed: 42
+    n_draws: 1000
   output:
-    dir: "output"
-    save_diagnostics: true
-    save_predictions: true 
+    path: "output"
+    prefix: "tournament_sim"

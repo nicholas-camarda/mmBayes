@@ -1,0 +1,32 @@
+Package: mmBayes
+Title: March Madness Bayesian Prediction Model
+Version: 0.1.0
+Authors@R: 
+    person("Author", "Name", , "author@example.com", role = c("aut", "cre"))
+Description: A Bayesian model for predicting March Madness tournament outcomes.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Imports:
+    bayesplot,
+    dplyr,
+    ggplot2,
+    logger,
+    loo,
+    patchwork,
+    purrr,
+    readxl,
+    rstanarm,
+    rvest,
+    stringr,
+    tibble,
+    tidyr,
+    writexl,
+    yaml
+Suggests:
+    config,
+    pkgload,
+    roxygen2,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

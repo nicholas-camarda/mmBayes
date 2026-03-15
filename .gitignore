@@ -1,7 +1,16 @@
 data/*
 *cache/*
 old/*
+!old/mmBayes_refactor_snapshot.R
+!old/R_setup_experiment.R
+!old/run_simulation_source_legacy.R
 plots/*
+output/
+*.Rout
+*.log
+priors/*.rds
+scripts/.Rhistory
+tests/testthat/*.log
 
 .DS_Store
 .history/

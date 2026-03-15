@@ -1,0 +1,17 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^data-raw$
+^\.git$
+^\.gitignore$
+^README\.Rmd$
+^LICENSE\.md$
+^\.travis\.yml$
+^\.github$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^vignettes$
+^output$
+^tournament_simulation\.log$
+^old$
+^scripts$
