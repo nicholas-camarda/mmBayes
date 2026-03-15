@@ -202,6 +202,30 @@ write_fixture_data_files <- function(team_path, results_path, team_data = NULL, 
     list(team_path = team_path, results_path = results_path)
 }
 
+make_fixture_conf_assignments <- function(team_features) {
+    team_features %>%
+        dplyr::select(Year, Team, Seed, Region, Conf)
+}
+
+make_fixture_bart_ratings <- function(team_features) {
+    team_features %>%
+        dplyr::select(
+            Year,
+            Team,
+            Barthag,
+            AdjOE,
+            AdjDE,
+            WAB,
+            TOR,
+            TORD,
+            ORB,
+            DRB,
+            `3P%`,
+            `3P%D`,
+            `Adj T.`
+        )
+}
+
 apply_fixture_result_aliases <- function(results_data) {
     alias_map <- c(
         "North Carolina" = "UNC",

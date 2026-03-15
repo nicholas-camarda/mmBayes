@@ -135,14 +135,13 @@ scrape_conf_assignments <- function(year) {
 #' Scrape Bart Torvik pre-tournament team features
 #'
 #' @param year The tournament year to scrape.
-#' @param region The region filter to request from Bart Torvik.
 #'
-#' @return A team-level feature table for the requested year and region.
+#' @return A year-wide team-level feature table for the requested year.
 #' @keywords internal
-scrape_bart_data <- function(year, region) {
+scrape_bart_data <- function(year) {
     url <- paste0(
         "https://barttorvik.com/?year=", year,
-        "&sort=&hteam=&t2value=&conlimit=", region,
+        "&sort=&hteam=&t2value=&conlimit=All",
         "&state=All&begin=", year - 1, "1101",
         "&end=", year, "0501",
         "&top=0&revquad=0&quad=5&venue=All&type=All&mingames=0#"
@@ -152,29 +151,121 @@ scrape_bart_data <- function(year, region) {
     page <- read_html_verified(url)
     table <- extract_primary_table(page, url, expected_header_tokens = c("Rk", "Team", "G", "AdjOE", "AdjDE", "Barthag"))
 
-    column_names <- as.character(table[1, ])
-    colnames(table) <- column_names
+    if (!all(c("Team", "AdjOE", "AdjDE", "Barthag") %in% names(table))) {
+        column_names <- as.character(table[1, ])
+        colnames(table) <- column_names
+        table <- dplyr::slice(table, -1)
+    }
 
     table %>%
-        dplyr::slice(-1) %>%
-        dplyr::filter(stringr::str_detect(Team, "\\bseed\\b")) %>%
+        dplyr::filter(!is.na(Team), stringr::str_squish(Team) != "") %>%
         dplyr::mutate(
             Year = as.character(year),
-            Region = region,
             Rk = as.numeric(Rk),
             G = as.numeric(G),
             dplyr::across(c(`AdjOE`, `AdjDE`, `Barthag`, `TOR`, `TORD`, `ORB`, `DRB`, `3P%`, `3P%D`, `Adj T.`, `WAB`), as.numeric),
-            temp = stringr::str_match(Team, "^(.*?)\\s+(\\d+)\\s*seed"),
-            Team_clean = canonicalize_team_name(stringr::str_trim(temp[, 2])),
-            Seed_clean = as.numeric(temp[, 3])
+            Team = canonicalize_team_name(stringr::str_trim(stringr::str_replace(Team, "\\s+\\d+\\s*seed$", ""))),
+            team_key = normalize_team_key(Team)
         ) %>%
-        dplyr::select(-temp) %>%
+        dplyr::select(
+            Year,
+            Team,
+            team_key,
+            Barthag,
+            AdjOE,
+            AdjDE,
+            WAB,
+            TOR,
+            TORD,
+            ORB,
+            DRB,
+            `3P%`,
+            `3P%D`,
+            `Adj T.`
+        )
+}
+
+#' Validate the scraped tournament roster
+#'
+#' @param conf_assignments A roster table scraped from the Bart tournament page.
+#'
+#' @return The validated roster with canonical team keys.
+#' @keywords internal
+validate_tournament_roster <- function(conf_assignments) {
+    roster <- conf_assignments %>%
         dplyr::mutate(
-            Team = Team_clean,
-            Seed = Seed_clean,
-            .before = 5
-        ) %>%
-        dplyr::select(-Team_clean, -Seed_clean)
+            Year = as.character(Year),
+            Team = canonicalize_team_name(Team),
+            Region = as.character(Region),
+            Conf = as.character(Conf),
+            Seed = as.integer(Seed),
+            team_key = normalize_team_key(Team)
+        )
+
+    duplicate_team_rows <- roster %>%
+        dplyr::count(Year, Region, Team, name = "n") %>%
+        dplyr::filter(n > 1)
+    if (nrow(duplicate_team_rows) > 0) {
+        stop_with_message(
+            sprintf(
+                "Tournament roster contains duplicate Year/Region/Team rows: %s",
+                paste(sprintf("%s %s %s", duplicate_team_rows$Year, duplicate_team_rows$Region, duplicate_team_rows$Team), collapse = "; ")
+            )
+        )
+    }
+
+    yearly_counts <- roster %>%
+        dplyr::count(Year, name = "teams") %>%
+        dplyr::filter(teams != 68L)
+    if (nrow(yearly_counts) > 0) {
+        stop_with_message(
+            sprintf(
+                "Tournament roster must contain exactly 68 teams per year: %s",
+                paste(sprintf("%s=%s", yearly_counts$Year, yearly_counts$teams), collapse = ", ")
+            )
+        )
+    }
+
+    region_counts <- roster %>%
+        dplyr::count(Year, Region, name = "teams") %>%
+        dplyr::filter(teams < 16L | teams > 18L)
+    if (nrow(region_counts) > 0) {
+        stop_with_message(
+            sprintf(
+                "Tournament roster has invalid region team counts: %s",
+                paste(sprintf("%s %s=%s", region_counts$Year, region_counts$Region, region_counts$teams), collapse = "; ")
+            )
+        )
+    }
+
+    duplicate_seed_slots <- roster %>%
+        dplyr::count(Year, Region, Seed, name = "n") %>%
+        dplyr::filter(n > 1)
+
+    invalid_duplicate_slots <- duplicate_seed_slots %>%
+        dplyr::filter(n != 2L)
+    if (nrow(invalid_duplicate_slots) > 0) {
+        stop_with_message(
+            sprintf(
+                "Tournament roster has invalid play-in seed duplication: %s",
+                paste(sprintf("%s %s %s=%s", invalid_duplicate_slots$Year, invalid_duplicate_slots$Region, invalid_duplicate_slots$Seed, invalid_duplicate_slots$n), collapse = "; ")
+            )
+        )
+    }
+
+    duplicate_slot_years <- duplicate_seed_slots %>%
+        dplyr::count(Year, name = "duplicate_slots") %>%
+        dplyr::filter(duplicate_slots != 4L)
+    if (nrow(duplicate_slot_years) > 0) {
+        stop_with_message(
+            sprintf(
+                "Tournament roster must contain exactly four play-in seed slots per year: %s",
+                paste(sprintf("%s=%s", duplicate_slot_years$Year, duplicate_slot_years$duplicate_slots), collapse = ", ")
+            )
+        )
+    }
+
+    roster
 }
 
 #' Build the canonical team feature dataset
@@ -185,15 +276,63 @@ scrape_bart_data <- function(year, region) {
 #' @return A normalized pre-tournament team feature table.
 #' @keywords internal
 build_team_feature_dataset <- function(bart_data, conf_assignments) {
-    bart_data %>%
-        dplyr::left_join(
-            conf_assignments,
-            by = c("Year", "Team", "Seed", "Region"),
-            suffix = c("", "_conf")
-        ) %>%
+    roster <- validate_tournament_roster(conf_assignments)
+    ratings <- bart_data %>%
         dplyr::mutate(
-            Conf = dplyr::coalesce(Conf_conf, Conf)
-        ) %>%
+            Year = as.character(Year),
+            Team = canonicalize_team_name(Team),
+            team_key = normalize_team_key(Team)
+        )
+
+    duplicate_rating_rows <- ratings %>%
+        dplyr::count(Year, team_key, name = "n") %>%
+        dplyr::filter(n > 1)
+    if (nrow(duplicate_rating_rows) > 0) {
+        duplicate_detail <- ratings %>%
+            dplyr::inner_join(duplicate_rating_rows, by = c("Year", "team_key")) %>%
+            dplyr::distinct(Year, Team)
+        stop_with_message(
+            sprintf(
+                "Bart ratings contain duplicate teams for the same year: %s",
+                paste(sprintf("%s %s", duplicate_detail$Year, duplicate_detail$Team), collapse = "; ")
+            )
+        )
+    }
+
+    joined <- roster %>%
+        dplyr::left_join(
+            ratings %>%
+                dplyr::select(
+                    Year,
+                    team_key,
+                    Barthag,
+                    AdjOE,
+                    AdjDE,
+                    WAB,
+                    TOR,
+                    TORD,
+                    ORB,
+                    DRB,
+                    `3P%`,
+                    `3P%D`,
+                    `Adj T.`
+                ),
+            by = c("Year", "team_key")
+        )
+
+    unresolved_roster <- joined %>%
+        dplyr::filter(dplyr::if_any(c(Barthag, AdjOE, AdjDE, WAB, TOR, TORD, ORB, DRB, `3P%`, `3P%D`, `Adj T.`), is.na)) %>%
+        dplyr::distinct(Year, Team)
+    if (nrow(unresolved_roster) > 0) {
+        stop_with_message(
+            sprintf(
+                "Year-wide Bart ratings did not cover every tournament team: %s",
+                paste(sprintf("%s %s", unresolved_roster$Year, unresolved_roster$Team), collapse = "; ")
+            )
+        )
+    }
+
+    joined %>%
         dplyr::select(
             Year,
             Team,
@@ -474,11 +613,8 @@ update_tournament_data <- function(start_year = NULL, bracket_year = as.integer(
     start_year <- start_year %||% max(2008L, bracket_year - history_window - 2L)
     historical_years <- seq.int(start_year, bracket_year)
     historical_years <- historical_years[historical_years != 2020L]
-    regions <- c("East", "West", "Midwest", "South")
 
-    bart_data <- purrr::map_dfr(historical_years, function(year) {
-        purrr::map_dfr(regions, function(region) scrape_bart_data(year, region))
-    })
+    bart_data <- purrr::map_dfr(historical_years, scrape_bart_data)
 
     conf_assignments <- purrr::map_dfr(historical_years, scrape_conf_assignments)
     team_features <- build_team_feature_dataset(bart_data, conf_assignments)

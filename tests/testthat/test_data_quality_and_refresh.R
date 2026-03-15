@@ -84,6 +84,50 @@ test_that("loader succeeds when result teams use aliased source names", {
     expect_true(all(c("historical_matchups", "historical_teams", "current_teams") %in% names(loaded)))
 })
 
+test_that("year-wide Bart join preserves the full tournament roster", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    conf_assignments <- make_fixture_conf_assignments(team_data)
+    bart_ratings <- make_fixture_bart_ratings(team_data)
+
+    dataset <- build_team_feature_dataset(bart_ratings, conf_assignments)
+
+    expect_equal(dataset %>% dplyr::count(Year) %>% dplyr::pull(n), c(68L, 68L))
+    expect_true(all(pre_tournament_feature_columns() %in% names(dataset)))
+    expect_equal(
+        dataset %>%
+            dplyr::count(Year, Region, Seed, name = "n") %>%
+            dplyr::filter(n > 1) %>%
+            dplyr::count(Year, name = "duplicate_slots") %>%
+            dplyr::pull(duplicate_slots),
+        c(4L, 4L)
+    )
+})
+
+test_that("year-wide Bart join fails fast when ratings miss tournament teams", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    conf_assignments <- make_fixture_conf_assignments(team_data)
+    bart_ratings <- make_fixture_bart_ratings(team_data) %>%
+        dplyr::filter(!(Year == "2024" & Team == "East_01_2024"))
+
+    expect_error(
+        build_team_feature_dataset(bart_ratings, conf_assignments),
+        regexp = "did not cover every tournament team"
+    )
+})
+
+test_that("year-wide Bart join fails fast on duplicate rating rows", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    conf_assignments <- make_fixture_conf_assignments(team_data)
+    bart_ratings <- make_fixture_bart_ratings(team_data)
+    duplicate_row <- bart_ratings %>%
+        dplyr::filter(Year == "2024", Team == "East_01_2024")
+
+    expect_error(
+        build_team_feature_dataset(dplyr::bind_rows(bart_ratings, duplicate_row), conf_assignments),
+        regexp = "duplicate teams for the same year"
+    )
+})
+
 test_that("quality gates flag suspicious First Four rows and round-count drift", {
     team_data <- make_fixture_team_features()
     results_data <- make_fixture_game_results(team_data) %>%
