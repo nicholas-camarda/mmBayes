@@ -35,7 +35,9 @@ default_project_config <- function() {
         ),
         output = list(
             path = "output",
-            prefix = "tournament_sim"
+            prefix = "tournament_sim",
+            log_path = "output/logs/tournament_simulation.log",
+            refresh_log_path = "output/logs/data_refresh.log"
         )
     )
 }
@@ -94,6 +96,11 @@ load_project_config <- function(path = "config.yml") {
 #' @return Invisibly configures the package logger for file-based logging.
 #' @export
 initialize_logging <- function(log_path = "tournament_simulation.log") {
+    log_dir <- dirname(log_path)
+    if (!identical(log_dir, ".") && !dir.exists(log_dir)) {
+        dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
+    }
+
     logger::log_threshold(logger::INFO)
     logger::log_appender(logger::appender_file(log_path))
 }

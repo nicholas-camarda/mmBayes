@@ -25,3 +25,5 @@ default:
   output:
     path: "output"
     prefix: "tournament_sim"
+    log_path: "output/logs/tournament_simulation.log"
+    refresh_log_path: "output/logs/data_refresh.log"

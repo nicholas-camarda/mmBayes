@@ -20,7 +20,8 @@ setwd(project_root)
 pkgload::load_all(project_root, export_all = TRUE, helpers = FALSE, quiet = TRUE)
 
 config <- load_project_config("config.yml")
-initialize_logging("tournament_simulation.log")
+log_path <- config$output$log_path %||% file.path(config$output$path %||% "output", "logs", "tournament_simulation.log")
+initialize_logging(log_path)
 results <- run_tournament_simulation(config)
 
 champion <- results$final_four$champion
@@ -45,3 +46,4 @@ if (!is.null(results$output$backtest_summary)) {
     cat(sprintf("- Backtest summary: %s\n", results$output$backtest_summary))
 }
 cat(sprintf("- Bracket plot: %s\n", results$output$bracket_plot))
+cat(sprintf("- Log: %s\n", log_path))

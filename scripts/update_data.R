@@ -19,9 +19,13 @@ setwd(project_root)
 
 pkgload::load_all(project_root, export_all = TRUE, helpers = FALSE, quiet = TRUE)
 
-initialize_logging("tournament_simulation.log")
+config <- load_project_config("config.yml")
+log_path <- config$output$refresh_log_path %||% file.path(config$output$path %||% "output", "logs", "data_refresh.log")
+
+initialize_logging(log_path)
 paths <- update_tournament_data()
 
 cat("Updated tournament data files:\n")
 cat(sprintf("- Team features: %s\n", paths$team_features))
 cat(sprintf("- Tournament game results: %s\n", paths$game_results))
+cat(sprintf("- Refresh log: %s\n", log_path))

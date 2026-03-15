@@ -10,7 +10,7 @@ library(logger)
 #' @export
 run_tournament_simulation <- function(config = NULL) {
     config <- config %||% load_project_config()
-    initialize_logging()
+    initialize_logging(config$output$log_path %||% file.path(config$output$path %||% "output", "logs", "tournament_simulation.log"))
 
     logger::log_info("Running tournament simulation pipeline")
     data <- load_tournament_data(config)

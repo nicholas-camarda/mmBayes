@@ -1,6 +1,7 @@
 library(dplyr)
 library(ggplot2)
 library(logger)
+library(stringr)
 library(tibble)
 
 #' Stop with a simplified message
@@ -36,6 +37,115 @@ safe_numeric <- function(x, default = 0) {
     ifelse(is.na(value) | !is.finite(value), default, value)
 }
 
+#' Build a raw normalization key for team names
+#'
+#' @param x A character vector of team names.
+#'
+#' @return A normalized character vector used for alias lookups.
+#' @keywords internal
+raw_team_name_key <- function(x) {
+    x %>%
+        as.character() %>%
+        stringr::str_replace_all("[\u2018\u2019]", "'") %>%
+        stringr::str_squish() %>%
+        tolower() %>%
+        gsub("&", "and", ., fixed = TRUE) %>%
+        gsub("[^a-z0-9]", "", .)
+}
+
+#' Return canonical team-name aliases used across data sources
+#'
+#' @return A named character vector mapping normalized aliases to canonical team
+#'   display names.
+#' @keywords internal
+team_name_aliases <- function() {
+    c(
+        "alabamast" = "Alabama State",
+        "appalachianst" = "Appalachian State",
+        "arizonast" = "Arizona State",
+        "boisest" = "Boise State",
+        "calstfullerton" = "Cal State Fullerton",
+        "clevelandst" = "Cleveland State",
+        "collegeofcharleston" = "Charleston",
+        "coloradost" = "Colorado State",
+        "fdu" = "Fairleigh Dickinson",
+        "floridast" = "Florida State",
+        "grambling" = "Grambling State",
+        "georgiast" = "Georgia State",
+        "gramblingst" = "Grambling State",
+        "iowast" = "Iowa State",
+        "jacksonvillest" = "Jacksonville State",
+        "kansasst" = "Kansas State",
+        "kennesawst" = "Kennesaw State",
+        "kentst" = "Kent State",
+        "longbeachst" = "Long Beach State",
+        "loyolail" = "Loyola Chicago",
+        "mcneesest" = "McNeese State",
+        "miamifl" = "Miami (FL)",
+        "michiganst" = "Michigan State",
+        "mississippi" = "Mississippi",
+        "mississippist" = "Mississippi State",
+        "montanast" = "Montana State",
+        "moreheadst" = "Morehead State",
+        "murrayst" = "Murray State",
+        "newmexicost" = "New Mexico State",
+        "ncstate" = "NC State",
+        "ncst" = "NC State",
+        "ncstatewolfpack" = "NC State",
+        "northdakotast" = "North Dakota State",
+        "northcarolina" = "North Carolina",
+        "northcarolinastate" = "NC State",
+        "norfolkst" = "Norfolk State",
+        "ohiost" = "Ohio State",
+        "olemiss" = "Mississippi",
+        "oklahomast" = "Oklahoma State",
+        "oregonst" = "Oregon State",
+        "pennst" = "Penn State",
+        "pitt" = "Pittsburgh",
+        "prairieview" = "Prairie View A&M",
+        "prairieviewaandm" = "Prairie View A&M",
+        "saintfrancispa" = "Saint Francis",
+        "saintjohns" = "Saint John's",
+        "saintpeters" = "Saint Peter's",
+        "sandiegost" = "San Diego State",
+        "southdakotast" = "South Dakota State",
+        "southeastmissourist" = "Southeast Missouri State",
+        "stfrancis" = "Saint Francis",
+        "stfrancispa" = "Saint Francis",
+        "stjohns" = "Saint John's",
+        "stjohnsny" = "Saint John's",
+        "stpeters" = "Saint Peter's",
+        "texasaandmcorpuschris" = "Texas A&M Corpus Christi",
+        "texasaandmcorpuschristi" = "Texas A&M Corpus Christi",
+        "uconn" = "Connecticut",
+        "ucsandiego" = "UC San Diego",
+        "ucsb" = "UC Santa Barbara",
+        "unc" = "North Carolina",
+        "utahst" = "Utah State",
+        "washingtonst" = "Washington State",
+        "wichitast" = "Wichita State",
+        "wrightst" = "Wright State",
+        "omaha" = "Nebraska Omaha"
+    )
+}
+
+#' Canonicalize team names across scraped sources
+#'
+#' @param x A character vector of team names.
+#'
+#' @return A character vector of canonical team display names.
+#' @keywords internal
+canonicalize_team_name <- function(x) {
+    aliases <- team_name_aliases()
+    keys <- raw_team_name_key(x)
+    canonical <- unname(aliases[keys])
+    fallback <- x %>%
+        as.character() %>%
+        stringr::str_replace_all("[\u2018\u2019]", "'") %>%
+        stringr::str_squish()
+    dplyr::coalesce(canonical, fallback)
+}
+
 #' Normalize team names for joins
 #'
 #' @param x A character vector of team names.
@@ -43,10 +153,7 @@ safe_numeric <- function(x, default = 0) {
 #' @return A normalized character vector suitable for key-based joins.
 #' @keywords internal
 normalize_team_key <- function(x) {
-    x %>%
-        tolower() %>%
-        gsub("&", "and", ., fixed = TRUE) %>%
-        gsub("[^a-z0-9]", "", .)
+    raw_team_name_key(canonicalize_team_name(x))
 }
 
 #' Return the ordered set of tournament round labels
@@ -107,6 +214,22 @@ default_round_weights <- function() {
         "Elite 8" = 8,
         "Final Four" = 16,
         "Championship" = 32
+    )
+}
+
+#' Return expected game counts by round for a completed tournament
+#'
+#' @return A named integer vector of expected completed-tournament round counts.
+#' @keywords internal
+expected_completed_round_counts <- function() {
+    c(
+        "First Four" = 4L,
+        "Round of 64" = 32L,
+        "Round of 32" = 16L,
+        "Sweet 16" = 8L,
+        "Elite 8" = 4L,
+        "Final Four" = 2L,
+        "Championship" = 1L
     )
 }
 

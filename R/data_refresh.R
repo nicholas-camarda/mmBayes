@@ -127,7 +127,7 @@ scrape_conf_assignments <- function(year) {
         Year = as.character(year),
         Region = as.character(Region),
         Seed = as.integer(Seed),
-        Team = stringr::str_trim(Team)
+        Team = canonicalize_team_name(stringr::str_trim(Team))
     ) %>%
         dplyr::select(Year, Team, Seed, Region, Conf)
 }
@@ -165,7 +165,7 @@ scrape_bart_data <- function(year, region) {
             G = as.numeric(G),
             dplyr::across(c(`AdjOE`, `AdjDE`, `Barthag`, `TOR`, `TORD`, `ORB`, `DRB`, `3P%`, `3P%D`, `Adj T.`, `WAB`), as.numeric),
             temp = stringr::str_match(Team, "^(.*?)\\s+(\\d+)\\s*seed"),
-            Team_clean = stringr::str_trim(temp[, 2]),
+            Team_clean = canonicalize_team_name(stringr::str_trim(temp[, 2])),
             Seed_clean = as.numeric(temp[, 3])
         ) %>%
         dplyr::select(-temp) %>%
@@ -258,10 +258,10 @@ parse_tournament_game_line <- function(line) {
 
     tibble::tibble(
         teamA_seed = as.integer(matched[, 2]),
-        teamA = stringr::str_trim(matched[, 3]),
+        teamA = canonicalize_team_name(stringr::str_trim(matched[, 3])),
         teamA_score = as.integer(matched[, 4]),
         teamB_seed = as.integer(matched[, 5]),
-        teamB = stringr::str_trim(matched[, 6]),
+        teamB = canonicalize_team_name(stringr::str_trim(matched[, 6])),
         teamB_score = as.integer(matched[, 7])
     )
 }
@@ -281,30 +281,25 @@ parse_tournament_team_result_line <- function(line) {
 
     tibble::tibble(
         seed = as.integer(matched[, 2]),
-        team = stringr::str_trim(matched[, 3]),
+        team = canonicalize_team_name(stringr::str_trim(matched[, 3])),
         score = as.integer(matched[, 4])
     )
 }
 
-#' Scrape explicit tournament game results
+#' Parse tournament bracket text into explicit game results
 #'
-#' @param year The tournament year to scrape.
+#' @param lines A character vector of bracket text lines.
+#' @param year The tournament year represented by `lines`.
 #'
 #' @return A game-level results table including region, round, teams, and winner.
 #' @keywords internal
-scrape_tournament_results <- function(year) {
-    url <- sprintf("https://www.sports-reference.com/cbb/postseason/men/%s-ncaa.html", year)
-    logger::log_info("Scraping tournament results from {url}")
-
-    page_text <- rvest::read_html(url) %>%
-        rvest::html_text2()
-    lines <- page_text %>%
-        stringr::str_split("\\n", simplify = FALSE) %>%
-        purrr::pluck(1) %>%
+parse_tournament_results_lines <- function(lines, year) {
+    lines <- lines %>%
         stringr::str_trim() %>%
         .[nzchar(.)]
 
     region_alias <- c("East", "West", "South", "Midwest", "National")
+    first_four_seeds <- c(10L, 11L, 12L, 16L)
     bracket_started <- FALSE
     first_four_counter <- 0L
     main_bracket_counter <- 0L
@@ -372,7 +367,8 @@ scrape_tournament_results <- function(year) {
             pending_game_team <- NULL
         }
 
-        is_equal_seed_play_in <- identical(parsed$teamA_seed, parsed$teamB_seed)
+        is_equal_seed_play_in <- identical(parsed$teamA_seed, parsed$teamB_seed) &&
+            parsed$teamA_seed %in% first_four_seeds
 
         if (isTRUE(next_game_is_first_four) || is_dayton_play_in || is_equal_seed_play_in) {
             first_four_counter <- first_four_counter + 1L
@@ -422,18 +418,15 @@ scrape_tournament_results <- function(year) {
             next
         }
 
-        if (main_bracket_counter > 60L) {
-            national_counter <- national_counter + 1L
-            results[[length(results) + 1L]] <- parsed %>%
-                dplyr::mutate(
-                    Year = as.character(year),
-                    region = "National",
-                    round = results_round_label("National", national_counter),
-                    game_index = ifelse(national_counter <= 2L, national_counter, 1L),
-                    winner = ifelse(teamA_score > teamB_score, teamA, teamB)
-                )
-            next
-        }
+        national_counter <- national_counter + 1L
+        results[[length(results) + 1L]] <- parsed %>%
+            dplyr::mutate(
+                Year = as.character(year),
+                region = "National",
+                round = results_round_label("National", national_counter),
+                game_index = ifelse(national_counter <= 2L, national_counter, 1L),
+                winner = ifelse(teamA_score > teamB_score, teamA, teamB)
+            )
     }
 
     final_results <- dplyr::bind_rows(results) %>%
@@ -444,6 +437,25 @@ scrape_tournament_results <- function(year) {
     }
 
     final_results
+}
+
+#' Scrape explicit tournament game results
+#'
+#' @param year The tournament year to scrape.
+#'
+#' @return A game-level results table including region, round, teams, and winner.
+#' @keywords internal
+scrape_tournament_results <- function(year) {
+    url <- sprintf("https://www.sports-reference.com/cbb/postseason/men/%s-ncaa.html", year)
+    logger::log_info("Scraping tournament results from {url}")
+
+    page_text <- rvest::read_html(url) %>%
+        rvest::html_text2()
+    lines <- page_text %>%
+        stringr::str_split("\\n", simplify = FALSE) %>%
+        purrr::pluck(1)
+
+    parse_tournament_results_lines(lines, year)
 }
 
 #' Refresh canonical tournament data files
@@ -478,6 +490,8 @@ update_tournament_data <- function(start_year = NULL, bracket_year = as.integer(
         available_feature_years
     )
     tournament_results <- purrr::map_dfr(completed_years, scrape_tournament_results)
+
+    assert_canonical_data_quality(team_features, tournament_results)
 
     writexl::write_xlsx(team_features, team_features_file)
     writexl::write_xlsx(tournament_results, game_results_file)

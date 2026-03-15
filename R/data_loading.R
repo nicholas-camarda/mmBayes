@@ -25,7 +25,7 @@ normalize_team_features <- function(data) {
         impute_numeric_columns() %>%
         dplyr::mutate(
             Year = as.character(Year),
-            Team = as.character(Team),
+            Team = canonicalize_team_name(Team),
             team_key = normalize_team_key(Team),
             Region = as.character(Region),
             Conf = as.character(Conf),
@@ -65,11 +65,11 @@ normalize_game_results <- function(data) {
             region = as.character(region),
             round = as.character(round),
             game_index = as.integer(game_index),
-            teamA = as.character(teamA),
-            teamB = as.character(teamB),
+            teamA = canonicalize_team_name(teamA),
+            teamB = canonicalize_team_name(teamB),
             teamA_seed = as.integer(teamA_seed),
             teamB_seed = as.integer(teamB_seed),
-            winner = as.character(winner)
+            winner = canonicalize_team_name(winner)
         )
 }
 
@@ -208,9 +208,21 @@ build_explicit_matchup_history <- function(team_features, game_results) {
     missing_team_rows <- joined %>%
         dplyr::filter(is.na(Seed_teamA) | is.na(Seed_teamB))
     if (nrow(missing_team_rows) > 0) {
-        missing_teams <- unique(c(missing_team_rows$teamA[is.na(missing_team_rows$Seed_teamA)], missing_team_rows$teamB[is.na(missing_team_rows$Seed_teamB)]))
+        missing_teams <- dplyr::bind_rows(
+            missing_team_rows %>%
+                dplyr::filter(is.na(Seed_teamA)) %>%
+                dplyr::transmute(Year, source_column = "teamA", Team = teamA),
+            missing_team_rows %>%
+                dplyr::filter(is.na(Seed_teamB)) %>%
+                dplyr::transmute(Year, source_column = "teamB", Team = teamB)
+        ) %>%
+            dplyr::distinct() %>%
+            dplyr::arrange(Year, Team, source_column)
         stop_with_message(
-            sprintf("Missing pre-tournament features for historical teams: %s", paste(missing_teams, collapse = ", "))
+            sprintf(
+                "Missing pre-tournament features for historical teams after aliasing: %s",
+                format_missing_team_summary(missing_teams)
+            )
         )
     }
 
@@ -330,6 +342,7 @@ load_tournament_data <- function(config) {
 
     validate_team_features(team_features)
     validate_game_results(game_results)
+    assert_canonical_data_quality(team_features, game_results)
 
     bracket_year <- get_bracket_year(team_features)
     logger::log_info("Using bracket year: {bracket_year}")

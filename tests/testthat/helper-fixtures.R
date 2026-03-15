@@ -28,33 +28,22 @@ make_fixture_team_features <- function(current_year = 2025, history_years = 2022
             add_safe_pre_tournament_features()
     }
 
-    build_play_in_row <- function(year, team_suffix = "b") {
-        dplyr::tibble(
-            Year = as.character(year),
-            Region = "East",
-            Seed = 11L,
-            Team = sprintf("East_11_%s_%s", year, team_suffix),
-            Conf = "Conf_04",
-            Barthag = plogis(2.1),
-            AdjOE = 108,
-            AdjDE = 94,
-            WAB = 4.5,
-            TOR = 0.132,
-            TORD = 0.146,
-            ORB = 0.285,
-            DRB = 0.666,
-            `3P%` = 0.347,
-            `3P%D` = 0.331,
-            `Adj T.` = 68.4
+    build_play_in_rows <- function(year) {
+        dplyr::tribble(
+            ~Region, ~Seed, ~Team, ~Conf, ~Barthag, ~AdjOE, ~AdjDE, ~WAB, ~TOR, ~TORD, ~ORB, ~DRB, ~`3P%`, ~`3P%D`, ~`Adj T.`,
+            "East", 11L, sprintf("East_11_%s_playin", year), "Conf_04", plogis(2.1), 108, 94, 4.5, 0.132, 0.146, 0.285, 0.666, 0.347, 0.331, 68.4,
+            "West", 16L, sprintf("West_16_%s_playin", year), "Conf_08", plogis(1.7), 103, 98, 2.8, 0.129, 0.141, 0.274, 0.659, 0.338, 0.336, 67.8,
+            "South", 10L, sprintf("South_10_%s_playin", year), "Conf_03", plogis(2.0), 109, 95, 4.1, 0.131, 0.145, 0.282, 0.664, 0.345, 0.332, 68.1,
+            "Midwest", 16L, sprintf("Midwest_16_%s_playin", year), "Conf_07", plogis(1.6), 102, 99, 2.4, 0.128, 0.140, 0.271, 0.657, 0.336, 0.337, 67.6
         ) %>%
+            dplyr::mutate(Year = as.character(year)) %>%
             add_safe_pre_tournament_features()
     }
 
     rows <- purrr::map_dfr(c(history_years, current_year), build_base_rows)
-    historical_play_in <- build_play_in_row(max(history_years), "playin")
-    current_play_in <- build_play_in_row(current_year, "playin")
+    play_in_rows <- purrr::map_dfr(c(history_years, current_year), build_play_in_rows)
 
-    dplyr::bind_rows(rows, historical_play_in, current_play_in) %>%
+    dplyr::bind_rows(rows, play_in_rows) %>%
         dplyr::arrange(Year, Region, Seed, Team)
 }
 
@@ -211,4 +200,98 @@ write_fixture_data_files <- function(team_path, results_path, team_data = NULL, 
     writexl::write_xlsx(results_data, results_path)
 
     list(team_path = team_path, results_path = results_path)
+}
+
+apply_fixture_result_aliases <- function(results_data) {
+    alias_map <- c(
+        "North Carolina" = "UNC",
+        "Connecticut" = "UConn",
+        "Pittsburgh" = "Pitt",
+        "Saint John's" = "St. John's (NY)",
+        "Saint Peter's" = "St. Peter's",
+        "UC Santa Barbara" = "UCSB",
+        "Wichita State" = "Wichita State",
+        "Florida State" = "Florida State",
+        "Ohio State" = "Ohio State",
+        "Michigan State" = "Michigan State",
+        "Kansas State" = "Kansas State",
+        "San Diego State" = "San Diego State",
+        "Texas A&M Corpus Christi" = "Texas A&M-Corpus Christi",
+        "Saint Francis" = "Saint Francis (PA)"
+    )
+
+    remap_name <- function(x) {
+        mapped <- alias_map[x]
+        dplyr::coalesce(unname(mapped), x)
+    }
+
+    results_data %>%
+        dplyr::mutate(
+            teamA = remap_name(teamA),
+            teamB = remap_name(teamB),
+            winner = remap_name(winner)
+        )
+}
+
+make_parser_fixture_lines <- function(year = 2025L) {
+    build_game_line <- function(seed_a, team_a, score_a, seed_b, team_b, score_b) {
+        sprintf("(%s) %s %s, (%s) %s %s", seed_a, team_a, score_a, seed_b, team_b, score_b)
+    }
+
+    parser_regions <- c("East", "Midwest", "South", "West")
+    play_in_specs <- list(
+        East = c(16L, 16L),
+        Midwest = c(16L, 16L),
+        South = c(10L, 10L),
+        West = c(11L, 11L)
+    )
+
+    regional_sections <- purrr::imap(
+        parser_regions,
+        function(region_name, region_index) {
+            counter_lines <- purrr::map_chr(seq_len(15), function(counter) {
+                if (counter <= 8) {
+                    seed_a <- c(1, 8, 5, 4, 6, 3, 7, 2)[counter]
+                    seed_b <- c(16, 9, 12, 13, 11, 14, 10, 15)[counter]
+                } else if (counter <= 12) {
+                    seed_a <- c(1, 5, 6, 7)[counter - 8]
+                    seed_b <- c(8, 4, 3, 2)[counter - 8]
+                } else if (counter <= 14) {
+                    seed_a <- c(1, 6)[counter - 12]
+                    seed_b <- c(4, 2)[counter - 12]
+                } else {
+                    seed_a <- 1
+                    seed_b <- 2
+                }
+
+                team_a <- sprintf("%s_%sA_%02d", region_name, counter, year)
+                team_b <- sprintf("%s_%sB_%02d", region_name, counter, year)
+                score_a <- 80 + region_index + counter
+                score_b <- 60 + region_index + counter
+                build_game_line(seed_a, team_a, score_a, seed_b, team_b, score_b)
+            })
+
+            c(
+                sprintf("%s First Four", region_name),
+                build_game_line(
+                    play_in_specs[[region_name]][1],
+                    sprintf("%s_PlayIn_1_%s", region_name, year),
+                    70 + region_index,
+                    play_in_specs[[region_name]][2],
+                    sprintf("%s_PlayIn_2_%s", region_name, year),
+                    63 + region_index
+                ),
+                region_name,
+                counter_lines
+            )
+        }
+    )
+
+    c(
+        unlist(regional_sections, use.names = FALSE),
+        "National",
+        build_game_line(1, sprintf("National_Semi_1A_%s", year), 71, 1, sprintf("National_Semi_1B_%s", year), 67),
+        build_game_line(1, sprintf("National_Semi_2A_%s", year), 75, 1, sprintf("National_Semi_2B_%s", year), 70),
+        build_game_line(1, sprintf("National_Title_A_%s", year), 69, 1, sprintf("National_Title_B_%s", year), 64)
+    )
 }
