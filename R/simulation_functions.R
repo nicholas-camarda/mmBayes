@@ -2,73 +2,75 @@ library(dplyr)
 library(logger)
 library(tibble)
 
-prepare_prediction_rows <- function(team_rows, model_results) {
-    prepared <- prepare_model_data(
-        team_rows,
-        metrics_to_use = model_results$metrics_to_use,
-        scaling_reference = model_results$scaling_reference,
-        conf_levels = model_results$conf_levels
-    )
-
-    prepared$data
-}
-
-predict_matchup_probabilities <- function(teamA, teamB, model_results, draws = 1000) {
-    prediction_rows <- prepare_prediction_rows(
-        dplyr::bind_rows(teamA, teamB),
-        model_results
-    )
-
-    if (model_results$engine != "bayes") {
-        stop_with_message("mmBayes requires the Bayesian model engine for tournament simulation")
-    }
-
-    posterior_draws <- nrow(as.matrix(model_results$model))
-    draws <- max(1L, min(as.integer(draws), posterior_draws))
-
-    linpred <- rstanarm::posterior_linpred(
-        newdata = prediction_rows,
-        object = model_results$model,
-        draws = draws,
-        re.form = NA
-    )
-    stats::plogis(linpred[, 1] - linpred[, 2])
-}
-
-#' Simulate a single matchup
-#' @export
-simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_results, draws = 1000) {
-    logger::log_info("Simulating matchup: {teamA$Team[1]} vs {teamB$Team[1]}")
-
-    win_probs <- calculate_win_probabilities(teamA, teamB, model_results, draws)
-    matchup_stats <- generate_matchup_stats(teamA, teamB, win_probs)
-    create_matchup_result(
-        teamA = teamA,
-        teamB = teamB,
+#' Build a single prediction row for a matchup
+#'
+#' @param teamA A one-row team feature data frame for team A.
+#' @param teamB A one-row team feature data frame for team B.
+#' @param round_name The round label for the matchup.
+#'
+#' @return A one-row matchup feature table.
+#' @keywords internal
+prepare_prediction_row <- function(teamA, teamB, round_name) {
+    build_matchup_feature_row(
+        team_a = teamA,
+        team_b = teamB,
         round_name = round_name,
-        matchup_number = matchup_number,
-        win_probs = win_probs,
-        matchup_stats = matchup_stats
+        actual_outcome = NA_real_,
+        metadata = list(
+            Year = teamA$Year[1],
+            region = teamA$Region[1],
+            teamA = teamA$Team[1],
+            teamB = teamB$Team[1]
+        )
     )
 }
 
-#' Calculate matchup win probabilities
+#' Predict matchup win probabilities
+#'
+#' @param teamA A one-row team feature data frame for team A.
+#' @param teamB A one-row team feature data frame for team B.
+#' @param round_name The round label for the matchup.
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws to use.
+#'
+#' @return A numeric vector of posterior win probabilities for team A.
 #' @export
-calculate_win_probabilities <- function(teamA, teamB, model_results, draws = 1000) {
-    draw_probs <- predict_matchup_probabilities(teamA, teamB, model_results, draws)
+predict_matchup_probabilities <- function(teamA, teamB, round_name, model_results, draws = 1000) {
+    prediction_row <- prepare_prediction_row(teamA, teamB, round_name)
+    draw_matrix <- predict_matchup_rows(prediction_row, model_results, draws = draws)
+    as.numeric(draw_matrix[, 1])
+}
+
+#' Summarize matchup win probabilities
+#'
+#' @param teamA A one-row team feature data frame for team A.
+#' @param teamB A one-row team feature data frame for team B.
+#' @param round_name The round label for the matchup.
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws to use.
+#'
+#' @return A list containing posterior summary statistics and draws.
+#' @export
+calculate_win_probabilities <- function(teamA, teamB, round_name, model_results, draws = 1000) {
+    draw_probs <- predict_matchup_probabilities(teamA, teamB, round_name, model_results, draws)
 
     list(
         mean = mean(draw_probs),
         ci_lower = as.numeric(stats::quantile(draw_probs, 0.025)),
         ci_upper = as.numeric(stats::quantile(draw_probs, 0.975)),
         sd = stats::sd(draw_probs),
-        density = stats::density(draw_probs),
         draws = draw_probs
     )
 }
 
-#' Generate matchup statistics
-#' @export
+#' Compute matchup summary statistics
+#'
+#' @param teamA A one-row team feature data frame for team A.
+#' @param teamB A one-row team feature data frame for team B.
+#' @param win_probs A win-probability summary list.
+#'
+#' @return A one-row tibble of matchup summary statistics.
+#' @keywords internal
 generate_matchup_stats <- function(teamA, teamB, win_probs) {
     tibble::tibble(
         teamA_strength = compute_team_strength(teamA),
@@ -79,13 +81,22 @@ generate_matchup_stats <- function(teamA, teamB, win_probs) {
 }
 
 #' Create a matchup result row
-#' @export
-create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_probs, matchup_stats) {
+#'
+#' @param teamA A one-row team feature data frame for team A.
+#' @param teamB A one-row team feature data frame for team B.
+#' @param round_name The round label for the matchup.
+#' @param matchup_number The game index within the round.
+#' @param win_probs A summarized win-probability list.
+#' @param matchup_stats A one-row tibble of derived matchup statistics.
+#' @param winner The chosen winner name.
+#'
+#' @return A one-row tibble describing the simulated matchup result.
+#' @keywords internal
+create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_probs, matchup_stats, winner) {
     team_a_name <- teamA$Team[1]
     team_b_name <- teamB$Team[1]
     team_a_seed <- teamA$Seed[1]
     team_b_seed <- teamB$Seed[1]
-    winner <- if (runif(1) <= win_probs$mean) teamA$Team[1] else teamB$Team[1]
 
     tibble::tibble(
         round = round_name,
@@ -106,6 +117,44 @@ create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_
     )
 }
 
+#' Simulate a deterministic matchup outcome
+#'
+#' @param teamA A one-row team feature data frame for team A.
+#' @param teamB A one-row team feature data frame for team B.
+#' @param round_name The round label for the matchup.
+#' @param matchup_number The game index within the round.
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws to use.
+#'
+#' @return A one-row tibble describing the matchup result.
+#' @export
+simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_results, draws = 1000) {
+    logger::log_info("Evaluating matchup: {teamA$Team[1]} vs {teamB$Team[1]} ({round_name})")
+
+    win_probs <- calculate_win_probabilities(teamA, teamB, round_name, model_results, draws)
+    matchup_stats <- generate_matchup_stats(teamA, teamB, win_probs)
+    winner <- if (win_probs$mean >= 0.5) teamA$Team[1] else teamB$Team[1]
+
+    create_matchup_result(
+        teamA = teamA,
+        teamB = teamB,
+        round_name = round_name,
+        matchup_number = matchup_number,
+        win_probs = win_probs,
+        matchup_stats = matchup_stats,
+        winner = winner
+    )
+}
+
+#' Simulate a tournament round
+#'
+#' @param teams A data frame of teams ordered into bracket slots.
+#' @param round_name The round label to simulate.
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws to use.
+#'
+#' @return A list containing round results and advancing teams.
+#' @keywords internal
 simulate_round <- function(teams, round_name, model_results, draws) {
     if (nrow(teams) %% 2 != 0) {
         stop_with_message(sprintf("%s received an odd number of teams", round_name))
@@ -131,22 +180,88 @@ simulate_round <- function(teams, round_name, model_results, draws) {
     )
 }
 
-#' Simulate a single region bracket
-#' @export
-simulate_region_bayesian <- function(region_teams, model_results, draws = 1000) {
-    region_teams <- fix_region_seeds(region_teams)
-    region_name <- unique(region_teams$Region)[1]
+#' Resolve duplicate-seed play-in games
+#'
+#' @param region_teams A region-level team table.
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws to use.
+#'
+#' @return A list containing resolved teams and optional First Four results.
+#' @keywords internal
+resolve_play_in_games <- function(region_teams, model_results, draws) {
+    expected <- 1:16
+    actual <- region_teams$Seed
+    duplicate_counts <- table(actual)
+    dup_seeds <- as.integer(names(duplicate_counts[duplicate_counts > 1]))
 
-    if (nrow(region_teams) != 16) {
-        stop_with_message(sprintf("Region %s must contain exactly 16 teams", region_name))
+    if (length(dup_seeds) == 0) {
+        region_teams$Assigned_Seed <- region_teams$Seed
+        return(list(
+            teams = region_teams,
+            results = tibble::tibble()
+        ))
     }
 
-    bracket_order <- standard_bracket_order()
+    play_in_results <- vector("list", length(dup_seeds))
+    survivors <- region_teams
+
+    for (i in seq_along(dup_seeds)) {
+        seed_value <- dup_seeds[[i]]
+        duplicate_rows <- survivors %>%
+            dplyr::filter(Seed == seed_value)
+
+        if (nrow(duplicate_rows) != 2) {
+            stop_with_message("Play-in simulation expects exactly two teams for each duplicate seed")
+        }
+
+        matchup <- simulate_matchup(
+            duplicate_rows[1, , drop = FALSE],
+            duplicate_rows[2, , drop = FALSE],
+            "First Four",
+            i,
+            model_results,
+            draws
+        )
+        play_in_results[[i]] <- matchup
+        losing_team <- if (matchup$winner[1] == duplicate_rows$Team[1]) duplicate_rows$Team[2] else duplicate_rows$Team[1]
+        survivors <- survivors %>%
+            dplyr::filter(Team != losing_team)
+    }
+
+    survivors$Assigned_Seed <- survivors$Seed
+
+    list(
+        teams = survivors,
+        results = dplyr::bind_rows(play_in_results)
+    )
+}
+
+#' Simulate a single regional bracket
+#'
+#' @param region_teams A region-level team table.
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws to use.
+#'
+#' @return A list containing regional round results and the region champion.
+#' @export
+simulate_region_bayesian <- function(region_teams, model_results, draws = 1000) {
+    region_name <- unique(region_teams$Region)[1]
+    play_in <- resolve_play_in_games(region_teams, model_results, draws)
+    region_teams <- play_in$teams
+
+    if (nrow(region_teams) != 16) {
+        stop_with_message(sprintf("Region %s must contain exactly 16 teams after play-in resolution", region_name))
+    }
+
     ordered_teams <- region_teams %>%
-        dplyr::arrange(match(Assigned_Seed, bracket_order))
+        dplyr::arrange(match(Assigned_Seed, standard_bracket_order()))
+
+    round_results <- list()
+    if (nrow(play_in$results) > 0) {
+        round_results[["First Four"]] <- play_in$results
+    }
 
     rounds <- c("Round of 64", "Round of 32", "Sweet 16", "Elite 8")
-    round_results <- list()
     remaining <- ordered_teams
 
     for (round_name in rounds) {
@@ -163,6 +278,12 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000) 
 }
 
 #' Simulate the Final Four and championship
+#'
+#' @param region_champions A named list of regional champion rows.
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws to use.
+#'
+#' @return A list containing semifinal, championship, and champion results.
 #' @export
 simulate_final_four <- function(region_champions, model_results, draws = 1000) {
     semifinal1 <- simulate_matchup(
@@ -217,6 +338,12 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000) {
 }
 
 #' Simulate the full tournament bracket
+#'
+#' @param all_teams A current-year team feature table.
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws to use.
+#'
+#' @return A list containing regional results and Final Four results.
 #' @export
 simulate_full_bracket <- function(all_teams, model_results, draws = 1000) {
     regions <- c("East", "West", "South", "Midwest")

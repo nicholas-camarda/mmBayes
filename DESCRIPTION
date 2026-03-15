@@ -12,6 +12,7 @@ Imports:
     bayesplot,
     dplyr,
     ggplot2,
+    httr,
     logger,
     loo,
     patchwork,

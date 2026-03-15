@@ -2,18 +2,33 @@ library(logger)
 library(yaml)
 
 #' Default project configuration
+#'
+#' @return A nested list containing default data, model, and output settings.
 #' @export
 default_project_config <- function() {
     list(
-        data_path = "data/bayesian_model_data.xlsx",
-        metrics_to_use = c(
-            "overall_strength", "barthag_logit", "AdjOE", "AdjDE",
-            "Clutch_Index", "Conf_Strength", "Upset_Factor", "Turnover_Edge"
+        data = list(
+            team_features_path = "data/pre_tournament_team_features.xlsx",
+            game_results_path = "data/tournament_game_results.xlsx"
         ),
         model = list(
-            required_metrics = c(
-                "overall_strength", "barthag_logit", "AdjOE", "AdjDE",
-                "Clutch_Index", "Conf_Strength", "Upset_Factor", "Turnover_Edge"
+            history_window = 8L,
+            backtest = TRUE,
+            required_predictors = c(
+                "round",
+                "same_conf",
+                "seed_diff",
+                "barthag_logit_diff",
+                "AdjOE_diff",
+                "AdjDE_diff",
+                "WAB_diff",
+                "TOR_diff",
+                "TORD_diff",
+                "ORB_diff",
+                "DRB_diff",
+                "3P%_diff",
+                "3P%D_diff",
+                "Adj T._diff"
             ),
             random_seed = 42,
             n_draws = 1000
@@ -25,6 +40,13 @@ default_project_config <- function() {
     )
 }
 
+#' Merge nested configuration lists
+#'
+#' @param base A base configuration list.
+#' @param override A list of overriding values.
+#'
+#' @return A recursively merged configuration list.
+#' @keywords internal
 merge_config_lists <- function(base, override) {
     if (is.null(override)) {
         return(base)
@@ -43,6 +65,10 @@ merge_config_lists <- function(base, override) {
 }
 
 #' Load the project configuration
+#'
+#' @param path Path to a YAML configuration file.
+#'
+#' @return A configuration list combining defaults with any file-based overrides.
 #' @export
 load_project_config <- function(path = "config.yml") {
     config <- default_project_config()
@@ -62,6 +88,10 @@ load_project_config <- function(path = "config.yml") {
 }
 
 #' Initialize logging for the current run
+#'
+#' @param log_path Path to the log file for the current run.
+#'
+#' @return Invisibly configures the package logger for file-based logging.
 #' @export
 initialize_logging <- function(log_path = "tournament_simulation.log") {
     logger::log_threshold(logger::INFO)

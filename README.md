@@ -3,8 +3,6 @@
 `mmBayes` is a private March Madness prediction project for generating and
 reviewing NCAA tournament brackets with a Bayesian workflow.
 
-`master` is the canonical branch for the project.
-
 ## Supported Commands
 
 Run the current bracket simulation:
@@ -26,42 +24,45 @@ These are the only supported entrypoints. The active runtime lives in `R/`.
 The simulation command:
 
 - loads `config.yml`
-- reads the canonical tournament data from `data/`
-- fits the required Bayesian model
-- simulates the tournament bracket
+- reads canonical pre-tournament team features and explicit historical game results from `data/`
+- fits a Bayesian matchup-level game model
+- runs a rolling held-out-tournament backtest
+- generates a deterministic max-probability bracket with posterior game probabilities
 - writes outputs under `output/`
 
 The active workflow requires `rstanarm`, `bayesplot`, and `loo`. If those
 packages are unavailable, the runner should fail immediately rather than falling
 back to a different modeling path.
 
-Legacy scripts are archived under `old/` for reference only and are not part of
+Legacy scripts are archived under `archive/legacy-runtime/` for reference only and are not part of
 the active execution path.
 
-## Project Status
+## Repository Layout
 
-The infrastructure is in good shape:
+- `R/`: active package runtime
+- `scripts/`: supported command-line entrypoints
+- `tests/`: automated tests and fixtures
+- `docs/reference/`: background papers and legacy writeups worth keeping
+- `archive/legacy-analysis/`: old rendered reports, spreadsheets, and diagnostics
+- `archive/legacy-runtime/`: superseded scripts kept only for historical reference
 
-- package-style runtime in `R/`
-- thin runner scripts in `scripts/`
-- automated tests in `tests/testthat/`
-- a working Bayesian end-to-end run
+## Modeling Design
 
-The modeling core is not yet at the point where the bracket outputs should be
-treated as fully trustworthy. The current dataset and feature framing still need
-a reset around real outcome labels and pre-tournament features only.
+The active modeling core is now matchup-based:
 
-## Current Limitations
+- historical training data is one row per actual tournament game
+- predictors are restricted to pre-tournament season features and matchup context
+- leakage-prone tournament-outcome features are excluded from active modeling
+- bracket picks are derived from calibrated game probabilities rather than a team-level `Champ` target
 
-The next substantive work is not more scaffolding. It is a modeling redesign:
+The canonical data refresh writes two files:
 
-- rebuild targets around actual realized tournament outcomes
-- restrict predictive features to information available before tournament games
-- remove or redesign leakage-prone derived features
-- move toward matchup-level prediction with bracket simulation layered on top
+- `data/pre_tournament_team_features.xlsx`
+- `data/tournament_game_results.xlsx`
 
-That is the path to making this a reliable personal bracket-prediction tool
-rather than just a runnable modeling sandbox.
+The default model uses the most recent eight completed tournaments available in
+the data files, skips 2020, and backtests on rolling held-out years before
+predicting the current bracket.
 
 ## Manual Validation
 
@@ -75,6 +76,7 @@ git status --short
 Successful validation means:
 
 - the Bayesian simulation command completes
+- the backtest summary is written
 - expected output files are written
 - only ignored runtime artifacts are created
 - no legacy script is used in the active workflow

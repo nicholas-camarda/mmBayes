@@ -1,24 +1,25 @@
 default:
-  data_path: "data/bayesian_model_data.xlsx"
-  metrics_to_use:
-    - overall_strength
-    - barthag_logit
-    - AdjOE
-    - AdjDE
-    - Clutch_Index
-    - Conf_Strength
-    - Upset_Factor
-    - Turnover_Edge
+  data:
+    team_features_path: "data/pre_tournament_team_features.xlsx"
+    game_results_path: "data/tournament_game_results.xlsx"
   model:
-    required_metrics:
-      - overall_strength
-      - barthag_logit
-      - AdjOE
-      - AdjDE
-      - Clutch_Index
-      - Conf_Strength
-      - Upset_Factor
-      - Turnover_Edge
+    history_window: 8
+    backtest: true
+    required_predictors:
+      - round
+      - same_conf
+      - seed_diff
+      - barthag_logit_diff
+      - AdjOE_diff
+      - AdjDE_diff
+      - WAB_diff
+      - TOR_diff
+      - TORD_diff
+      - ORB_diff
+      - DRB_diff
+      - 3P%_diff
+      - 3P%D_diff
+      - Adj T._diff
     random_seed: 42
     n_draws: 1000
   output:

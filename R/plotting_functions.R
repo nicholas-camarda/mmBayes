@@ -2,9 +2,11 @@ library(dplyr)
 library(ggplot2)
 library(patchwork)
 
-round_levels <- c("Round of 64", "Round of 32", "Sweet 16", "Elite 8", "Final Four", "Championship")
-
 #' Create the main tournament visualization
+#'
+#' @param simulation_results A full bracket simulation result bundle.
+#'
+#' @return A patchwork object combining bracket, probability, and uncertainty plots.
 #' @export
 create_tournament_visualization <- function(simulation_results) {
     bracket_plot <- create_bracket_visualization(simulation_results)
@@ -15,11 +17,15 @@ create_tournament_visualization <- function(simulation_results) {
 }
 
 #' Create a bracket-style overview plot
+#'
+#' @param results A full bracket simulation result bundle.
+#'
+#' @return A `ggplot` showing winners by matchup and round.
 #' @export
 create_bracket_visualization <- function(results) {
     matchups <- flatten_matchup_results(results) %>%
         dplyr::mutate(
-            round = factor(round, levels = round_levels),
+            round = factor(round, levels = round_levels()),
             matchup_label = paste(teamA, "vs", teamB)
         )
 
@@ -36,11 +42,15 @@ create_bracket_visualization <- function(results) {
 }
 
 #' Create a matchup probability plot
+#'
+#' @param results A full bracket simulation result bundle.
+#'
+#' @return A faceted `ggplot` of matchup win probabilities.
 #' @export
 create_probability_plot <- function(results) {
     matchups <- flatten_matchup_results(results) %>%
         dplyr::mutate(
-            round = factor(round, levels = round_levels),
+            round = factor(round, levels = round_levels()),
             matchup_label = sprintf("%s vs %s", teamA, teamB)
         )
 
@@ -56,11 +66,15 @@ create_probability_plot <- function(results) {
 }
 
 #' Create a prediction uncertainty plot
+#'
+#' @param results A full bracket simulation result bundle.
+#'
+#' @return A faceted `ggplot` of matchup intervals and posterior means.
 #' @export
 create_uncertainty_plot <- function(results) {
     matchups <- flatten_matchup_results(results) %>%
         dplyr::mutate(
-            round = factor(round, levels = round_levels),
+            round = factor(round, levels = round_levels()),
             matchup_label = sprintf("%s vs %s", teamA, teamB)
         )
 

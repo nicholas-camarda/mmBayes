@@ -408,7 +408,7 @@ log_info(paste(names(data_init), collapse=", "))
 
 if (scrape_new_data) {
     log_info("Scraping new data...")
-    source("old/load_v2.R")
+    source("archive/legacy-runtime/load_v2.R")
     log_info("Data scraping complete. Please run the script again with scrape_new_data = FALSE")
     quit()
 }
@@ -1634,4 +1634,3 @@ if (is_script) {
     
     log_info("Simulation complete!")
 }
-

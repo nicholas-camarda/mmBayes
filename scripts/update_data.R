@@ -1,5 +1,9 @@
 #!/usr/bin/env Rscript
 
+#' Find the absolute path to the current script
+#'
+#' @return A normalized absolute path to the running script or working directory.
+#' @keywords internal
 find_script_path <- function() {
     args <- commandArgs(trailingOnly = FALSE)
     file_arg <- grep("^--file=", args, value = TRUE)
@@ -19,6 +23,5 @@ initialize_logging("tournament_simulation.log")
 paths <- update_tournament_data()
 
 cat("Updated tournament data files:\n")
-cat(sprintf("- Bart data: %s\n", paths$bart_data))
-cat(sprintf("- Conference assignments: %s\n", paths$conf_assignments))
-cat(sprintf("- Canonical model data: %s\n", paths$final_data))
+cat(sprintf("- Team features: %s\n", paths$team_features))
+cat(sprintf("- Tournament game results: %s\n", paths$game_results))

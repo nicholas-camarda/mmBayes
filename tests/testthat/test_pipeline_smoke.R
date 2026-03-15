@@ -1,12 +1,15 @@
-test_that("run_tournament_simulation writes expected outputs", {
-    workbook <- tempfile(fileext = ".xlsx")
+test_that("run_tournament_simulation writes outputs and backtest summaries", {
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
     output_dir <- tempfile(pattern = "mmBayes-output-")
     dir.create(output_dir, recursive = TRUE)
-    write_fixture_workbook(workbook)
+    fixture_paths <- write_fixture_data_files(team_file, results_file)
 
     config <- default_project_config()
-    config$data_path <- workbook
-    config$model$n_draws <- 25
+    config$data$team_features_path <- fixture_paths$team_path
+    config$data$game_results_path <- fixture_paths$results_path
+    config$model$history_window <- 3L
+    config$model$n_draws <- 25L
     config$output$path <- output_dir
     config$output$prefix <- "fixture"
 
@@ -21,8 +24,9 @@ test_that("run_tournament_simulation writes expected outputs", {
 
     expect_true(file.exists(file.path(output_dir, "fixture.rds")))
     expect_true(file.exists(file.path(output_dir, "fixture_model_summary.txt")))
+    expect_true(file.exists(file.path(output_dir, "fixture_backtest_summary.txt")))
     expect_true(file.exists(file.path(output_dir, "fixture_bracket.png")))
-    expect_true(is.list(results$final_four))
-    expect_equal(results$model$engine, "bayes")
+    expect_true(is.list(results$backtest))
+    expect_true(nrow(results$backtest$summary) == 1)
     expect_true(inherits(results$visualization, "patchwork"))
 })
