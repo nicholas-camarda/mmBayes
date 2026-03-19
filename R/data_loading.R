@@ -37,7 +37,8 @@ normalize_team_features <- function(data) {
 #'
 #' @param data A raw tournament game-results table.
 #'
-#' @return A cleaned game-results table with standardized column types.
+#' @return A cleaned game-results table with standardized column types and
+#'   canonical score columns.
 #' @keywords internal
 normalize_game_results <- function(data) {
     rename_candidates <- c(
@@ -49,14 +50,28 @@ normalize_game_results <- function(data) {
         teamB = "teamB",
         teamA_seed = "teamA_seed",
         teamB_seed = "teamB_seed",
+        teamA_score = "teamA_score",
+        teamB_score = "teamB_score",
+        total_points = "total_points",
         winner = "winner"
     )
 
-    missing_cols <- setdiff(unname(rename_candidates), names(data))
+    required_cols <- unname(rename_candidates[c("Year", "region", "round", "game_index", "teamA", "teamB", "teamA_seed", "teamB_seed", "winner")])
+    missing_cols <- setdiff(required_cols, names(data))
     if (length(missing_cols) > 0) {
         stop_with_message(
             sprintf("Game results validation failed; missing columns: %s", paste(missing_cols, collapse = ", "))
         )
+    }
+
+    if (!"teamA_score" %in% names(data)) {
+        data$teamA_score <- NA_integer_
+    }
+    if (!"teamB_score" %in% names(data)) {
+        data$teamB_score <- NA_integer_
+    }
+    if (!"total_points" %in% names(data)) {
+        data$total_points <- NA_integer_
     }
 
     data %>%
@@ -69,6 +84,17 @@ normalize_game_results <- function(data) {
             teamB = canonicalize_team_name(teamB),
             teamA_seed = as.integer(teamA_seed),
             teamB_seed = as.integer(teamB_seed),
+            teamA_score = as.integer(teamA_score),
+            teamB_score = as.integer(teamB_score),
+            total_points = dplyr::if_else(
+                !is.na(total_points),
+                as.integer(total_points),
+                dplyr::if_else(
+                    !is.na(teamA_score) & !is.na(teamB_score),
+                    as.integer(teamA_score + teamB_score),
+                    NA_integer_
+                )
+            ),
             winner = canonicalize_team_name(winner)
         )
 }
@@ -99,6 +125,9 @@ prepare_current_play_in_results <- function(team_features, game_results, bracket
             teamB = character(),
             teamA_seed = integer(),
             teamB_seed = integer(),
+            teamA_score = integer(),
+            teamB_score = integer(),
+            total_points = integer(),
             winner = character(),
             play_in_region = character(),
             slot_seed = integer()
@@ -152,6 +181,9 @@ prepare_current_play_in_results <- function(team_features, game_results, bracket
             teamB,
             teamA_seed,
             teamB_seed,
+            teamA_score,
+            teamB_score,
+            total_points,
             winner,
             play_in_region,
             slot_seed
@@ -194,6 +226,24 @@ validate_game_results <- function(data) {
 
     if (!all(data$winner %in% c(data$teamA, data$teamB))) {
         stop_with_message("Each game result must name either teamA or teamB as the winner")
+    }
+
+    partial_scores <- xor(is.na(data$teamA_score), is.na(data$teamB_score))
+    if (any(partial_scores)) {
+        stop_with_message("Game score columns must be either both populated or both missing")
+    }
+
+    scored_rows <- !is.na(data$teamA_score) & !is.na(data$teamB_score)
+    if (any(scored_rows)) {
+        expected_total <- data$teamA_score[scored_rows] + data$teamB_score[scored_rows]
+        if (any(is.na(data$total_points[scored_rows]) | data$total_points[scored_rows] != expected_total)) {
+            stop_with_message("Game total_points values must equal teamA_score + teamB_score when scores are present")
+        }
+
+        score_winner <- ifelse(data$teamA_score[scored_rows] > data$teamB_score[scored_rows], data$teamA[scored_rows], data$teamB[scored_rows])
+        if (any(data$winner[scored_rows] != score_winner)) {
+            stop_with_message("Game winners must match the higher score when scores are present")
+        }
     }
 
     TRUE
@@ -414,7 +464,8 @@ build_actual_game_reference <- function(team_features, game_results) {
 #' @param config A project configuration list.
 #'
 #' @return A list containing historical matchup rows, historical teams, current
-#'   teams, actual historical results, and the active bracket year.
+#'   teams, score-bearing historical results, actual historical results, and the
+#'   active bracket year.
 #' @export
 load_tournament_data <- function(config) {
     logger::log_info("Starting data loading process")
@@ -453,6 +504,7 @@ load_tournament_data <- function(config) {
         bracket_year = bracket_year,
         historical_matchups = historical_matchups,
         historical_teams = historical_teams,
+        historical_games = historical_games,
         historical_actual_results = historical_actual_results,
         current_teams = current_teams,
         current_play_in_results = current_play_in_results,

@@ -500,7 +500,8 @@ parse_tournament_team_name_line <- function(line) {
 #' @param lines A character vector of bracket text lines.
 #' @param year The tournament year represented by `lines`.
 #'
-#' @return A game-level results table including region, round, teams, and winner.
+#' @return A game-level results table including region, round, teams, scores,
+#'   total points, and winner.
 #' @keywords internal
 parse_tournament_results_lines <- function(lines, year) {
     lines <- lines %>%
@@ -640,7 +641,23 @@ parse_tournament_results_lines <- function(lines, year) {
     }
 
     final_results <- dplyr::bind_rows(results) %>%
-        dplyr::select(Year, region, round, game_index, teamA, teamB, teamA_seed, teamB_seed, winner)
+        dplyr::mutate(
+            total_points = teamA_score + teamB_score
+        ) %>%
+        dplyr::select(
+            Year,
+            region,
+            round,
+            game_index,
+            teamA,
+            teamB,
+            teamA_seed,
+            teamB_seed,
+            teamA_score,
+            teamB_score,
+            total_points,
+            winner
+        )
 
     if (nrow(final_results) == 0) {
         stop_with_message(sprintf("No tournament results parsed for year %s", year))
@@ -655,7 +672,8 @@ parse_tournament_results_lines <- function(lines, year) {
 #' @param allow_empty Whether to return a zero-row result table when no
 #'   completed games are available yet.
 #'
-#' @return A game-level results table including region, round, teams, and winner.
+#' @return A game-level results table including region, round, teams, scores,
+#'   total points, and winner.
 #' @keywords internal
 scrape_tournament_results <- function(year, allow_empty = FALSE) {
     url <- sprintf("https://www.sports-reference.com/cbb/postseason/men/%s-ncaa.html", year)

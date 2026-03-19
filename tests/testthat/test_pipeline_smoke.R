@@ -27,6 +27,7 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     expect_true(file.exists(file.path(output_dir, "fixture_backtest_summary.txt")))
     expect_true(file.exists(file.path(output_dir, "fixture_bracket.png")))
     expect_true(file.exists(file.path(output_dir, "bracket_dashboard.html")))
+    expect_true(file.exists(file.path(output_dir, "technical_dashboard.html")))
     expect_true(file.exists(file.path(output_dir, "bracket_decision_sheet.csv")))
     expect_true(file.exists(file.path(output_dir, "bracket_candidate_1.csv")))
     expect_true(file.exists(results$output$log_path))
@@ -35,4 +36,5 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     expect_true(is.list(results$backtest))
     expect_true(nrow(results$backtest$summary) == 1)
     expect_true(inherits(results$visualization, "patchwork"))
+    expect_true(file.exists(results$output$technical_dashboard))
 })

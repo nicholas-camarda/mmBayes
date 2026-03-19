@@ -36,6 +36,12 @@ model_results <- fit_tournament_model(
     cache_dir = model_cache_dir,
     use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
 )
+total_points_model <- fit_total_points_model(
+    historical_total_points = build_total_points_training_rows(data$historical_actual_results),
+    random_seed = config$model$random_seed,
+    cache_dir = model_cache_dir,
+    use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
+)
 
 candidates <- generate_bracket_candidates(
     all_teams = data$current_teams,
@@ -45,6 +51,12 @@ candidates <- generate_bracket_candidates(
     n_candidates = 2L,
     n_simulations = 25L,
     random_seed = config$model$random_seed
+)
+total_points_predictions <- predict_candidate_total_points(
+    candidates = candidates,
+    current_teams = data$current_teams,
+    total_points_model = total_points_model,
+    draws = config$model$n_draws
 )
 
 output_dir <- config$output$path %||% "output"
@@ -57,7 +69,8 @@ decision_outputs <- save_decision_outputs(
     candidates = candidates,
     output_dir = output_dir,
     backtest = NULL,
-    play_in_resolution = play_in_resolution
+    play_in_resolution = play_in_resolution,
+    total_points_predictions = total_points_predictions
 )
 
 cat("\n=============================================\n")
@@ -71,13 +84,28 @@ for (candidate in candidates) {
         candidate$champion,
         candidate$final_four
     ))
+    tiebreaker_row <- total_points_predictions$candidate_summaries %>%
+        dplyr::filter(candidate_id == candidate$candidate_id)
+    if (nrow(tiebreaker_row) == 1L) {
+        cat(sprintf(
+            "  Championship tiebreaker: %s for %s (80%% interval %.1f-%.1f)\n",
+            tiebreaker_row$recommended_tiebreaker_points[[1]],
+            tiebreaker_row$championship_matchup[[1]],
+            tiebreaker_row$predicted_total_80_lower[[1]],
+            tiebreaker_row$predicted_total_80_upper[[1]]
+        ))
+    }
 }
 cat(sprintf("\nDashboard: %s\n", decision_outputs$dashboard))
+cat(sprintf("Technical dashboard: %s\n", decision_outputs$technical_dashboard))
 cat(sprintf("Decision sheet: %s\n", decision_outputs$decision_sheet_path))
 cat(sprintf("Summary: %s\n", decision_outputs$candidate_summary))
 cat(sprintf("RDS: %s\n", decision_outputs$candidates_rds))
 for (index in seq_along(decision_outputs$candidate_csvs)) {
     cat(sprintf("Candidate %s CSV: %s\n", index, decision_outputs$candidate_csvs[[index]]))
 }
+cat(sprintf("Tiebreaker summary CSV: %s\n", decision_outputs$championship_tiebreaker_summary))
+cat(sprintf("Tiebreaker distribution CSV: %s\n", decision_outputs$championship_tiebreaker_distribution))
+cat(sprintf("Matchup totals CSV: %s\n", decision_outputs$matchup_total_points))
 cat(sprintf("Log: %s\n", log_path))
 logger::log_info("Fast bracket-candidate pipeline complete; dashboard at {decision_outputs$dashboard}")

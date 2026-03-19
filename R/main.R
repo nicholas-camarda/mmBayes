@@ -29,6 +29,13 @@ run_tournament_simulation <- function(config = NULL) {
         cache_dir = model_cache_dir,
         use_cache = use_model_cache
     )
+    logger::log_info("Fitting total-points model")
+    total_points_model <- fit_total_points_model(
+        historical_total_points = build_total_points_training_rows(data$historical_actual_results),
+        random_seed = config$model$random_seed,
+        cache_dir = model_cache_dir,
+        use_cache = use_model_cache
+    )
     logger::log_info("Running backtest")
     backtest_results <- if (isTRUE(config$model$backtest)) {
         run_rolling_backtest(
@@ -62,6 +69,13 @@ run_tournament_simulation <- function(config = NULL) {
         random_seed = config$model$random_seed
     )
     decision_sheet <- build_decision_sheet(candidate_results)
+    logger::log_info("Predicting candidate championship tiebreakers and matchup totals")
+    total_points_predictions <- predict_candidate_total_points(
+        candidates = candidate_results,
+        current_teams = data$current_teams,
+        total_points_model = total_points_model,
+        draws = config$model$n_draws
+    )
     logger::log_info("Rendering visualization")
     visualization <- create_tournament_visualization(simulation_results)
 
@@ -69,10 +83,12 @@ run_tournament_simulation <- function(config = NULL) {
         bracket_year = data$bracket_year,
         data = data,
         model = model_results,
+        total_points_model = total_points_model,
         backtest = backtest_results,
         simulations = simulation_results,
         candidates = candidate_results,
         decision_sheet = decision_sheet,
+        total_points_predictions = total_points_predictions,
         final_four = simulation_results$final_four,
         visualization = visualization,
         output = list(log_path = run_log_path)

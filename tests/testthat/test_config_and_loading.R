@@ -36,10 +36,14 @@ test_that("load_tournament_data returns matchup history and current teams", {
     loaded <- load_tournament_data(config)
 
     expect_equal(loaded$bracket_year, "2025")
-    expect_true(all(c("historical_matchups", "historical_teams", "current_teams", "historical_actual_results", "current_play_in_results") %in% names(loaded)))
+    expect_true(all(c("historical_matchups", "historical_teams", "historical_games", "current_teams", "historical_actual_results", "current_play_in_results") %in% names(loaded)))
     expect_gt(nrow(loaded$historical_matchups), 0)
+    expect_gt(nrow(loaded$historical_games), 0)
     expect_true(all(config$model$required_predictors %in% names(loaded$historical_matchups)))
     expect_false(any(leakage_columns() %in% names(loaded$historical_teams)))
+    expect_true(all(c("teamA_score", "teamB_score", "total_points") %in% names(loaded$historical_games)))
+    expect_true(all(c("teamA_score", "teamB_score", "total_points") %in% names(loaded$historical_actual_results)))
+    expect_false(any(is.na(loaded$historical_games$total_points)))
 })
 
 test_that("historical matchup builder duplicates rows symmetrically and preserves first four", {

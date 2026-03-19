@@ -143,6 +143,21 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         ) %>%
         dplyr::arrange(Year, game_index)
 
+    invalid_score_rows <- game_results %>%
+        dplyr::filter(
+            xor(is.na(teamA_score), is.na(teamB_score)) |
+                (
+                    !is.na(teamA_score) &
+                        !is.na(teamB_score) &
+                        (
+                            is.na(total_points) |
+                                total_points != teamA_score + teamB_score |
+                                winner != ifelse(teamA_score > teamB_score, teamA, teamB)
+                        )
+                )
+        ) %>%
+        dplyr::arrange(Year, round, region, game_index)
+
     unresolved_teams <- find_unresolved_result_teams(team_features, game_results)
 
     summary <- tibble::tibble(
@@ -156,6 +171,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         unmatched_current_slot_rows = nrow(unmatched_current_slots),
         duplicate_current_slot_rows = nrow(duplicate_current_slots),
         suspicious_first_four_rows = nrow(suspicious_first_four),
+        invalid_score_rows = nrow(invalid_score_rows),
         unresolved_team_rows = nrow(unresolved_teams),
         passed = all(games_per_year$ok) &&
             nrow(round_count_issues) == 0 &&
@@ -164,6 +180,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
             nrow(unmatched_current_slots) == 0 &&
             nrow(duplicate_current_slots) == 0 &&
             nrow(suspicious_first_four) == 0 &&
+            nrow(invalid_score_rows) == 0 &&
             nrow(unresolved_teams) == 0
     )
 
@@ -178,6 +195,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         unmatched_current_slots = unmatched_current_slots,
         duplicate_current_slots = duplicate_current_slots,
         suspicious_first_four = suspicious_first_four,
+        invalid_score_rows = invalid_score_rows,
         unresolved_teams = unresolved_teams,
         passed = isTRUE(summary$passed[[1]])
     )
@@ -263,6 +281,29 @@ assert_canonical_data_quality <- function(team_features, game_results) {
         issues <- c(
             issues,
             paste("Suspicious First Four rows with 1-seeds:", paste(suspicious_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$invalid_score_rows) > 0) {
+        score_text <- report$invalid_score_rows %>%
+            dplyr::mutate(
+                text = sprintf(
+                    "%s %s %s #%s (%s %s, %s %s, winner %s)",
+                    Year,
+                    round,
+                    region,
+                    game_index,
+                    teamA,
+                    teamA_score,
+                    teamB,
+                    teamB_score,
+                    winner
+                )
+            ) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Invalid score-bearing rows detected:", paste(score_text, collapse = "; "))
         )
     }
 

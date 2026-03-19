@@ -54,6 +54,58 @@ fixture_team_score <- function(team_row) {
         (safe_numeric(team_row$WAB) / 5)
 }
 
+#' Create deterministic fixture scores for a matchup
+#'
+#' @param team_a A one-row team feature tibble for team A.
+#' @param team_b A one-row team feature tibble for team B.
+#' @param winner A one-row team feature tibble for the chosen winner.
+#' @param round_name The round label for the matchup.
+#' @param matchup_number The matchup number within the round.
+#'
+#' @return A named list with integer `teamA_score`, `teamB_score`, and
+#'   `total_points` values.
+make_fixture_matchup_scores <- function(team_a, team_b, winner, round_name, matchup_number) {
+    round_adjustment <- c(
+        "First Four" = -2,
+        "Round of 64" = 0,
+        "Round of 32" = 1,
+        "Sweet 16" = -1,
+        "Elite 8" = -2,
+        "Final Four" = -4,
+        "Championship" = -5
+    )
+
+    offense_sum <- safe_numeric(team_a$AdjOE[1]) + safe_numeric(team_b$AdjOE[1])
+    defense_sum <- safe_numeric(team_a$AdjDE[1]) + safe_numeric(team_b$AdjDE[1])
+    tempo_mean <- mean(c(safe_numeric(team_a$`Adj T.`[1]), safe_numeric(team_b$`Adj T.`[1])))
+    profile_gap <- abs(safe_numeric(team_a$AdjOE[1]) - safe_numeric(team_b$AdjOE[1])) +
+        abs(safe_numeric(team_a$AdjDE[1]) - safe_numeric(team_b$AdjDE[1])) +
+        abs(safe_numeric(team_a$WAB[1]) - safe_numeric(team_b$WAB[1])) +
+        abs(safe_numeric(team_a$`Adj T.`[1]) - safe_numeric(team_b$`Adj T.`[1]))
+
+    base_total <- round(
+        25 +
+            (0.35 * offense_sum) -
+            (0.08 * defense_sum) +
+            (0.2 * tempo_mean) +
+            (0.7 * profile_gap) +
+            round_adjustment[[round_name]] +
+            ((matchup_number + safe_numeric(team_a$Seed[1]) + safe_numeric(team_b$Seed[1])) %% 7)
+    )
+    base_total <- max(110L, min(175L, as.integer(base_total)))
+
+    strength_gap <- abs(fixture_team_score(team_a) - fixture_team_score(team_b))
+    margin <- max(1L, min(base_total - 2L, as.integer(round(4 + (strength_gap * 3) + (matchup_number %% 5)))))
+    winner_score <- as.integer(floor((base_total + margin) / 2))
+    loser_score <- as.integer(base_total - winner_score)
+
+    if (winner$Team[1] == team_a$Team[1]) {
+        list(teamA_score = winner_score, teamB_score = loser_score, total_points = base_total)
+    } else {
+        list(teamA_score = loser_score, teamB_score = winner_score, total_points = base_total)
+    }
+}
+
 pick_fixture_winner <- function(team_a, team_b, year, round_name, region, matchup_number) {
     score_a <- fixture_team_score(team_a)
     score_b <- fixture_team_score(team_b)
@@ -80,6 +132,13 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
                 dplyr::filter(Seed == dup_seeds[1]) %>%
                 dplyr::arrange(Team)
             play_in_winner <- pick_fixture_winner(play_in_teams[1, , drop = FALSE], play_in_teams[2, , drop = FALSE], year, "First Four", region_name, 1)
+            play_in_scores <- make_fixture_matchup_scores(
+                play_in_teams[1, , drop = FALSE],
+                play_in_teams[2, , drop = FALSE],
+                play_in_winner,
+                "First Four",
+                1
+            )
             results[[length(results) + 1L]] <- tibble::tibble(
                 Year = as.character(year),
                 region = region_name,
@@ -89,6 +148,9 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
                 teamB = play_in_teams$Team[2],
                 teamA_seed = play_in_teams$Seed[1],
                 teamB_seed = play_in_teams$Seed[2],
+                teamA_score = play_in_scores$teamA_score,
+                teamB_score = play_in_scores$teamB_score,
+                total_points = play_in_scores$total_points,
                 winner = play_in_winner$Team[1]
             )
             survivors <- dplyr::bind_rows(
@@ -109,6 +171,7 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
                 team_a <- ordered[idx_a, , drop = FALSE]
                 team_b <- ordered[idx_b, , drop = FALSE]
                 winner <- pick_fixture_winner(team_a, team_b, year, round_name, region_name, matchup_number)
+                matchup_scores <- make_fixture_matchup_scores(team_a, team_b, winner, round_name, matchup_number)
 
                 results[[length(results) + 1L]] <- tibble::tibble(
                     Year = as.character(year),
@@ -119,6 +182,9 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
                     teamB = team_b$Team[1],
                     teamA_seed = team_a$Seed[1],
                     teamB_seed = team_b$Seed[1],
+                    teamA_score = matchup_scores$teamA_score,
+                    teamB_score = matchup_scores$teamB_score,
+                    total_points = matchup_scores$total_points,
                     winner = winner$Team[1]
                 )
                 next_round[[matchup_number]] <- winner
@@ -150,6 +216,9 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
         semifinal1_winner <- pick_fixture_winner(regional$South$champion, regional$West$champion, year, "Final Four", "National", 1)
         semifinal2_winner <- pick_fixture_winner(regional$East$champion, regional$Midwest$champion, year, "Final Four", "National", 2)
         champion <- pick_fixture_winner(semifinal1_winner, semifinal2_winner, year, "Championship", "National", 1)
+        semifinal1_scores <- make_fixture_matchup_scores(regional$South$champion, regional$West$champion, semifinal1_winner, "Final Four", 1)
+        semifinal2_scores <- make_fixture_matchup_scores(regional$East$champion, regional$Midwest$champion, semifinal2_winner, "Final Four", 2)
+        championship_scores <- make_fixture_matchup_scores(semifinal1_winner, semifinal2_winner, champion, "Championship", 1)
 
         dplyr::bind_rows(
             purrr::map_dfr(regional, "results"),
@@ -162,6 +231,9 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
                 teamB = regional$West$champion$Team[1],
                 teamA_seed = regional$South$champion$Seed[1],
                 teamB_seed = regional$West$champion$Seed[1],
+                teamA_score = semifinal1_scores$teamA_score,
+                teamB_score = semifinal1_scores$teamB_score,
+                total_points = semifinal1_scores$total_points,
                 winner = semifinal1_winner$Team[1]
             ),
             tibble::tibble(
@@ -173,6 +245,9 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
                 teamB = regional$Midwest$champion$Team[1],
                 teamA_seed = regional$East$champion$Seed[1],
                 teamB_seed = regional$Midwest$champion$Seed[1],
+                teamA_score = semifinal2_scores$teamA_score,
+                teamB_score = semifinal2_scores$teamB_score,
+                total_points = semifinal2_scores$total_points,
                 winner = semifinal2_winner$Team[1]
             ),
             tibble::tibble(
@@ -184,6 +259,9 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
                 teamB = semifinal2_winner$Team[1],
                 teamA_seed = semifinal1_winner$Seed[1],
                 teamB_seed = semifinal2_winner$Seed[1],
+                teamA_score = championship_scores$teamA_score,
+                teamB_score = championship_scores$teamB_score,
+                total_points = championship_scores$total_points,
                 winner = champion$Team[1]
             )
         )

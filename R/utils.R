@@ -83,6 +83,7 @@ team_name_aliases <- function() {
         "longislanduniversitybrooklyn" = "LIU",
         "loyolail" = "Loyola Chicago",
         "louisianalafayette" = "Louisiana",
+        "mcneese" = "McNeese State",
         "mcneesest" = "McNeese State",
         "miamifl" = "Miami (FL)",
         "michiganst" = "Michigan State",
@@ -269,6 +270,9 @@ empty_game_results_table <- function() {
         teamB = character(),
         teamA_seed = integer(),
         teamB_seed = integer(),
+        teamA_score = integer(),
+        teamB_score = integer(),
+        total_points = integer(),
         winner = character()
     )
 }
@@ -354,6 +358,63 @@ build_matchup_feature_row <- function(team_a, team_b, round_name, actual_outcome
         `3P%_diff` = diff_values[["3P%_diff"]] %||% 0,
         `3P%D_diff` = diff_values[["3P%D_diff"]] %||% 0,
         `Adj T._diff` = diff_values[["Adj T._diff"]] %||% 0
+    )
+}
+
+#' Build a single total-points feature row
+#'
+#' @param team_a A one-row team feature data frame for team A.
+#' @param team_b A one-row team feature data frame for team B.
+#' @param round_name The round label for the matchup.
+#' @param total_points Optional observed combined score for the matchup.
+#' @param metadata Optional metadata such as year, region, game index, and team
+#'   names.
+#'
+#' @return A one-row matchup feature tibble for total-points modeling.
+#' @keywords internal
+build_total_points_feature_row <- function(team_a, team_b, round_name, total_points = NA_real_, metadata = list()) {
+    if (nrow(team_a) != 1 || nrow(team_b) != 1) {
+        stop_with_message("Total-points feature rows require exactly one row for each team")
+    }
+
+    conf_a <- stringr::str_squish(dplyr::coalesce(as.character(team_a$Conf[1]), ""))
+    conf_b <- stringr::str_squish(dplyr::coalesce(as.character(team_b$Conf[1]), ""))
+    same_conf_value <- if (nzchar(conf_a) && nzchar(conf_b) && conf_a == conf_b) 1L else 0L
+
+    sum_feature <- function(feature_name) {
+        safe_numeric(team_a[[feature_name]][1]) + safe_numeric(team_b[[feature_name]][1])
+    }
+    mean_feature <- function(feature_name) {
+        mean(c(safe_numeric(team_a[[feature_name]][1]), safe_numeric(team_b[[feature_name]][1])), na.rm = TRUE)
+    }
+    gap_feature <- function(feature_name) {
+        abs(safe_numeric(team_a[[feature_name]][1]) - safe_numeric(team_b[[feature_name]][1]))
+    }
+
+    tibble::tibble(
+        Year = as.character(metadata$Year %||% team_a$Year[1]),
+        region = as.character(metadata$region %||% team_a$Region[1]),
+        round = as.character(round_name),
+        game_index = safe_numeric(metadata$game_index %||% NA_real_, default = NA_real_),
+        teamA = as.character(metadata$teamA %||% team_a$Team[1]),
+        teamB = as.character(metadata$teamB %||% team_b$Team[1]),
+        same_conf = same_conf_value,
+        seed_sum = safe_numeric(team_a$Seed[1]) + safe_numeric(team_b$Seed[1]),
+        seed_gap = abs(safe_numeric(team_a$Seed[1]) - safe_numeric(team_b$Seed[1])),
+        barthag_logit_sum = sum_feature("barthag_logit"),
+        barthag_logit_gap = gap_feature("barthag_logit"),
+        AdjOE_sum = sum_feature("AdjOE"),
+        AdjDE_sum = sum_feature("AdjDE"),
+        WAB_sum = sum_feature("WAB"),
+        TOR_sum = sum_feature("TOR"),
+        TORD_sum = sum_feature("TORD"),
+        ORB_sum = sum_feature("ORB"),
+        DRB_sum = sum_feature("DRB"),
+        `3P%_sum` = sum_feature("3P%"),
+        `3P%D_sum` = sum_feature("3P%D"),
+        `Adj T._mean` = mean_feature("Adj T."),
+        `Adj T._gap` = gap_feature("Adj T."),
+        total_points = safe_numeric(total_points, default = NA_real_)
     )
 }
 
@@ -653,6 +714,12 @@ augment_matchup_decisions <- function(matchups, round_weights = default_round_we
             upset_leverage = round_weight * win_prob_underdog * (1 + interval_width)
         ) %>%
         dplyr::mutate(
+            inspection_level = dplyr::case_when(
+                confidence_tier == "Toss-up" ~ "primary",
+                confidence_tier == "Volatile" ~ "secondary",
+                TRUE ~ "none"
+            ),
+            inspection_flag = inspection_level != "none",
             rationale_short = purrr::pmap_chr(
                 list(confidence_tier, round_weight, win_prob_favorite, win_prob_underdog, interval_width),
                 build_decision_rationale
@@ -831,6 +898,8 @@ build_decision_sheet <- function(candidates, round_weights = default_round_weigh
             interval_width,
             prediction_sd,
             confidence_tier,
+            inspection_flag,
+            inspection_level,
             round_weight = unname(round_weights[as.character(round)]),
             decision_score,
             upset_leverage,
@@ -864,6 +933,218 @@ build_decision_sheet <- function(candidates, round_weights = default_round_weigh
         ) %>%
         dplyr::arrange(region_order, round_order, matchup_number) %>%
         dplyr::select(-region_order, -round_order)
+}
+
+#' Summarize posterior total-points draws
+#'
+#' @param draws A numeric vector of posterior predictive total-points draws.
+#'
+#' @return A one-row tibble of mean, median, spread, and interval summaries.
+#' @keywords internal
+summarize_total_points_draws <- function(draws) {
+    draws <- suppressWarnings(as.numeric(draws))
+    draws <- draws[is.finite(draws)]
+
+    if (length(draws) == 0) {
+        return(tibble::tibble(
+            predicted_total_mean = NA_real_,
+            predicted_total_median = NA_real_,
+            predicted_total_sd = NA_real_,
+            predicted_total_50_lower = NA_real_,
+            predicted_total_50_upper = NA_real_,
+            predicted_total_80_lower = NA_real_,
+            predicted_total_80_upper = NA_real_,
+            predicted_total_95_lower = NA_real_,
+            predicted_total_95_upper = NA_real_,
+            recommended_tiebreaker_points = NA_integer_
+        ))
+    }
+
+    tibble::tibble(
+        predicted_total_mean = mean(draws),
+        predicted_total_median = stats::median(draws),
+        predicted_total_sd = stats::sd(draws),
+        predicted_total_50_lower = as.numeric(stats::quantile(draws, 0.25)),
+        predicted_total_50_upper = as.numeric(stats::quantile(draws, 0.75)),
+        predicted_total_80_lower = as.numeric(stats::quantile(draws, 0.10)),
+        predicted_total_80_upper = as.numeric(stats::quantile(draws, 0.90)),
+        predicted_total_95_lower = as.numeric(stats::quantile(draws, 0.025)),
+        predicted_total_95_upper = as.numeric(stats::quantile(draws, 0.975)),
+        recommended_tiebreaker_points = as.integer(round(stats::median(draws)))
+    )
+}
+
+#' Build total-points prediction rows for a candidate bracket
+#'
+#' @param candidate A candidate bracket object with a `matchups` table.
+#' @param team_lookup A current-year team feature lookup table keyed by team.
+#'
+#' @return A matchup-level tibble ready for total-points prediction.
+#' @keywords internal
+build_candidate_total_points_rows <- function(candidate, team_lookup) {
+    if (is.null(candidate$matchups) || nrow(candidate$matchups) == 0) {
+        return(tibble::tibble())
+    }
+
+    purrr::pmap_dfr(
+        candidate$matchups,
+        function(...) {
+            row <- tibble::as_tibble(list(...))
+            team_a <- team_lookup %>%
+                dplyr::filter(team_key == normalize_team_key(row$teamA[[1]]))
+            team_b <- team_lookup %>%
+                dplyr::filter(team_key == normalize_team_key(row$teamB[[1]]))
+
+            if (nrow(team_a) != 1 || nrow(team_b) != 1) {
+                stop_with_message(
+                    sprintf(
+                        "Could not build total-points features for %s vs %s",
+                        row$teamA[[1]],
+                        row$teamB[[1]]
+                    )
+                )
+            }
+
+            build_total_points_feature_row(
+                team_a = team_a,
+                team_b = team_b,
+                round_name = as.character(row$round[[1]]),
+                metadata = list(
+                    Year = team_a$Year[[1]],
+                    region = as.character(row$region[[1]]),
+                    game_index = row$matchup_number[[1]],
+                    teamA = row$teamA[[1]],
+                    teamB = row$teamB[[1]]
+                )
+            ) %>%
+                dplyr::mutate(
+                    candidate_id = candidate$candidate_id,
+                    candidate_type = candidate$type,
+                    matchup_number = row$matchup_number[[1]],
+                    confidence_tier = row$confidence_tier[[1]],
+                    inspection_flag = row$inspection_flag[[1]],
+                    inspection_level = row$inspection_level[[1]],
+                    chosen_winner = row$winner[[1]]
+                )
+        }
+    )
+}
+
+#' Predict candidate-level championship and matchup total points
+#'
+#' @param candidates A list of bracket candidate objects.
+#' @param current_teams A current-year team feature table.
+#' @param total_points_model A fitted total-points model result bundle.
+#' @param draws Number of posterior predictive draws to retain per matchup.
+#'
+#' @return A list containing candidate summaries, championship distributions,
+#'   and full matchup-level total summaries.
+#' @export
+predict_candidate_total_points <- function(candidates, current_teams, total_points_model, draws = 1000) {
+    if (length(candidates) == 0 || is.null(total_points_model)) {
+        return(list(
+            candidate_summaries = tibble::tibble(),
+            championship_distribution = tibble::tibble(),
+            matchup_summaries = tibble::tibble()
+        ))
+    }
+
+    team_lookup <- current_teams %>%
+        dplyr::mutate(team_key = normalize_team_key(Team)) %>%
+        dplyr::distinct(team_key, .keep_all = TRUE)
+
+    candidate_rows <- purrr::map(candidates, build_candidate_total_points_rows, team_lookup = team_lookup)
+
+    matchup_summaries <- purrr::map_dfr(candidate_rows, function(candidate_rows_tbl) {
+        if (nrow(candidate_rows_tbl) == 0) {
+            return(tibble::tibble())
+        }
+
+        draw_matrix <- predict_total_points_rows(candidate_rows_tbl, total_points_model, draws = draws)
+        draw_summaries <- purrr::map_dfr(seq_len(ncol(draw_matrix)), function(index) {
+            summarize_total_points_draws(draw_matrix[, index])
+        })
+
+        dplyr::bind_cols(candidate_rows_tbl, draw_summaries) %>%
+            dplyr::transmute(
+                candidate_id,
+                candidate_type,
+                round = as.character(round),
+                region = as.character(region),
+                matchup_number = as.integer(matchup_number),
+                teamA,
+                teamB,
+                chosen_winner,
+                confidence_tier,
+                inspection_flag,
+                inspection_level,
+                predicted_total_mean,
+                predicted_total_median,
+                predicted_total_sd,
+                predicted_total_50_lower,
+                predicted_total_50_upper,
+                predicted_total_80_lower,
+                predicted_total_80_upper,
+                predicted_total_95_lower,
+                predicted_total_95_upper,
+                recommended_tiebreaker_points
+            )
+    })
+
+    candidate_summaries <- matchup_summaries %>%
+        dplyr::filter(round == "Championship") %>%
+        dplyr::transmute(
+            candidate_id,
+            candidate_type,
+            championship_matchup = sprintf("%s vs %s", teamA, teamB),
+            finalist_a = teamA,
+            finalist_b = teamB,
+            recommended_tiebreaker_points,
+            predicted_total_mean,
+            predicted_total_median,
+            predicted_total_sd,
+            predicted_total_50_lower,
+            predicted_total_50_upper,
+            predicted_total_80_lower,
+            predicted_total_80_upper,
+            predicted_total_95_lower,
+            predicted_total_95_upper
+        )
+
+    championship_distribution <- purrr::map_dfr(candidate_rows, function(candidate_rows_tbl) {
+        if (nrow(candidate_rows_tbl) == 0) {
+            return(tibble::tibble())
+        }
+
+        championship_index <- which(as.character(candidate_rows_tbl$round) == "Championship")
+        if (length(championship_index) != 1L) {
+            return(tibble::tibble())
+        }
+
+        championship_row <- candidate_rows_tbl[championship_index, , drop = FALSE]
+        championship_draws <- predict_total_points_rows(championship_row, total_points_model, draws = draws)[, 1]
+        championship_draws <- pmax(0, round(championship_draws))
+        distribution <- as.data.frame(table(championship_draws), stringsAsFactors = FALSE)
+        names(distribution) <- c("total_points", "n")
+
+        distribution %>%
+            dplyr::as_tibble() %>%
+            dplyr::mutate(
+                candidate_id = championship_row$candidate_id[[1]],
+                candidate_type = championship_row$candidate_type[[1]],
+                championship_matchup = sprintf("%s vs %s", championship_row$teamA[[1]], championship_row$teamB[[1]]),
+                total_points = as.integer(total_points),
+                probability = n / sum(n)
+            ) %>%
+            dplyr::select(candidate_id, candidate_type, championship_matchup, total_points, probability) %>%
+            dplyr::arrange(candidate_id, total_points)
+    })
+
+    list(
+        candidate_summaries = candidate_summaries,
+        championship_distribution = championship_distribution,
+        matchup_summaries = matchup_summaries
+    )
 }
 
 #' Generate the top bracket candidates for the current field
@@ -1017,11 +1298,13 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
 #' @param play_in_resolution Optional one-row tibble from
 #'   [summarize_play_in_resolution()] describing whether unresolved simulated
 #'   First Four slots remain in the active bracket.
+#' @param total_points_predictions Optional list returned by
+#'   [predict_candidate_total_points()].
 #'
 #' @return A list of decision-artifact file paths and the in-memory decision
 #'   sheet.
 #' @export
-save_decision_outputs <- function(bracket_year, candidates, output_dir = "output", backtest = NULL, play_in_resolution = NULL) {
+save_decision_outputs <- function(bracket_year, candidates, output_dir = "output", backtest = NULL, play_in_resolution = NULL, total_points_predictions = NULL) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- build_decision_sheet(candidates)
@@ -1029,9 +1312,19 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
     rds_path <- file.path(output_dir, "bracket_candidates.rds")
     decision_sheet_path <- file.path(output_dir, "bracket_decision_sheet.csv")
     dashboard_path <- file.path(output_dir, "bracket_dashboard.html")
+    technical_dashboard_path <- file.path(output_dir, "technical_dashboard.html")
+    tiebreaker_summary_path <- file.path(output_dir, "championship_tiebreaker_summary.csv")
+    championship_distribution_path <- file.path(output_dir, "championship_tiebreaker_distribution.csv")
+    matchup_totals_path <- file.path(output_dir, "candidate_matchup_total_points.csv")
 
     saveRDS(candidates, rds_path)
     utils::write.csv(decision_sheet, decision_sheet_path, row.names = FALSE)
+
+    if (!is.null(total_points_predictions)) {
+        utils::write.csv(total_points_predictions$candidate_summaries, tiebreaker_summary_path, row.names = FALSE)
+        utils::write.csv(total_points_predictions$championship_distribution, championship_distribution_path, row.names = FALSE)
+        utils::write.csv(total_points_predictions$matchup_summaries, matchup_totals_path, row.names = FALSE)
+    }
 
     candidate_csv_paths <- vapply(candidates, function(candidate) {
         path <- file.path(output_dir, sprintf("bracket_candidate_%s.csv", candidate$candidate_id))
@@ -1048,6 +1341,19 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
         cat(sprintf("Bracket log probability: %.4f\n", candidate$bracket_log_prob))
         cat(sprintf("Mean picked-game probability: %.4f\n", candidate$mean_game_prob))
         cat(sprintf("Title path mean probability: %.4f\n", candidate$title_path_mean_prob %||% NA_real_))
+        if (!is.null(total_points_predictions) && nrow(total_points_predictions$candidate_summaries) > 0) {
+            tiebreaker_row <- total_points_predictions$candidate_summaries %>%
+                dplyr::filter(candidate_id == candidate$candidate_id)
+            if (nrow(tiebreaker_row) == 1L) {
+                cat(sprintf("Championship matchup: %s\n", tiebreaker_row$championship_matchup[[1]]))
+                cat(sprintf("Recommended tiebreaker: %s\n", tiebreaker_row$recommended_tiebreaker_points[[1]]))
+                cat(sprintf(
+                    "Championship total 80%% interval: %.1f to %.1f\n",
+                    tiebreaker_row$predicted_total_80_lower[[1]],
+                    tiebreaker_row$predicted_total_80_upper[[1]]
+                ))
+            }
+        }
         if (!is.na(candidate$frequency)) {
             cat(sprintf("Simulation frequency: %s\n", candidate$frequency))
         }
@@ -1064,18 +1370,34 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
             decision_sheet = decision_sheet,
             candidates = candidates,
             backtest = backtest,
-            play_in_resolution = play_in_resolution
+            play_in_resolution = play_in_resolution,
+            total_points_predictions = total_points_predictions
         ),
         dashboard_path
+    )
+    writeLines(
+        create_technical_dashboard_html(
+            bracket_year = bracket_year,
+            decision_sheet = decision_sheet,
+            candidates = candidates,
+            backtest = backtest,
+            total_points_predictions = total_points_predictions,
+            play_in_resolution = play_in_resolution
+        ),
+        technical_dashboard_path
     )
 
     list(
         decision_sheet = decision_sheet,
         decision_sheet_path = decision_sheet_path,
         dashboard = dashboard_path,
+        technical_dashboard = technical_dashboard_path,
         candidates_rds = rds_path,
         candidate_summary = summary_path,
-        candidate_csvs = unname(candidate_csv_paths)
+        candidate_csvs = unname(candidate_csv_paths),
+        championship_tiebreaker_summary = if (!is.null(total_points_predictions)) tiebreaker_summary_path else NULL,
+        championship_tiebreaker_distribution = if (!is.null(total_points_predictions)) championship_distribution_path else NULL,
+        matchup_total_points = if (!is.null(total_points_predictions)) matchup_totals_path else NULL
     )
 }
 
@@ -1119,7 +1441,8 @@ save_results <- function(results, output_config) {
             candidates = results$candidates,
             output_dir = output_dir,
             backtest = results$backtest,
-            play_in_resolution = play_in_resolution
+            play_in_resolution = play_in_resolution,
+            total_points_predictions = results$total_points_predictions
         )
     } else {
         NULL
@@ -1144,6 +1467,7 @@ save_results <- function(results, output_config) {
         bracket_plot = viz_path,
         candidate_summary = if (!is.null(results$candidates) && length(results$candidates) > 0) candidate_summary_path else NULL,
         dashboard = decision_outputs$dashboard %||% NULL,
+        technical_dashboard = decision_outputs$technical_dashboard %||% NULL,
         decision_sheet = decision_outputs$decision_sheet_path %||% NULL,
         candidate_csvs = decision_outputs$candidate_csvs %||% NULL,
         candidates_rds = decision_outputs$candidates_rds %||% NULL

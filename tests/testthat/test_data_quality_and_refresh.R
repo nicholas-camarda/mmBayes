@@ -199,7 +199,22 @@ test_that("parser keeps national 1-seed games out of First Four for affected yea
         expect_false(any(parsed$region == "First Four" & parsed$teamA_seed == 1L & parsed$teamB_seed == 1L))
         expect_equal(sum(parsed$region == "National" & parsed$round == "Final Four"), 2)
         expect_equal(sum(parsed$region == "National" & parsed$round == "Championship"), 1)
+        expect_true(all(c("teamA_score", "teamB_score", "total_points") %in% names(parsed)))
+        expect_true(all(parsed$total_points == parsed$teamA_score + parsed$teamB_score))
     }
+})
+
+test_that("quality gates reject score rows with inconsistent totals", {
+    team_data <- make_fixture_team_features()
+    results_data <- make_fixture_game_results(team_data) %>%
+        dplyr::mutate(
+            total_points = dplyr::if_else(row_number() == 1L, total_points + 1L, total_points)
+        )
+
+    expect_error(
+        assert_canonical_data_quality(team_data, results_data),
+        regexp = "Invalid score-bearing rows"
+    )
 })
 
 test_that("parser handles no-contest bracket slots without shifting later rounds", {

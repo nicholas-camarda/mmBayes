@@ -61,6 +61,9 @@ if (!is.null(results$output$candidate_summary)) {
 if (!is.null(results$output$dashboard)) {
     cat(sprintf("- Dashboard: %s\n", results$output$dashboard))
 }
+if (!is.null(results$output$technical_dashboard)) {
+    cat(sprintf("- Technical dashboard: %s\n", results$output$technical_dashboard))
+}
 if (!is.null(results$output$decision_sheet)) {
     cat(sprintf("- Decision sheet: %s\n", results$output$decision_sheet))
 }
