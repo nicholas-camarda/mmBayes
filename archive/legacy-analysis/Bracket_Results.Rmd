@@ -1,80 +1,98 @@
 # Bayesian Bracket Results
 
-## South Region Matchups
-
-```{r}
-# Shift + CMD + K to knit the document
+```{r setup, include=FALSE}
 library(readxl)
 library(knitr)
 
-# Read and display all sheets as tables
-res_south1 <- read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 1)
-kable(res_south1)
+sort_matchup_table <- function(data_frame) {
+	round_levels <- c(
+		"First Four",
+		"Round of 64",
+		"Round of 32",
+		"Round of 16",
+		"Elite 8",
+		"Final Four",
+		"Championship"
+	)
 
-res_south2 <- read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 2)
-kable(res_south2)
+	if (!all(c("round", "matchup_number") %in% names(data_frame))) {
+		return(data_frame)
+	}
 
-res_south3 <- read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 3)
-kable(res_south3)
-
-res_south4 <- read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 4)
-kable(res_south4)
+	data_frame[order(factor(data_frame$round, levels = round_levels), data_frame$matchup_number), , drop = FALSE]
+}
 ```
 
 ## East Region Matchups
 
 ```{r}
-res_east1 <- read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 1)
+res_east1 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 1))
 kable(res_east1)
 
-res_east2 <- read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 2)
+res_east2 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 2))
 kable(res_east2)
 
-res_east3 <- read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 3)
+res_east3 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 3))
 kable(res_east3)
 
-res_east4 <- read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 4)
+res_east4 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'East_Region.xlsx'), sheet = 4))
 kable(res_east4)
-```
-
-## West Region Matchups
-
-```{r}
-res_west1 <- read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 1)
-kable(res_west1)
-
-res_west2 <- read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 2)
-kable(res_west2)
-
-res_west3 <- read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 3)
-kable(res_west3)
-
-res_west4 <- read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 4)
-kable(res_west4)
 ```
 
 ## Midwest Region Matchups
 
 ```{r}
-res_midwest1 <- read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 1)
+res_midwest1 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 1))
 kable(res_midwest1)
 
-res_midwest2 <- read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 2)
+res_midwest2 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 2))
 kable(res_midwest2)
 
-res_midwest3 <- read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 3)
+res_midwest3 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 3))
 kable(res_midwest3)
 
-res_midwest4 <- read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 4)
+res_midwest4 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'Midwest_Region.xlsx'), sheet = 4))
 kable(res_midwest4)
+```
+
+## South Region Matchups
+
+```{r}
+res_south1 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 1))
+kable(res_south1)
+
+res_south2 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 2))
+kable(res_south2)
+
+res_south3 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 3))
+kable(res_south3)
+
+res_south4 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'South_Region.xlsx'), sheet = 4))
+kable(res_south4)
+```
+
+## West Region Matchups
+
+```{r}
+res_west1 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 1))
+kable(res_west1)
+
+res_west2 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 2))
+kable(res_west2)
+
+res_west3 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 3))
+kable(res_west3)
+
+res_west4 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'West_Region.xlsx'), sheet = 4))
+kable(res_west4)
 ```
 
 ## Final Four and Championship
 
 ```{r}
-res_final_four1 <- read_xlsx(file.path('bracket_results', 'Final_Four_and_Championship.xlsx'), sheet = 1)
+res_final_four1 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'Final_Four_and_Championship.xlsx'), sheet = 1))
 kable(res_final_four1)
 
-res_final_four2 <- read_xlsx(file.path('bracket_results', 'Final_Four_and_Championship.xlsx'), sheet = 2)
+res_final_four2 <- sort_matchup_table(read_xlsx(file.path('bracket_results', 'Final_Four_and_Championship.xlsx'), sheet = 2))
 kable(res_final_four2)
 ```

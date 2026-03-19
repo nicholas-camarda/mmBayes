@@ -151,17 +151,68 @@ configure_priors <- function() {
     )
 }
 
+#' Build a cache key for a fitted model bundle
+#'
+#' @param historical_matchups Historical matchup training rows.
+#' @param predictor_columns Predictor columns used for fitting.
+#' @param random_seed Random seed used during fitting.
+#' @param include_diagnostics Whether diagnostics are included in the bundle.
+#'
+#' @return A cache key suitable for a file name.
+#' @keywords internal
+build_model_fit_cache_key <- function(historical_matchups, predictor_columns, random_seed, include_diagnostics) {
+    cache_signature <- list(
+        historical_matchups = historical_matchups,
+        predictor_columns = predictor_columns,
+        random_seed = random_seed,
+        include_diagnostics = include_diagnostics
+    )
+
+    signature_file <- tempfile(fileext = ".rds")
+    on.exit(unlink(signature_file), add = TRUE)
+    saveRDS(cache_signature, signature_file)
+    tools::md5sum(signature_file)[[1]]
+}
+
+#' Build the cache file path for a fitted model bundle
+#'
+#' @param cache_dir Directory used to store cached fitted models.
+#' @param cache_key Cache key returned by [build_model_fit_cache_key()].
+#'
+#' @return A cache file path.
+#' @keywords internal
+build_model_fit_cache_path <- function(cache_dir, cache_key) {
+    file.path(cache_dir, paste0("fit_", cache_key, ".rds"))
+}
+
 #' Fit the tournament matchup model
 #'
 #' @param historical_matchups A matchup-level historical training table.
 #' @param predictor_columns Predictor columns to include in the model.
 #' @param random_seed Random seed used during fitting.
+#' @param include_diagnostics Whether to compute expensive post-fit diagnostics.
+#' @param cache_dir Optional directory used to store and reload fitted model bundles.
+#' @param use_cache Whether to reuse a cached fit when available.
 #'
 #' @return A list containing the fitted Bayesian model, formula, predictors,
 #'   scaling reference, and diagnostics.
 #' @export
-fit_tournament_model <- function(historical_matchups, predictor_columns, random_seed = 123) {
+fit_tournament_model <- function(historical_matchups, predictor_columns, random_seed = 123, include_diagnostics = TRUE, cache_dir = NULL, use_cache = TRUE) {
     require_bayesian_packages()
+
+    cache_path <- NULL
+    if (isTRUE(use_cache) && !is.null(cache_dir)) {
+        dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+        cache_key <- build_model_fit_cache_key(historical_matchups, predictor_columns, random_seed, include_diagnostics)
+        cache_path <- build_model_fit_cache_path(cache_dir, cache_key)
+        if (file.exists(cache_path)) {
+            logger::log_info("Loading cached matchup-level model fit from {cache_path}")
+            cached_result <- readRDS(cache_path)
+            cached_result$cache_path <- cache_path
+            return(cached_result)
+        }
+    }
+
     logger::log_info("Starting matchup-level Bayesian model fitting")
     set.seed(random_seed)
 
@@ -185,14 +236,22 @@ fit_tournament_model <- function(historical_matchups, predictor_columns, random_
         refresh = refresh
     )
 
-    list(
+    fit_result <- list(
         engine = "bayes",
         model = model,
         formula = formula_input,
         predictor_columns = predictor_columns,
         scaling_reference = prepared$scaling_reference,
-        diagnostics = perform_model_diagnostics(model, "bayes")
+        diagnostics = if (isTRUE(include_diagnostics)) perform_model_diagnostics(model, "bayes") else NULL,
+        cache_path = cache_path
     )
+
+    if (!is.null(cache_path)) {
+        saveRDS(fit_result, cache_path)
+        logger::log_info("Saved matchup-level model fit cache to {cache_path}")
+    }
+
+    fit_result
 }
 
 #' Compute diagnostics for a fitted model
@@ -295,6 +354,16 @@ predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
         prediction_data$round <- factor(round_values, levels = training_round_levels)
     }
 
+    if (anyNA(prediction_data)) {
+        missing_columns <- names(prediction_data)[colSums(is.na(prediction_data)) > 0]
+        stop_with_message(
+            sprintf(
+                "Prediction rows contain missing values for: %s",
+                paste(missing_columns, collapse = ", ")
+            )
+        )
+    }
+
     posterior_draws <- nrow(as.matrix(model_results$model))
     draws <- max(1L, min(as.integer(draws), posterior_draws))
 
@@ -317,7 +386,7 @@ predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
 #' @return A list of year-level metrics, predictions, calibration, bracket
 #'   scores, and summary metrics.
 #' @export
-run_rolling_backtest <- function(historical_teams, historical_actual_results, predictor_columns, random_seed = 123, draws = 1000) {
+run_rolling_backtest <- function(historical_teams, historical_actual_results, predictor_columns, random_seed = 123, draws = 1000, cache_dir = NULL, use_cache = TRUE) {
     years <- sort(unique(as.character(historical_actual_results$Year)))
     if (length(years) < 2) {
         return(list(
@@ -338,6 +407,7 @@ run_rolling_backtest <- function(historical_teams, historical_actual_results, pr
     for (index in 2:length(years)) {
         holdout_year <- years[[index]]
         train_years <- years[seq_len(index - 1L)]
+        logger::log_info("Running rolling backtest holdout for {holdout_year}")
 
         train_teams <- historical_teams %>%
             dplyr::filter(Year %in% train_years)
@@ -354,7 +424,10 @@ run_rolling_backtest <- function(historical_teams, historical_actual_results, pr
         model_results <- fit_tournament_model(
             historical_matchups = build_explicit_matchup_history(train_teams, train_results),
             predictor_columns = predictor_columns,
-            random_seed = random_seed
+            random_seed = random_seed,
+            include_diagnostics = FALSE,
+            cache_dir = cache_dir,
+            use_cache = use_cache
         )
 
         holdout_rows <- actual_results_to_matchup_rows(holdout_results)
@@ -372,7 +445,8 @@ run_rolling_backtest <- function(historical_teams, historical_actual_results, pr
         simulated_bracket <- simulate_full_bracket(
             all_teams = holdout_teams,
             model_results = model_results,
-            draws = draws
+            draws = draws,
+            log_matchups = FALSE
         )
         predicted_matchups <- flatten_matchup_results(simulated_bracket)
         actual_lookup <- holdout_results %>%

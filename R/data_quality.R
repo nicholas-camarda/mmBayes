@@ -73,26 +73,30 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
     game_results <- normalize_game_results(game_results)
 
     years <- sort(unique(as.character(game_results$Year)))
-    expected_rounds <- expected_completed_round_counts()
-
     games_per_year <- game_results %>%
         dplyr::count(Year, name = "games") %>%
-        dplyr::mutate(expected_games = sum(expected_rounds)) %>%
+        dplyr::rowwise() %>%
+        dplyr::mutate(expected_games = sum(expected_completed_round_counts(Year))) %>%
+        dplyr::ungroup() %>%
         dplyr::mutate(ok = games == expected_games)
 
     round_counts <- game_results %>%
         dplyr::count(Year, round, name = "games") %>%
-        dplyr::mutate(round = factor(round, levels = names(expected_rounds))) %>%
+        dplyr::mutate(round = factor(round, levels = names(expected_completed_round_counts()))) %>%
         dplyr::arrange(Year, round)
 
-    round_count_issues <- tidyr::expand_grid(
-        Year = years,
-        round = names(expected_rounds)
-    ) %>%
+    expected_round_grid <- purrr::map_dfr(years, function(year) {
+        tibble::tibble(
+            Year = year,
+            round = names(expected_completed_round_counts(year)),
+            expected_games = unname(expected_completed_round_counts(year))
+        )
+    })
+
+    round_count_issues <- expected_round_grid %>%
         dplyr::left_join(round_counts, by = c("Year", "round")) %>%
         dplyr::mutate(
             games = dplyr::coalesce(games, 0L),
-            expected_games = unname(expected_rounds[round]),
             ok = games == expected_games
         ) %>%
         dplyr::filter(!ok)

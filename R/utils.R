@@ -79,7 +79,10 @@ team_name_aliases <- function() {
         "kennesawst" = "Kennesaw State",
         "kentst" = "Kent State",
         "longbeachst" = "Long Beach State",
+        "liubrooklyn" = "LIU",
+        "longislanduniversitybrooklyn" = "LIU",
         "loyolail" = "Loyola Chicago",
+        "louisianalafayette" = "Louisiana",
         "mcneesest" = "McNeese State",
         "miamifl" = "Miami (FL)",
         "michiganst" = "Michigan State",
@@ -94,6 +97,7 @@ team_name_aliases <- function() {
         "ncstatewolfpack" = "NC State",
         "northdakotast" = "North Dakota State",
         "northcarolina" = "North Carolina",
+        "northcarolinast" = "NC State",
         "northcarolinastate" = "NC State",
         "norfolkst" = "Norfolk State",
         "ohiost" = "Ohio State",
@@ -164,6 +168,14 @@ round_levels <- function() {
     c("First Four", "Round of 64", "Round of 32", "Sweet 16", "Elite 8", "Final Four", "Championship")
 }
 
+#' Return the bracket fill order for regions
+#'
+#' @return A character vector of region labels in ESPN bracket order.
+#' @keywords internal
+bracket_region_levels <- function() {
+    c("East", "South", "Midwest", "West")
+}
+
 #' List allowed pre-tournament feature columns
 #'
 #' @return A character vector of season-available team feature names.
@@ -219,10 +231,13 @@ default_round_weights <- function() {
 
 #' Return expected game counts by round for a completed tournament
 #'
+#' @param year Optional tournament year. When supplied, known exceptions such as
+#'   the 2021 COVID no-contest are reflected in the expected counts.
+#'
 #' @return A named integer vector of expected completed-tournament round counts.
 #' @keywords internal
-expected_completed_round_counts <- function() {
-    c(
+expected_completed_round_counts <- function(year = NULL) {
+    counts <- c(
         "First Four" = 4L,
         "Round of 64" = 32L,
         "Round of 32" = 16L,
@@ -231,6 +246,13 @@ expected_completed_round_counts <- function() {
         "Final Four" = 2L,
         "Championship" = 1L
     )
+
+    year_value <- suppressWarnings(as.integer(year))
+    if (length(year_value) == 1L && !is.na(year_value) && year_value == 2021L) {
+        counts["Round of 64"] <- 31L
+    }
+
+    counts
 }
 
 #' Build a single matchup feature row
@@ -248,6 +270,10 @@ build_matchup_feature_row <- function(team_a, team_b, round_name, actual_outcome
         stop_with_message("Matchup feature rows require exactly one row for each team")
     }
 
+    conf_a <- stringr::str_squish(dplyr::coalesce(as.character(team_a$Conf[1]), ""))
+    conf_b <- stringr::str_squish(dplyr::coalesce(as.character(team_b$Conf[1]), ""))
+    same_conf_value <- if (nzchar(conf_a) && nzchar(conf_b) && conf_a == conf_b) 1L else 0L
+
     available_features <- intersect(pre_tournament_feature_columns(), intersect(names(team_a), names(team_b)))
     diff_values <- purrr::map_dbl(available_features, function(feature_name) {
         safe_numeric(team_a[[feature_name]][1]) - safe_numeric(team_b[[feature_name]][1])
@@ -263,7 +289,7 @@ build_matchup_feature_row <- function(team_a, team_b, round_name, actual_outcome
         teamB = as.character(metadata$teamB %||% team_b$Team[1]),
         winner = as.character(metadata$winner %||% if (isTRUE(actual_outcome == 1)) team_a$Team[1] else if (isTRUE(actual_outcome == 0)) team_b$Team[1] else NA_character_),
         actual_outcome = safe_numeric(actual_outcome, default = NA_real_),
-        same_conf = as.integer(as.character(team_a$Conf[1]) == as.character(team_b$Conf[1])),
+        same_conf = same_conf_value,
         seed_diff = safe_numeric(team_a$Seed[1]) - safe_numeric(team_b$Seed[1]),
         barthag_logit_diff = diff_values[["barthag_logit_diff"]] %||% 0,
         AdjOE_diff = diff_values[["AdjOE_diff"]] %||% 0,
@@ -450,6 +476,549 @@ flatten_matchup_results <- function(simulation_results) {
     dplyr::bind_rows(region_rows, final_rows)
 }
 
+#' Compute the implied log probability of a flattened bracket
+#'
+#' @param flattened_matchups A flattened matchup table with `win_prob_A`.
+#'
+#' @return A one-row tibble with bracket-level log-probability summaries.
+#' @keywords internal
+summarize_bracket_probability <- function(flattened_matchups) {
+    chosen_prob <- ifelse(
+        flattened_matchups$winner == flattened_matchups$teamA,
+        flattened_matchups$win_prob_A,
+        1 - flattened_matchups$win_prob_A
+    )
+    chosen_prob <- pmin(pmax(chosen_prob, 1e-6), 1 - 1e-6)
+
+    tibble::tibble(
+        bracket_log_prob = sum(log(chosen_prob), na.rm = TRUE),
+        mean_game_prob = mean(chosen_prob, na.rm = TRUE)
+    )
+}
+
+#' Classify the confidence tier for a matchup
+#'
+#' @param favorite_prob Posterior win probability for the favored side.
+#' @param ci_lower Lower credible bound for the favored side.
+#' @param ci_upper Upper credible bound for the favored side.
+#'
+#' @return A character scalar describing the confidence tier.
+#' @keywords internal
+classify_confidence_tier <- function(favorite_prob, ci_lower, ci_upper) {
+    interval_width <- safe_numeric(ci_upper) - safe_numeric(ci_lower)
+
+    if (interval_width > 0.35) {
+        return("Volatile")
+    }
+    if (safe_numeric(favorite_prob) >= 0.8 && safe_numeric(ci_lower) >= 0.6) {
+        return("Lock")
+    }
+    if (safe_numeric(favorite_prob) >= 0.65 && interval_width <= 0.3) {
+        return("Lean")
+    }
+
+    "Toss-up"
+}
+
+#' Build a short decision rationale for a matchup
+#'
+#' @param confidence_tier Confidence tier returned by
+#'   [classify_confidence_tier()].
+#' @param round_weight Standard scoring weight for the round.
+#' @param favorite_prob Posterior win probability for the favored side.
+#' @param underdog_prob Posterior win probability for the underdog.
+#' @param interval_width Width of the favored-side credible interval.
+#'
+#' @return A short sentence suitable for dashboards and decision sheets.
+#' @keywords internal
+build_decision_rationale <- function(confidence_tier, round_weight, favorite_prob, underdog_prob, interval_width) {
+    if (identical(confidence_tier, "Lock")) {
+        return("Take the favorite. The posterior edge is strong and stable.")
+    }
+    if (safe_numeric(round_weight) >= 8 && safe_numeric(underdog_prob) >= 0.35) {
+        return("Late-round leverage spot. The underdog path is still live.")
+    }
+    if (identical(confidence_tier, "Volatile")) {
+        return("Wide posterior interval. This matchup is unstable enough to swing a bracket.")
+    }
+    if (safe_numeric(favorite_prob) < 0.6) {
+        return("Near coin flip. Either side is defensible in pool play.")
+    }
+    if (safe_numeric(interval_width) > 0.25) {
+        return("The favorite has the edge, but uncertainty is still meaningful.")
+    }
+
+    "Lean favorite. The safer side is clear, but it is not a lock."
+}
+
+#' Add decision-oriented metadata to matchup predictions
+#'
+#' @param matchups A flattened matchup table.
+#' @param round_weights Optional named round-weight vector.
+#'
+#' @return The matchup table with favorite, uncertainty, and leverage columns.
+#' @export
+augment_matchup_decisions <- function(matchups, round_weights = default_round_weights()) {
+    if (nrow(matchups) == 0) {
+        return(tibble::tibble())
+    }
+
+    favorite_prob <- pmax(matchups$win_prob_A, 1 - matchups$win_prob_A)
+    underdog_prob <- 1 - favorite_prob
+    favorite_ci_lower <- ifelse(matchups$win_prob_A >= 0.5, matchups$ci_lower, 1 - matchups$ci_upper)
+    favorite_ci_upper <- ifelse(matchups$win_prob_A >= 0.5, matchups$ci_upper, 1 - matchups$ci_lower)
+    interval_width <- pmax(0, favorite_ci_upper - favorite_ci_lower)
+    confidence_tier <- vapply(
+        seq_len(nrow(matchups)),
+        function(index) {
+            classify_confidence_tier(
+                favorite_prob = favorite_prob[[index]],
+                ci_lower = favorite_ci_lower[[index]],
+                ci_upper = favorite_ci_upper[[index]]
+            )
+        },
+        character(1)
+    )
+
+    augmented <- matchups %>%
+        dplyr::mutate(
+            slot_key = sprintf("%s|%s|%s", region, round, matchup_number),
+            round = factor(round, levels = round_levels()),
+            round_weight = unname(round_weights[as.character(round)]),
+            round_weight = dplyr::coalesce(round_weight, 0),
+            posterior_favorite = ifelse(win_prob_A >= 0.5, teamA, teamB),
+            favorite_seed = ifelse(win_prob_A >= 0.5, teamA_seed, teamB_seed),
+            underdog = ifelse(win_prob_A >= 0.5, teamB, teamA),
+            underdog_seed = ifelse(win_prob_A >= 0.5, teamB_seed, teamA_seed),
+            win_prob_favorite = favorite_prob,
+            win_prob_underdog = underdog_prob,
+            favorite_ci_lower = favorite_ci_lower,
+            favorite_ci_upper = favorite_ci_upper,
+            interval_width = interval_width,
+            posterior_edge = win_prob_favorite - 0.5,
+            confidence_tier = confidence_tier,
+            decision_score = round_weight * (win_prob_underdog + interval_width),
+            upset_leverage = round_weight * win_prob_underdog * (1 + interval_width)
+        ) %>%
+        dplyr::mutate(
+            rationale_short = purrr::pmap_chr(
+                list(confidence_tier, round_weight, win_prob_favorite, win_prob_underdog, interval_width),
+                build_decision_rationale
+            )
+        )
+
+    ranking <- augmented %>%
+        dplyr::arrange(dplyr::desc(decision_score), dplyr::desc(interval_width), round, region, matchup_number) %>%
+        dplyr::transmute(slot_key, decision_rank = dplyr::row_number())
+
+    augmented %>%
+        dplyr::left_join(ranking, by = "slot_key") %>%
+        dplyr::mutate(
+            region = factor(region, levels = bracket_region_levels()),
+            round = factor(round, levels = round_levels())
+        ) %>%
+        dplyr::arrange(region, round, matchup_number)
+}
+
+#' Build a stable key for a full bracket path
+#'
+#' @param flattened_matchups A flattened matchup table.
+#'
+#' @return A character scalar uniquely identifying the bracket winners by game.
+#' @keywords internal
+build_bracket_key <- function(flattened_matchups) {
+    flattened_matchups %>%
+        dplyr::arrange(factor(round, levels = round_levels()), region, matchup_number) %>%
+        dplyr::transmute(key = sprintf("%s|%s|%s|%s", round, region, matchup_number, winner)) %>%
+        dplyr::pull(key) %>%
+        paste(collapse = " || ")
+}
+
+#' Compare two candidate brackets slot by slot
+#'
+#' @param base_matchups The baseline candidate matchup table.
+#' @param alt_matchups The alternate candidate matchup table.
+#'
+#' @return A joined comparison table keyed by bracket slot.
+#' @keywords internal
+compare_candidate_matchups <- function(base_matchups, alt_matchups) {
+    base_prepped <- if ("slot_key" %in% names(base_matchups)) base_matchups else augment_matchup_decisions(base_matchups)
+    alt_prepped <- if ("slot_key" %in% names(alt_matchups)) alt_matchups else augment_matchup_decisions(alt_matchups)
+
+    base_prepped %>%
+        dplyr::transmute(
+            slot_key,
+            region,
+            round,
+            matchup_number,
+            candidate_1_matchup = sprintf("%s vs %s", teamA, teamB),
+            candidate_1_pick = winner,
+            candidate_1_upset = upset,
+            confidence_tier,
+            upset_leverage,
+            decision_score
+        ) %>%
+        dplyr::left_join(
+            alt_prepped %>%
+                dplyr::transmute(
+                    slot_key,
+                    candidate_2_matchup = sprintf("%s vs %s", teamA, teamB),
+                    candidate_2_pick = winner,
+                    candidate_2_upset = upset
+                ),
+            by = "slot_key"
+        ) %>%
+        dplyr::mutate(
+            candidate_2_matchup = dplyr::coalesce(candidate_2_matchup, candidate_1_matchup),
+            candidate_2_pick = dplyr::coalesce(candidate_2_pick, candidate_1_pick),
+            candidate_2_upset = dplyr::coalesce(candidate_2_upset, candidate_1_upset),
+            candidate_diff_flag = candidate_1_pick != candidate_2_pick |
+                candidate_1_matchup != candidate_2_matchup
+        )
+}
+
+#' Build a short rationale for a candidate flip
+#'
+#' @param comparison_row A one-row comparison tibble from
+#'   [compare_candidate_matchups()].
+#'
+#' @return A short sentence explaining why the alternate pick is plausible.
+#' @keywords internal
+build_flip_rationale <- function(comparison_row) {
+    if (!isTRUE(comparison_row$candidate_diff_flag[[1]])) {
+        return("Matches the primary bracket.")
+    }
+
+    if (isTRUE(comparison_row$candidate_2_upset[[1]]) && comparison_row$confidence_tier[[1]] %in% c("Toss-up", "Volatile")) {
+        return("Live underdog pivot in a volatile matchup.")
+    }
+    if (comparison_row$round[[1]] %in% c("Sweet 16", "Elite 8", "Final Four", "Championship")) {
+        return("High-leverage late-round pivot.")
+    }
+    if (comparison_row$confidence_tier[[1]] == "Toss-up") {
+        return("Near coin flip, so the alternate bracket takes the other side.")
+    }
+
+    "Controlled alternate path with a plausible downstream payoff."
+}
+
+#' Summarize path-level details for a bracket candidate
+#'
+#' @param matchups A candidate matchup table.
+#'
+#' @return A one-row tibble describing the candidate's title path.
+#' @keywords internal
+summarize_candidate_path <- function(matchups) {
+    title_path <- matchups %>%
+        dplyr::filter(round %in% c("Final Four", "Championship")) %>%
+        dplyr::transmute(
+            round = as.character(round),
+            chosen_prob = ifelse(winner == teamA, win_prob_A, 1 - win_prob_A)
+        )
+
+    tibble::tibble(
+        title_path_mean_prob = mean(title_path$chosen_prob, na.rm = TRUE),
+        title_path_min_prob = min(title_path$chosen_prob, na.rm = TRUE)
+    )
+}
+
+#' Build the bracket decision sheet used by the dashboard and CSV export
+#'
+#' @param candidates A list of bracket candidate result objects.
+#' @param round_weights Optional named round-weight vector.
+#'
+#' @return A sorted decision-sheet tibble.
+#' @export
+build_decision_sheet <- function(candidates, round_weights = default_round_weights()) {
+    if (length(candidates) == 0) {
+        return(tibble::tibble())
+    }
+
+    primary <- if ("slot_key" %in% names(candidates[[1]]$matchups)) {
+        candidates[[1]]$matchups
+    } else {
+        augment_matchup_decisions(candidates[[1]]$matchups, round_weights = round_weights)
+    }
+    alternate <- if (length(candidates) >= 2) {
+        if ("slot_key" %in% names(candidates[[2]]$matchups)) {
+            candidates[[2]]$matchups
+        } else {
+            augment_matchup_decisions(candidates[[2]]$matchups, round_weights = round_weights)
+        }
+    } else {
+        primary
+    }
+
+    comparison <- compare_candidate_matchups(primary, alternate)
+    comparison$alternate_rationale <- vapply(
+        seq_len(nrow(comparison)),
+        function(index) build_flip_rationale(comparison[index, , drop = FALSE]),
+        character(1)
+    )
+
+    primary %>%
+        dplyr::transmute(
+            slot_key,
+            region,
+            round = factor(round, levels = round_levels()),
+            matchup_number,
+            matchup_label = sprintf("%s vs %s", teamA, teamB),
+            teamA,
+            teamB,
+            teamA_seed,
+            teamB_seed,
+            posterior_favorite,
+            favorite_seed,
+            underdog,
+            underdog_seed,
+            win_prob_A,
+            win_prob_favorite,
+            win_prob_underdog,
+            ci_lower = favorite_ci_lower,
+            ci_upper = favorite_ci_upper,
+            interval_width,
+            prediction_sd,
+            confidence_tier,
+            round_weight = unname(round_weights[as.character(round)]),
+            decision_score,
+            upset_leverage,
+            decision_rank,
+            rationale_short,
+            candidate_1_pick = winner,
+            candidate_1_upset = upset
+        ) %>%
+        dplyr::left_join(
+            comparison %>%
+                dplyr::select(
+                    slot_key,
+                    candidate_2_matchup,
+                    candidate_2_pick,
+                    candidate_2_upset,
+                    candidate_diff_flag,
+                    alternate_rationale
+                ),
+            by = "slot_key"
+        ) %>%
+        dplyr::mutate(
+            candidate_2_matchup = dplyr::coalesce(candidate_2_matchup, matchup_label),
+            candidate_2_pick = dplyr::coalesce(candidate_2_pick, candidate_1_pick),
+            candidate_2_upset = dplyr::coalesce(candidate_2_upset, candidate_1_upset),
+            candidate_diff_flag = dplyr::coalesce(candidate_diff_flag, FALSE),
+            upset_flag_if_picked = candidate_1_upset
+        ) %>%
+        dplyr::mutate(
+            region_order = factor(region, levels = bracket_region_levels()),
+            round_order = factor(round, levels = round_levels())
+        ) %>%
+        dplyr::arrange(region_order, round_order, matchup_number) %>%
+        dplyr::select(-region_order, -round_order)
+}
+
+#' Generate the top bracket candidates for the current field
+#'
+#' @param all_teams A current-year team feature table.
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws per matchup.
+#' @param n_candidates Number of bracket candidates to retain.
+#' @param n_simulations Number of stochastic brackets to explore.
+#' @param random_seed Random seed for stochastic exploration.
+#'
+#' @return A list with candidate metadata and flattened matchup tables.
+#' @export
+generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, n_candidates = 2L, n_simulations = 250L, random_seed = 123) {
+    deterministic_bracket <- simulate_full_bracket(
+        all_teams = all_teams,
+        model_results = model_results,
+        draws = draws,
+        deterministic = TRUE,
+        log_matchups = FALSE
+    )
+    deterministic_flat <- augment_matchup_decisions(flatten_matchup_results(deterministic_bracket))
+    deterministic_summary <- summarize_bracket_probability(deterministic_flat)
+    deterministic_path <- summarize_candidate_path(deterministic_flat)
+
+    candidates <- list(
+        list(
+            candidate_id = 1L,
+            bracket_key = build_bracket_key(deterministic_flat),
+            type = "safe",
+            champion = deterministic_bracket$final_four$champion$Team[[1]],
+            final_four = paste(vapply(deterministic_bracket$final_four$semifinalists, function(team) team$Team[[1]], character(1)), collapse = ", "),
+            frequency = NA_integer_,
+            bracket_log_prob = deterministic_summary$bracket_log_prob[[1]],
+            mean_game_prob = deterministic_summary$mean_game_prob[[1]],
+            title_path_mean_prob = deterministic_path$title_path_mean_prob[[1]],
+            title_path_min_prob = deterministic_path$title_path_min_prob[[1]],
+            diff_summary = "Primary bracket built from the higher posterior-mean pick in every slot.",
+            simulation = deterministic_bracket,
+            matchups = deterministic_flat
+        )
+    )
+
+    if (n_candidates <= 1L || n_simulations <= 0L) {
+        return(candidates)
+    }
+
+    set.seed(random_seed)
+    simulated_rows <- vector("list", n_simulations)
+    for (index in seq_len(n_simulations)) {
+        bracket <- simulate_full_bracket(
+            all_teams = all_teams,
+            model_results = model_results,
+            draws = draws,
+            deterministic = FALSE,
+            log_matchups = FALSE
+        )
+        flattened <- flatten_matchup_results(bracket)
+        summary_row <- summarize_bracket_probability(flattened)
+        simulated_rows[[index]] <- tibble::tibble(
+            bracket_key = build_bracket_key(flattened),
+            champion = bracket$final_four$champion$Team[[1]],
+            final_four = paste(vapply(bracket$final_four$semifinalists, function(team) team$Team[[1]], character(1)), collapse = ", "),
+            bracket_log_prob = summary_row$bracket_log_prob[[1]],
+            mean_game_prob = summary_row$mean_game_prob[[1]],
+            simulation = list(bracket),
+            matchups = list(augment_matchup_decisions(flattened))
+        )
+    }
+
+    ranked_candidates <- dplyr::bind_rows(simulated_rows) %>%
+        dplyr::group_by(bracket_key) %>%
+        dplyr::summarise(
+            champion = champion[[1]],
+            final_four = final_four[[1]],
+            frequency = dplyr::n(),
+            bracket_log_prob = max(bracket_log_prob),
+            mean_game_prob = max(mean_game_prob),
+            simulation = list(simulation[[which.max(bracket_log_prob)]]),
+            matchups = list(matchups[[which.max(bracket_log_prob)]]),
+            .groups = "drop"
+        ) %>%
+        dplyr::arrange(dplyr::desc(frequency), dplyr::desc(bracket_log_prob))
+
+    alternate_candidates <- purrr::map_dfr(seq_len(nrow(ranked_candidates)), function(index) {
+        row <- ranked_candidates[index, , drop = FALSE]
+        comparison <- compare_candidate_matchups(deterministic_flat, row$matchups[[1]])
+        diff_rows <- comparison %>%
+            dplyr::filter(candidate_diff_flag)
+
+        tibble::tibble(
+            row_index = index,
+            diff_count = nrow(diff_rows),
+            round64_diff_count = sum(diff_rows$round == "Round of 64"),
+            leverage_sum = sum(diff_rows$upset_leverage, na.rm = TRUE),
+            candidate_score = row$bracket_log_prob[[1]] +
+                (log1p(row$frequency[[1]]) / 3) +
+                (sum(diff_rows$upset_leverage, na.rm = TRUE) / 25) -
+                (nrow(diff_rows) / 8) -
+                (max(sum(diff_rows$round == "Round of 64") - 6L, 0L) * 2),
+            diff_summary = if (nrow(diff_rows) == 0) {
+                "Matches the primary bracket."
+            } else {
+                paste(
+                    sprintf(
+                        "%s (%s)",
+                        diff_rows$candidate_2_pick[seq_len(min(3L, nrow(diff_rows)))],
+                        diff_rows$round[seq_len(min(3L, nrow(diff_rows)))]
+                    ),
+                    collapse = "; "
+                )
+            }
+        )
+    }) %>%
+        dplyr::filter(diff_count > 0) %>%
+        dplyr::arrange(dplyr::desc(candidate_score), round64_diff_count, diff_count)
+
+    for (index in seq_len(min(n_candidates - 1L, nrow(alternate_candidates)))) {
+        row <- ranked_candidates[alternate_candidates$row_index[[index]], , drop = FALSE]
+        path_summary <- summarize_candidate_path(row$matchups[[1]])
+        candidates[[length(candidates) + 1L]] <- list(
+            candidate_id = length(candidates) + 1L,
+            bracket_key = row$bracket_key[[1]],
+            type = "alternate",
+            champion = row$champion[[1]],
+            final_four = row$final_four[[1]],
+            frequency = row$frequency[[1]],
+            bracket_log_prob = row$bracket_log_prob[[1]],
+            mean_game_prob = row$mean_game_prob[[1]],
+            title_path_mean_prob = path_summary$title_path_mean_prob[[1]],
+            title_path_min_prob = path_summary$title_path_min_prob[[1]],
+            diff_summary = alternate_candidates$diff_summary[[index]],
+            simulation = row$simulation[[1]],
+            matchups = row$matchups[[1]]
+        )
+    }
+
+    candidates
+}
+
+#' Write candidate summaries, decision sheets, and dashboard artifacts
+#'
+#' @param bracket_year The active bracket year.
+#' @param candidates A list of candidate bracket objects.
+#' @param output_dir Directory used for output artifacts.
+#' @param backtest Optional backtest result bundle.
+#'
+#' @return A list of decision-artifact file paths and the in-memory decision
+#'   sheet.
+#' @export
+save_decision_outputs <- function(bracket_year, candidates, output_dir = "output", backtest = NULL) {
+    dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+    decision_sheet <- build_decision_sheet(candidates)
+    summary_path <- file.path(output_dir, "bracket_candidates.txt")
+    rds_path <- file.path(output_dir, "bracket_candidates.rds")
+    decision_sheet_path <- file.path(output_dir, "bracket_decision_sheet.csv")
+    dashboard_path <- file.path(output_dir, "bracket_dashboard.html")
+
+    saveRDS(candidates, rds_path)
+    utils::write.csv(decision_sheet, decision_sheet_path, row.names = FALSE)
+
+    candidate_csv_paths <- vapply(candidates, function(candidate) {
+        path <- file.path(output_dir, sprintf("bracket_candidate_%s.csv", candidate$candidate_id))
+        utils::write.csv(candidate$matchups, path, row.names = FALSE)
+        path
+    }, character(1))
+
+    sink(summary_path)
+    cat(sprintf("Bracket year: %s\n\n", bracket_year))
+    for (candidate in candidates) {
+        cat(sprintf("Candidate %s (%s)\n", candidate$candidate_id, candidate$type))
+        cat(sprintf("Champion: %s\n", candidate$champion))
+        cat(sprintf("Final Four: %s\n", candidate$final_four))
+        cat(sprintf("Bracket log probability: %.4f\n", candidate$bracket_log_prob))
+        cat(sprintf("Mean picked-game probability: %.4f\n", candidate$mean_game_prob))
+        cat(sprintf("Title path mean probability: %.4f\n", candidate$title_path_mean_prob %||% NA_real_))
+        if (!is.na(candidate$frequency)) {
+            cat(sprintf("Simulation frequency: %s\n", candidate$frequency))
+        }
+        if (!is.null(candidate$diff_summary)) {
+            cat(sprintf("Alternate rationale: %s\n", candidate$diff_summary))
+        }
+        cat("\n")
+    }
+    sink()
+
+    writeLines(
+        create_bracket_dashboard_html(
+            bracket_year = bracket_year,
+            decision_sheet = decision_sheet,
+            candidates = candidates,
+            backtest = backtest
+        ),
+        dashboard_path
+    )
+
+    list(
+        decision_sheet = decision_sheet,
+        decision_sheet_path = decision_sheet_path,
+        dashboard = dashboard_path,
+        candidates_rds = rds_path,
+        candidate_summary = summary_path,
+        candidate_csvs = unname(candidate_csv_paths)
+    )
+}
+
 #' Save simulation outputs to disk
 #'
 #' @param results A result bundle returned by the main pipeline.
@@ -466,6 +1035,7 @@ save_results <- function(results, output_config) {
     model_summary_path <- file.path(output_dir, paste0(prefix, "_model_summary.txt"))
     backtest_summary_path <- file.path(output_dir, paste0(prefix, "_backtest_summary.txt"))
     viz_path <- file.path(output_dir, paste0(prefix, "_bracket.png"))
+    candidate_summary_path <- file.path(output_dir, paste0(prefix, "_candidate_brackets.txt"))
 
     saveRDS(results, rds_path)
 
@@ -477,6 +1047,21 @@ save_results <- function(results, output_config) {
         sink(backtest_summary_path)
         print(results$backtest$summary)
         sink()
+    }
+
+    decision_outputs <- if (!is.null(results$candidates) && length(results$candidates) > 0) {
+        save_decision_outputs(
+            bracket_year = results$bracket_year,
+            candidates = results$candidates,
+            output_dir = output_dir,
+            backtest = results$backtest
+        )
+    } else {
+        NULL
+    }
+
+    if (!is.null(decision_outputs)) {
+        file.copy(decision_outputs$candidate_summary, candidate_summary_path, overwrite = TRUE)
     }
 
     ggplot2::ggsave(
@@ -491,7 +1076,12 @@ save_results <- function(results, output_config) {
         results = rds_path,
         model_summary = model_summary_path,
         backtest_summary = if (!is.null(results$backtest)) backtest_summary_path else NULL,
-        bracket_plot = viz_path
+        bracket_plot = viz_path,
+        candidate_summary = if (!is.null(results$candidates) && length(results$candidates) > 0) candidate_summary_path else NULL,
+        dashboard = decision_outputs$dashboard %||% NULL,
+        decision_sheet = decision_outputs$decision_sheet_path %||% NULL,
+        candidate_csvs = decision_outputs$candidate_csvs %||% NULL,
+        candidates_rds = decision_outputs$candidates_rds %||% NULL
     )
 }
 

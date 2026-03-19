@@ -17,7 +17,13 @@ Refresh the canonical tournament data files:
 Rscript scripts/update_data.R
 ```
 
-These are the only supported entrypoints. The active runtime lives in `R/`.
+Generate fast bracket-entry artifacts without the full backtest:
+
+```sh
+Rscript scripts/run_bracket_candidates.R
+```
+
+These are the supported entrypoints. The active runtime lives in `R/`.
 
 ## Current Workflow
 
@@ -28,6 +34,7 @@ The simulation command:
 - fits a Bayesian matchup-level game model
 - runs a rolling held-out-tournament backtest
 - generates a deterministic max-probability bracket with posterior game probabilities
+- writes a bracket dashboard and decision sheet for manual bracket entry
 - writes outputs under `output/`
 
 The active workflow requires `rstanarm`, `bayesplot`, and `loo`. If those
@@ -39,7 +46,13 @@ back to a different modeling path.
 - `R/`: active package runtime
 - `scripts/`: supported command-line entrypoints
 - `tests/`: automated tests and fixtures
+- `docs/methods-and-interpretation.md`: technical methods plus plain-English interpretation guide
 - `docs/reference/`: background papers and supporting reference material
+
+## Documentation
+
+- [Methods and Interpretation Guide](docs/methods-and-interpretation.md)
+- [Docs Index](docs/README.md)
 
 ## Modeling Design
 

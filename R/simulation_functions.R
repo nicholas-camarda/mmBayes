@@ -32,6 +32,9 @@ prepare_prediction_row <- function(teamA, teamB, round_name) {
 #' @param round_name The round label for the matchup.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param deterministic Whether to take the higher posterior-mean team or sample
+#'   a stochastic winner from that probability.
+#' @param log_matchup Whether to emit a log line for the matchup.
 #'
 #' @return A numeric vector of posterior win probabilities for team A.
 #' @export
@@ -128,12 +131,19 @@ create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_
 #'
 #' @return A one-row tibble describing the matchup result.
 #' @export
-simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_results, draws = 1000) {
-    logger::log_info("Evaluating matchup: {teamA$Team[1]} vs {teamB$Team[1]} ({round_name})")
+simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_results, draws = 1000, deterministic = TRUE, log_matchup = TRUE) {
+    if (isTRUE(log_matchup)) {
+        logger::log_debug("Evaluating matchup: {teamA$Team[1]} vs {teamB$Team[1]} ({round_name})")
+    }
 
     win_probs <- calculate_win_probabilities(teamA, teamB, round_name, model_results, draws)
     matchup_stats <- generate_matchup_stats(teamA, teamB, win_probs)
-    winner <- if (win_probs$mean >= 0.5) teamA$Team[1] else teamB$Team[1]
+    team_a_wins <- if (isTRUE(deterministic)) {
+        win_probs$mean >= 0.5
+    } else {
+        stats::rbinom(1L, 1L, prob = win_probs$mean) == 1L
+    }
+    winner <- if (team_a_wins) teamA$Team[1] else teamB$Team[1]
 
     create_matchup_result(
         teamA = teamA,
@@ -152,10 +162,12 @@ simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_res
 #' @param round_name The round label to simulate.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param deterministic Whether each matchup is resolved deterministically.
+#' @param log_matchups Whether to emit per-matchup log lines.
 #'
 #' @return A list containing round results and advancing teams.
 #' @keywords internal
-simulate_round <- function(teams, round_name, model_results, draws) {
+simulate_round <- function(teams, round_name, model_results, draws, deterministic = TRUE, log_matchups = TRUE) {
     if (nrow(teams) %% 2 != 0) {
         stop_with_message(sprintf("%s received an odd number of teams", round_name))
     }
@@ -169,7 +181,7 @@ simulate_round <- function(teams, round_name, model_results, draws) {
         team_a <- teams[team_a_idx, , drop = FALSE]
         team_b <- teams[team_b_idx, , drop = FALSE]
 
-        matchup <- simulate_matchup(team_a, team_b, round_name, i, model_results, draws)
+        matchup <- simulate_matchup(team_a, team_b, round_name, i, model_results, draws, deterministic = deterministic, log_matchup = log_matchups)
         round_results[[i]] <- matchup
         advancing_teams[[i]] <- if (matchup$winner[1] == team_a$Team[1]) team_a else team_b
     }
@@ -185,10 +197,12 @@ simulate_round <- function(teams, round_name, model_results, draws) {
 #' @param region_teams A region-level team table.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param deterministic Whether play-in winners are resolved deterministically.
+#' @param log_matchups Whether to emit per-matchup log lines.
 #'
 #' @return A list containing resolved teams and optional First Four results.
 #' @keywords internal
-resolve_play_in_games <- function(region_teams, model_results, draws) {
+resolve_play_in_games <- function(region_teams, model_results, draws, deterministic = TRUE, log_matchups = TRUE) {
     expected <- 1:16
     actual <- region_teams$Seed
     duplicate_counts <- table(actual)
@@ -220,7 +234,9 @@ resolve_play_in_games <- function(region_teams, model_results, draws) {
             "First Four",
             i,
             model_results,
-            draws
+            draws,
+            deterministic = deterministic,
+            log_matchup = log_matchups
         )
         play_in_results[[i]] <- matchup
         losing_team <- if (matchup$winner[1] == duplicate_rows$Team[1]) duplicate_rows$Team[2] else duplicate_rows$Team[1]
@@ -241,12 +257,14 @@ resolve_play_in_games <- function(region_teams, model_results, draws) {
 #' @param region_teams A region-level team table.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param deterministic Whether regional games are resolved deterministically.
+#' @param log_matchups Whether to emit per-matchup log lines.
 #'
 #' @return A list containing regional round results and the region champion.
 #' @export
-simulate_region_bayesian <- function(region_teams, model_results, draws = 1000) {
+simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE) {
     region_name <- unique(region_teams$Region)[1]
-    play_in <- resolve_play_in_games(region_teams, model_results, draws)
+    play_in <- resolve_play_in_games(region_teams, model_results, draws, deterministic = deterministic, log_matchups = log_matchups)
     region_teams <- play_in$teams
 
     if (nrow(region_teams) != 16) {
@@ -265,7 +283,7 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000) 
     remaining <- ordered_teams
 
     for (round_name in rounds) {
-        simulated_round <- simulate_round(remaining, round_name, model_results, draws)
+        simulated_round <- simulate_round(remaining, round_name, model_results, draws, deterministic = deterministic, log_matchups = log_matchups)
         round_results[[round_name]] <- simulated_round$results
         remaining <- simulated_round$winners
     }
@@ -282,17 +300,21 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000) 
 #' @param region_champions A named list of regional champion rows.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param deterministic Whether national games are resolved deterministically.
+#' @param log_matchups Whether to emit per-matchup log lines.
 #'
 #' @return A list containing semifinal, championship, and champion results.
 #' @export
-simulate_final_four <- function(region_champions, model_results, draws = 1000) {
+simulate_final_four <- function(region_champions, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE) {
     semifinal1 <- simulate_matchup(
         region_champions$South,
         region_champions$West,
         "Final Four",
         1,
         model_results,
-        draws
+        draws,
+        deterministic = deterministic,
+        log_matchup = log_matchups
     )
     semifinal2 <- simulate_matchup(
         region_champions$East,
@@ -300,7 +322,9 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000) {
         "Final Four",
         2,
         model_results,
-        draws
+        draws,
+        deterministic = deterministic,
+        log_matchup = log_matchups
     )
 
     championship_team_a <- if (semifinal1$winner[1] == region_champions$South$Team[1]) {
@@ -320,7 +344,9 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000) {
         "Championship",
         1,
         model_results,
-        draws
+        draws,
+        deterministic = deterministic,
+        log_matchup = log_matchups
     )
 
     champion <- if (championship$winner[1] == championship_team_a$Team[1]) {
@@ -342,10 +368,12 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000) {
 #' @param all_teams A current-year team feature table.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param deterministic Whether all matchups are resolved deterministically.
+#' @param log_matchups Whether to emit per-matchup log lines.
 #'
 #' @return A list containing regional results and Final Four results.
 #' @export
-simulate_full_bracket <- function(all_teams, model_results, draws = 1000) {
+simulate_full_bracket <- function(all_teams, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE) {
     regions <- c("East", "West", "South", "Midwest")
     region_counts <- table(all_teams$Region)
 
@@ -361,13 +389,15 @@ simulate_full_bracket <- function(all_teams, model_results, draws = 1000) {
             simulate_region_bayesian(
                 region_teams = dplyr::filter(all_teams, Region == region_name),
                 model_results = model_results,
-                draws = draws
+                draws = draws,
+                deterministic = deterministic,
+                log_matchups = log_matchups
             )
         }
     )
 
     champions <- purrr::map(region_results, "champion")
-    final_four <- simulate_final_four(champions, model_results, draws)
+    final_four <- simulate_final_four(champions, model_results, draws, deterministic = deterministic, log_matchups = log_matchups)
 
     list(
         region_results = region_results,

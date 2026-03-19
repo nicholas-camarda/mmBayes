@@ -212,6 +212,7 @@ make_fixture_bart_ratings <- function(team_features) {
         dplyr::select(
             Year,
             Team,
+            Seed,
             Barthag,
             AdjOE,
             AdjDE,
@@ -262,17 +263,24 @@ make_parser_fixture_lines <- function(year = 2025L) {
         sprintf("(%s) %s %s, (%s) %s %s", seed_a, team_a, score_a, seed_b, team_b, score_b)
     }
 
+    build_orphan_team_line <- function(seed, team_name) {
+        sprintf("team %s %s", seed, team_name)
+    }
+
     parser_regions <- c("East", "Midwest", "South", "West")
-    play_in_specs <- list(
-        East = c(16L, 16L),
-        Midwest = c(16L, 16L),
-        South = c(10L, 10L),
-        West = c(11L, 11L)
+    play_in_specs_by_year <- list(
+        `2018` = list(East = c(16L, 11L), Midwest = c(16L), South = integer(), West = c(11L)),
+        `2021` = list(East = c(16L, 11L), Midwest = integer(), South = integer(), West = c(16L, 11L)),
+        `2024` = list(East = integer(), Midwest = c(16L), South = c(10L), West = c(16L, 11L)),
+        `2025` = list(East = c(16L), Midwest = c(11L), South = c(11L, 16L), West = integer())
     )
+    play_in_specs <- play_in_specs_by_year[[as.character(year)]] %||%
+        list(East = c(16L), Midwest = c(16L), South = c(11L), West = c(11L))
 
     regional_sections <- purrr::imap(
         parser_regions,
         function(region_name, region_index) {
+            play_in_lines <- play_in_specs[[region_name]]
             counter_lines <- purrr::map_chr(seq_len(15), function(counter) {
                 if (counter <= 8) {
                     seed_a <- c(1, 8, 5, 4, 6, 3, 7, 2)[counter]
@@ -295,23 +303,34 @@ make_parser_fixture_lines <- function(year = 2025L) {
                 build_game_line(seed_a, team_a, score_a, seed_b, team_b, score_b)
             })
 
+            first_four_block <- character()
+            if (length(play_in_lines) > 0) {
+                first_four_block <- c(
+                    sprintf("%s First Four", region_name),
+                    purrr::map_chr(seq_along(play_in_lines), function(idx) {
+                        build_game_line(
+                            play_in_lines[[idx]],
+                            sprintf("%s_PlayIn_%sA_%s", region_name, idx, year),
+                            70 + region_index + idx,
+                            play_in_lines[[idx]],
+                            sprintf("%s_PlayIn_%sB_%s", region_name, idx, year),
+                            63 + region_index + idx
+                        )
+                    })
+                )
+            }
+
             c(
-                sprintf("%s First Four", region_name),
-                build_game_line(
-                    play_in_specs[[region_name]][1],
-                    sprintf("%s_PlayIn_1_%s", region_name, year),
-                    70 + region_index,
-                    play_in_specs[[region_name]][2],
-                    sprintf("%s_PlayIn_2_%s", region_name, year),
-                    63 + region_index
-                ),
-                region_name,
-                counter_lines
+                first_four_block,
+                counter_lines,
+                build_orphan_team_line(1L, sprintf("%s_Champion_%s", region_name, year))
             )
         }
     )
 
     c(
+        parser_regions,
+        "National",
         unlist(regional_sections, use.names = FALSE),
         "National",
         build_game_line(1, sprintf("National_Semi_1A_%s", year), 71, 1, sprintf("National_Semi_1B_%s", year), 67),

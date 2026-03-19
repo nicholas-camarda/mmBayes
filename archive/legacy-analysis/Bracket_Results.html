@@ -354,279 +354,9 @@ display: none;
 
 <div id="bayesian-bracket-results" class="section level1">
 <h1>Bayesian Bracket Results</h1>
-<div id="south-region-matchups" class="section level2">
-<h2>South Region Matchups</h2>
-<pre class="r"><code># Shift + CMD + K to knit the document
-library(readxl)
-library(knitr)
-
-# Read and display all sheets as tables
-res_south1 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;South_Region.xlsx&#39;), sheet = 1)
-kable(res_south1)</code></pre>
-<table>
-<colgroup>
-<col width="10%" />
-<col width="13%" />
-<col width="11%" />
-<col width="14%" />
-<col width="13%" />
-<col width="14%" />
-<col width="9%" />
-<col width="13%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="left">round</th>
-<th align="right">matchup_number</th>
-<th align="left">teamA</th>
-<th align="right">teamA_composite</th>
-<th align="left">teamB</th>
-<th align="right">teamB_composite</th>
-<th align="right">win_prob_A</th>
-<th align="left">winner</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="left">Round of 16</td>
-<td align="right">1</td>
-<td align="left">Auburn</td>
-<td align="right">56.92000</td>
-<td align="left">Alabama St.</td>
-<td align="right">26.14589</td>
-<td align="right">0.86</td>
-<td align="left">Auburn</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 16</td>
-<td align="right">2</td>
-<td align="left">Louisville</td>
-<td align="right">36.85493</td>
-<td align="left">Creighton</td>
-<td align="right">33.10179</td>
-<td align="right">0.63</td>
-<td align="left">Louisville</td>
-</tr>
-<tr class="odd">
-<td align="left">Round of 16</td>
-<td align="right">3</td>
-<td align="left">Michigan</td>
-<td align="right">35.72357</td>
-<td align="left">UC San Diego</td>
-<td align="right">34.59444</td>
-<td align="right">0.77</td>
-<td align="left">Michigan</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 16</td>
-<td align="right">4</td>
-<td align="left">Texas A&amp;M</td>
-<td align="right">38.69650</td>
-<td align="left">Yale</td>
-<td align="right">31.48097</td>
-<td align="right">0.81</td>
-<td align="left">Texas A&amp;M</td>
-</tr>
-<tr class="odd">
-<td align="left">Round of 16</td>
-<td align="right">5</td>
-<td align="left">Mississippi</td>
-<td align="right">37.97629</td>
-<td align="left">North Carolina</td>
-<td align="right">35.61828</td>
-<td align="right">0.38</td>
-<td align="left">North Carolina</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 16</td>
-<td align="right">6</td>
-<td align="left">Iowa St.</td>
-<td align="right">43.01419</td>
-<td align="left">Lipscomb</td>
-<td align="right">29.98284</td>
-<td align="right">0.87</td>
-<td align="left">Iowa St.</td>
-</tr>
-<tr class="odd">
-<td align="left">Round of 16</td>
-<td align="right">7</td>
-<td align="left">Marquette</td>
-<td align="right">36.47820</td>
-<td align="left">New Mexico</td>
-<td align="right">33.16473</td>
-<td align="right">0.79</td>
-<td align="left">Marquette</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 16</td>
-<td align="right">8</td>
-<td align="left">Michigan St.</td>
-<td align="right">41.22974</td>
-<td align="left">Bryant</td>
-<td align="right">27.41568</td>
-<td align="right">0.83</td>
-<td align="left">Michigan St.</td>
-</tr>
-</tbody>
-</table>
-<pre class="r"><code>res_south2 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;South_Region.xlsx&#39;), sheet = 2)
-kable(res_south2)</code></pre>
-<table style="width:100%;">
-<colgroup>
-<col width="10%" />
-<col width="13%" />
-<col width="13%" />
-<col width="14%" />
-<col width="11%" />
-<col width="14%" />
-<col width="10%" />
-<col width="11%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="left">round</th>
-<th align="right">matchup_number</th>
-<th align="left">teamA</th>
-<th align="right">teamA_composite</th>
-<th align="left">teamB</th>
-<th align="right">teamB_composite</th>
-<th align="right">win_prob_A</th>
-<th align="left">winner</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="left">Round of 8</td>
-<td align="right">1</td>
-<td align="left">Auburn</td>
-<td align="right">56.92000</td>
-<td align="left">Louisville</td>
-<td align="right">36.85493</td>
-<td align="right">0.84</td>
-<td align="left">Auburn</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 8</td>
-<td align="right">2</td>
-<td align="left">Michigan</td>
-<td align="right">35.72357</td>
-<td align="left">Texas A&amp;M</td>
-<td align="right">38.69650</td>
-<td align="right">0.22</td>
-<td align="left">Texas A&amp;M</td>
-</tr>
-<tr class="odd">
-<td align="left">Round of 8</td>
-<td align="right">3</td>
-<td align="left">North Carolina</td>
-<td align="right">35.61828</td>
-<td align="left">Iowa St.</td>
-<td align="right">43.01419</td>
-<td align="right">0.15</td>
-<td align="left">Iowa St.</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 8</td>
-<td align="right">4</td>
-<td align="left">Marquette</td>
-<td align="right">36.47820</td>
-<td align="left">Michigan St.</td>
-<td align="right">41.22974</td>
-<td align="right">0.19</td>
-<td align="left">Michigan St.</td>
-</tr>
-</tbody>
-</table>
-<pre class="r"><code>res_south3 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;South_Region.xlsx&#39;), sheet = 3)
-kable(res_south3)</code></pre>
-<table>
-<colgroup>
-<col width="11%" />
-<col width="15%" />
-<col width="9%" />
-<col width="16%" />
-<col width="13%" />
-<col width="16%" />
-<col width="11%" />
-<col width="9%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="left">round</th>
-<th align="right">matchup_number</th>
-<th align="left">teamA</th>
-<th align="right">teamA_composite</th>
-<th align="left">teamB</th>
-<th align="right">teamB_composite</th>
-<th align="right">win_prob_A</th>
-<th align="left">winner</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="left">Round of 4</td>
-<td align="right">1</td>
-<td align="left">Auburn</td>
-<td align="right">56.92000</td>
-<td align="left">Texas A&amp;M</td>
-<td align="right">38.69650</td>
-<td align="right">0.84</td>
-<td align="left">Auburn</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 4</td>
-<td align="right">2</td>
-<td align="left">Iowa St.</td>
-<td align="right">43.01419</td>
-<td align="left">Michigan St.</td>
-<td align="right">41.22974</td>
-<td align="right">0.89</td>
-<td align="left">Iowa St.</td>
-</tr>
-</tbody>
-</table>
-<pre class="r"><code>res_south4 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;South_Region.xlsx&#39;), sheet = 4)
-kable(res_south4)</code></pre>
-<table style="width:100%;">
-<colgroup>
-<col width="8%" />
-<col width="16%" />
-<col width="7%" />
-<col width="17%" />
-<col width="10%" />
-<col width="17%" />
-<col width="12%" />
-<col width="7%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="left">round</th>
-<th align="right">matchup_number</th>
-<th align="left">teamA</th>
-<th align="right">teamA_composite</th>
-<th align="left">teamB</th>
-<th align="right">teamB_composite</th>
-<th align="right">win_prob_A</th>
-<th align="left">winner</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="left">Elite 8</td>
-<td align="right">1</td>
-<td align="left">Auburn</td>
-<td align="right">56.92</td>
-<td align="left">Iowa St.</td>
-<td align="right">43.01419</td>
-<td align="right">0.82</td>
-<td align="left">Auburn</td>
-</tr>
-</tbody>
-</table>
-</div>
 <div id="east-region-matchups" class="section level2">
 <h2>East Region Matchups</h2>
-<pre class="r"><code>res_east1 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;East_Region.xlsx&#39;), sheet = 1)
+<pre class="r"><code>res_east1 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;East_Region.xlsx&#39;), sheet = 1))
 kable(res_east1)</code></pre>
 <table>
 <colgroup>
@@ -734,7 +464,7 @@ kable(res_east1)</code></pre>
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>res_east2 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;East_Region.xlsx&#39;), sheet = 2)
+<pre class="r"><code>res_east2 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;East_Region.xlsx&#39;), sheet = 2))
 kable(res_east2)</code></pre>
 <table style="width:100%;">
 <colgroup>
@@ -802,7 +532,7 @@ kable(res_east2)</code></pre>
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>res_east3 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;East_Region.xlsx&#39;), sheet = 3)
+<pre class="r"><code>res_east3 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;East_Region.xlsx&#39;), sheet = 3))
 kable(res_east3)</code></pre>
 <table>
 <colgroup>
@@ -850,7 +580,7 @@ kable(res_east3)</code></pre>
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>res_east4 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;East_Region.xlsx&#39;), sheet = 4)
+<pre class="r"><code>res_east4 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;East_Region.xlsx&#39;), sheet = 4))
 kable(res_east4)</code></pre>
 <table>
 <colgroup>
@@ -889,274 +619,9 @@ kable(res_east4)</code></pre>
 </tbody>
 </table>
 </div>
-<div id="west-region-matchups" class="section level2">
-<h2>West Region Matchups</h2>
-<pre class="r"><code>res_west1 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;West_Region.xlsx&#39;), sheet = 1)
-kable(res_west1)</code></pre>
-<table style="width:100%;">
-<colgroup>
-<col width="10%" />
-<col width="13%" />
-<col width="10%" />
-<col width="14%" />
-<col width="13%" />
-<col width="14%" />
-<col width="10%" />
-<col width="11%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="left">round</th>
-<th align="right">matchup_number</th>
-<th align="left">teamA</th>
-<th align="right">teamA_composite</th>
-<th align="left">teamB</th>
-<th align="right">teamB_composite</th>
-<th align="right">win_prob_A</th>
-<th align="left">winner</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="left">Round of 16</td>
-<td align="right">1</td>
-<td align="left">Florida</td>
-<td align="right">54.12848</td>
-<td align="left">Norfolk St.</td>
-<td align="right">27.87633</td>
-<td align="right">0.86</td>
-<td align="left">Florida</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 16</td>
-<td align="right">2</td>
-<td align="left">Connecticut</td>
-<td align="right">35.38277</td>
-<td align="left">Oklahoma</td>
-<td align="right">35.75285</td>
-<td align="right">0.83</td>
-<td align="left">Connecticut</td>
-</tr>
-<tr class="odd">
-<td align="left">Round of 16</td>
-<td align="right">3</td>
-<td align="left">Memphis</td>
-<td align="right">32.18866</td>
-<td align="left">Colorado St.</td>
-<td align="right">33.86279</td>
-<td align="right">0.15</td>
-<td align="left">Colorado St.</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 16</td>
-<td align="right">4</td>
-<td align="left">Maryland</td>
-<td align="right">41.71405</td>
-<td align="left">Grand Canyon</td>
-<td align="right">30.21863</td>
-<td align="right">0.83</td>
-<td align="left">Maryland</td>
-</tr>
-<tr class="odd">
-<td align="left">Round of 16</td>
-<td align="right">5</td>
-<td align="left">Missouri</td>
-<td align="right">42.28288</td>
-<td align="left">Drake</td>
-<td align="right">32.44368</td>
-<td align="right">0.84</td>
-<td align="left">Missouri</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 16</td>
-<td align="right">6</td>
-<td align="left">Texas Tech</td>
-<td align="right">44.75263</td>
-<td align="left">UNC Wilmington</td>
-<td align="right">30.28731</td>
-<td align="right">0.88</td>
-<td align="left">Texas Tech</td>
-</tr>
-<tr class="odd">
-<td align="left">Round of 16</td>
-<td align="right">7</td>
-<td align="left">Kansas</td>
-<td align="right">36.58307</td>
-<td align="left">Arkansas</td>
-<td align="right">34.10871</td>
-<td align="right">0.92</td>
-<td align="left">Kansas</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 16</td>
-<td align="right">8</td>
-<td align="left">St. John’s</td>
-<td align="right">39.05403</td>
-<td align="left">Nebraska Omaha</td>
-<td align="right">29.27301</td>
-<td align="right">0.81</td>
-<td align="left">St. John’s</td>
-</tr>
-</tbody>
-</table>
-<pre class="r"><code>res_west2 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;West_Region.xlsx&#39;), sheet = 2)
-kable(res_west2)</code></pre>
-<table>
-<colgroup>
-<col width="10%" />
-<col width="14%" />
-<col width="12%" />
-<col width="15%" />
-<col width="11%" />
-<col width="15%" />
-<col width="10%" />
-<col width="10%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="left">round</th>
-<th align="right">matchup_number</th>
-<th align="left">teamA</th>
-<th align="right">teamA_composite</th>
-<th align="left">teamB</th>
-<th align="right">teamB_composite</th>
-<th align="right">win_prob_A</th>
-<th align="left">winner</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="left">Round of 8</td>
-<td align="right">1</td>
-<td align="left">Florida</td>
-<td align="right">54.12848</td>
-<td align="left">Connecticut</td>
-<td align="right">35.38277</td>
-<td align="right">0.83</td>
-<td align="left">Florida</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 8</td>
-<td align="right">2</td>
-<td align="left">Colorado St.</td>
-<td align="right">33.86279</td>
-<td align="left">Maryland</td>
-<td align="right">41.71405</td>
-<td align="right">0.21</td>
-<td align="left">Maryland</td>
-</tr>
-<tr class="odd">
-<td align="left">Round of 8</td>
-<td align="right">3</td>
-<td align="left">Missouri</td>
-<td align="right">42.28288</td>
-<td align="left">Texas Tech</td>
-<td align="right">44.75263</td>
-<td align="right">0.11</td>
-<td align="left">Texas Tech</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 8</td>
-<td align="right">4</td>
-<td align="left">Kansas</td>
-<td align="right">36.58307</td>
-<td align="left">St. John’s</td>
-<td align="right">39.05403</td>
-<td align="right">0.35</td>
-<td align="left">St. John’s</td>
-</tr>
-</tbody>
-</table>
-<pre class="r"><code>res_west3 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;West_Region.xlsx&#39;), sheet = 3)
-kable(res_west3)</code></pre>
-<table>
-<colgroup>
-<col width="10%" />
-<col width="14%" />
-<col width="10%" />
-<col width="15%" />
-<col width="10%" />
-<col width="15%" />
-<col width="10%" />
-<col width="10%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="left">round</th>
-<th align="right">matchup_number</th>
-<th align="left">teamA</th>
-<th align="right">teamA_composite</th>
-<th align="left">teamB</th>
-<th align="right">teamB_composite</th>
-<th align="right">win_prob_A</th>
-<th align="left">winner</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="left">Round of 4</td>
-<td align="right">1</td>
-<td align="left">Florida</td>
-<td align="right">54.12848</td>
-<td align="left">Maryland</td>
-<td align="right">41.71405</td>
-<td align="right">0.86</td>
-<td align="left">Florida</td>
-</tr>
-<tr class="even">
-<td align="left">Round of 4</td>
-<td align="right">2</td>
-<td align="left">Texas Tech</td>
-<td align="right">44.75263</td>
-<td align="left">St. John’s</td>
-<td align="right">39.05403</td>
-<td align="right">0.82</td>
-<td align="left">Texas Tech</td>
-</tr>
-</tbody>
-</table>
-<pre class="r"><code>res_west4 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;West_Region.xlsx&#39;), sheet = 4)
-kable(res_west4)</code></pre>
-<table>
-<colgroup>
-<col width="8%" />
-<col width="16%" />
-<col width="8%" />
-<col width="17%" />
-<col width="11%" />
-<col width="17%" />
-<col width="11%" />
-<col width="8%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th align="left">round</th>
-<th align="right">matchup_number</th>
-<th align="left">teamA</th>
-<th align="right">teamA_composite</th>
-<th align="left">teamB</th>
-<th align="right">teamB_composite</th>
-<th align="right">win_prob_A</th>
-<th align="left">winner</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td align="left">Elite 8</td>
-<td align="right">1</td>
-<td align="left">Florida</td>
-<td align="right">54.12848</td>
-<td align="left">Texas Tech</td>
-<td align="right">44.75263</td>
-<td align="right">0.8</td>
-<td align="left">Florida</td>
-</tr>
-</tbody>
-</table>
-</div>
 <div id="midwest-region-matchups" class="section level2">
 <h2>Midwest Region Matchups</h2>
-<pre class="r"><code>res_midwest1 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Midwest_Region.xlsx&#39;), sheet = 1)
+<pre class="r"><code>res_midwest1 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Midwest_Region.xlsx&#39;), sheet = 1))
 kable(res_midwest1)</code></pre>
 <table>
 <colgroup>
@@ -1264,7 +729,7 @@ kable(res_midwest1)</code></pre>
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>res_midwest2 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Midwest_Region.xlsx&#39;), sheet = 2)
+<pre class="r"><code>res_midwest2 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Midwest_Region.xlsx&#39;), sheet = 2))
 kable(res_midwest2)</code></pre>
 <table>
 <colgroup>
@@ -1332,7 +797,7 @@ kable(res_midwest2)</code></pre>
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>res_midwest3 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Midwest_Region.xlsx&#39;), sheet = 3)
+<pre class="r"><code>res_midwest3 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Midwest_Region.xlsx&#39;), sheet = 3))
 kable(res_midwest3)</code></pre>
 <table>
 <colgroup>
@@ -1380,7 +845,7 @@ kable(res_midwest3)</code></pre>
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>res_midwest4 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Midwest_Region.xlsx&#39;), sheet = 4)
+<pre class="r"><code>res_midwest4 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Midwest_Region.xlsx&#39;), sheet = 4))
 kable(res_midwest4)</code></pre>
 <table>
 <colgroup>
@@ -1419,9 +884,539 @@ kable(res_midwest4)</code></pre>
 </tbody>
 </table>
 </div>
+<div id="south-region-matchups" class="section level2">
+<h2>South Region Matchups</h2>
+<pre class="r"><code>res_south1 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;South_Region.xlsx&#39;), sheet = 1))
+kable(res_south1)</code></pre>
+<table>
+<colgroup>
+<col width="10%" />
+<col width="13%" />
+<col width="11%" />
+<col width="14%" />
+<col width="13%" />
+<col width="14%" />
+<col width="9%" />
+<col width="13%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">round</th>
+<th align="right">matchup_number</th>
+<th align="left">teamA</th>
+<th align="right">teamA_composite</th>
+<th align="left">teamB</th>
+<th align="right">teamB_composite</th>
+<th align="right">win_prob_A</th>
+<th align="left">winner</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Round of 16</td>
+<td align="right">1</td>
+<td align="left">Auburn</td>
+<td align="right">56.92000</td>
+<td align="left">Alabama St.</td>
+<td align="right">26.14589</td>
+<td align="right">0.86</td>
+<td align="left">Auburn</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 16</td>
+<td align="right">2</td>
+<td align="left">Louisville</td>
+<td align="right">36.85493</td>
+<td align="left">Creighton</td>
+<td align="right">33.10179</td>
+<td align="right">0.63</td>
+<td align="left">Louisville</td>
+</tr>
+<tr class="odd">
+<td align="left">Round of 16</td>
+<td align="right">3</td>
+<td align="left">Michigan</td>
+<td align="right">35.72357</td>
+<td align="left">UC San Diego</td>
+<td align="right">34.59444</td>
+<td align="right">0.77</td>
+<td align="left">Michigan</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 16</td>
+<td align="right">4</td>
+<td align="left">Texas A&amp;M</td>
+<td align="right">38.69650</td>
+<td align="left">Yale</td>
+<td align="right">31.48097</td>
+<td align="right">0.81</td>
+<td align="left">Texas A&amp;M</td>
+</tr>
+<tr class="odd">
+<td align="left">Round of 16</td>
+<td align="right">5</td>
+<td align="left">Mississippi</td>
+<td align="right">37.97629</td>
+<td align="left">North Carolina</td>
+<td align="right">35.61828</td>
+<td align="right">0.38</td>
+<td align="left">North Carolina</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 16</td>
+<td align="right">6</td>
+<td align="left">Iowa St.</td>
+<td align="right">43.01419</td>
+<td align="left">Lipscomb</td>
+<td align="right">29.98284</td>
+<td align="right">0.87</td>
+<td align="left">Iowa St.</td>
+</tr>
+<tr class="odd">
+<td align="left">Round of 16</td>
+<td align="right">7</td>
+<td align="left">Marquette</td>
+<td align="right">36.47820</td>
+<td align="left">New Mexico</td>
+<td align="right">33.16473</td>
+<td align="right">0.79</td>
+<td align="left">Marquette</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 16</td>
+<td align="right">8</td>
+<td align="left">Michigan St.</td>
+<td align="right">41.22974</td>
+<td align="left">Bryant</td>
+<td align="right">27.41568</td>
+<td align="right">0.83</td>
+<td align="left">Michigan St.</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>res_south2 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;South_Region.xlsx&#39;), sheet = 2))
+kable(res_south2)</code></pre>
+<table style="width:100%;">
+<colgroup>
+<col width="10%" />
+<col width="13%" />
+<col width="13%" />
+<col width="14%" />
+<col width="11%" />
+<col width="14%" />
+<col width="10%" />
+<col width="11%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">round</th>
+<th align="right">matchup_number</th>
+<th align="left">teamA</th>
+<th align="right">teamA_composite</th>
+<th align="left">teamB</th>
+<th align="right">teamB_composite</th>
+<th align="right">win_prob_A</th>
+<th align="left">winner</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Round of 8</td>
+<td align="right">1</td>
+<td align="left">Auburn</td>
+<td align="right">56.92000</td>
+<td align="left">Louisville</td>
+<td align="right">36.85493</td>
+<td align="right">0.84</td>
+<td align="left">Auburn</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 8</td>
+<td align="right">2</td>
+<td align="left">Michigan</td>
+<td align="right">35.72357</td>
+<td align="left">Texas A&amp;M</td>
+<td align="right">38.69650</td>
+<td align="right">0.22</td>
+<td align="left">Texas A&amp;M</td>
+</tr>
+<tr class="odd">
+<td align="left">Round of 8</td>
+<td align="right">3</td>
+<td align="left">North Carolina</td>
+<td align="right">35.61828</td>
+<td align="left">Iowa St.</td>
+<td align="right">43.01419</td>
+<td align="right">0.15</td>
+<td align="left">Iowa St.</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 8</td>
+<td align="right">4</td>
+<td align="left">Marquette</td>
+<td align="right">36.47820</td>
+<td align="left">Michigan St.</td>
+<td align="right">41.22974</td>
+<td align="right">0.19</td>
+<td align="left">Michigan St.</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>res_south3 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;South_Region.xlsx&#39;), sheet = 3))
+kable(res_south3)</code></pre>
+<table>
+<colgroup>
+<col width="11%" />
+<col width="15%" />
+<col width="9%" />
+<col width="16%" />
+<col width="13%" />
+<col width="16%" />
+<col width="11%" />
+<col width="9%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">round</th>
+<th align="right">matchup_number</th>
+<th align="left">teamA</th>
+<th align="right">teamA_composite</th>
+<th align="left">teamB</th>
+<th align="right">teamB_composite</th>
+<th align="right">win_prob_A</th>
+<th align="left">winner</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Round of 4</td>
+<td align="right">1</td>
+<td align="left">Auburn</td>
+<td align="right">56.92000</td>
+<td align="left">Texas A&amp;M</td>
+<td align="right">38.69650</td>
+<td align="right">0.84</td>
+<td align="left">Auburn</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 4</td>
+<td align="right">2</td>
+<td align="left">Iowa St.</td>
+<td align="right">43.01419</td>
+<td align="left">Michigan St.</td>
+<td align="right">41.22974</td>
+<td align="right">0.89</td>
+<td align="left">Iowa St.</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>res_south4 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;South_Region.xlsx&#39;), sheet = 4))
+kable(res_south4)</code></pre>
+<table style="width:100%;">
+<colgroup>
+<col width="8%" />
+<col width="16%" />
+<col width="7%" />
+<col width="17%" />
+<col width="10%" />
+<col width="17%" />
+<col width="12%" />
+<col width="7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">round</th>
+<th align="right">matchup_number</th>
+<th align="left">teamA</th>
+<th align="right">teamA_composite</th>
+<th align="left">teamB</th>
+<th align="right">teamB_composite</th>
+<th align="right">win_prob_A</th>
+<th align="left">winner</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Elite 8</td>
+<td align="right">1</td>
+<td align="left">Auburn</td>
+<td align="right">56.92</td>
+<td align="left">Iowa St.</td>
+<td align="right">43.01419</td>
+<td align="right">0.82</td>
+<td align="left">Auburn</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="west-region-matchups" class="section level2">
+<h2>West Region Matchups</h2>
+<pre class="r"><code>res_west1 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;West_Region.xlsx&#39;), sheet = 1))
+kable(res_west1)</code></pre>
+<table style="width:100%;">
+<colgroup>
+<col width="10%" />
+<col width="13%" />
+<col width="10%" />
+<col width="14%" />
+<col width="13%" />
+<col width="14%" />
+<col width="10%" />
+<col width="11%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">round</th>
+<th align="right">matchup_number</th>
+<th align="left">teamA</th>
+<th align="right">teamA_composite</th>
+<th align="left">teamB</th>
+<th align="right">teamB_composite</th>
+<th align="right">win_prob_A</th>
+<th align="left">winner</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Round of 16</td>
+<td align="right">1</td>
+<td align="left">Florida</td>
+<td align="right">54.12848</td>
+<td align="left">Norfolk St.</td>
+<td align="right">27.87633</td>
+<td align="right">0.86</td>
+<td align="left">Florida</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 16</td>
+<td align="right">2</td>
+<td align="left">Connecticut</td>
+<td align="right">35.38277</td>
+<td align="left">Oklahoma</td>
+<td align="right">35.75285</td>
+<td align="right">0.83</td>
+<td align="left">Connecticut</td>
+</tr>
+<tr class="odd">
+<td align="left">Round of 16</td>
+<td align="right">3</td>
+<td align="left">Memphis</td>
+<td align="right">32.18866</td>
+<td align="left">Colorado St.</td>
+<td align="right">33.86279</td>
+<td align="right">0.15</td>
+<td align="left">Colorado St.</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 16</td>
+<td align="right">4</td>
+<td align="left">Maryland</td>
+<td align="right">41.71405</td>
+<td align="left">Grand Canyon</td>
+<td align="right">30.21863</td>
+<td align="right">0.83</td>
+<td align="left">Maryland</td>
+</tr>
+<tr class="odd">
+<td align="left">Round of 16</td>
+<td align="right">5</td>
+<td align="left">Missouri</td>
+<td align="right">42.28288</td>
+<td align="left">Drake</td>
+<td align="right">32.44368</td>
+<td align="right">0.84</td>
+<td align="left">Missouri</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 16</td>
+<td align="right">6</td>
+<td align="left">Texas Tech</td>
+<td align="right">44.75263</td>
+<td align="left">UNC Wilmington</td>
+<td align="right">30.28731</td>
+<td align="right">0.88</td>
+<td align="left">Texas Tech</td>
+</tr>
+<tr class="odd">
+<td align="left">Round of 16</td>
+<td align="right">7</td>
+<td align="left">Kansas</td>
+<td align="right">36.58307</td>
+<td align="left">Arkansas</td>
+<td align="right">34.10871</td>
+<td align="right">0.92</td>
+<td align="left">Kansas</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 16</td>
+<td align="right">8</td>
+<td align="left">St. John’s</td>
+<td align="right">39.05403</td>
+<td align="left">Nebraska Omaha</td>
+<td align="right">29.27301</td>
+<td align="right">0.81</td>
+<td align="left">St. John’s</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>res_west2 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;West_Region.xlsx&#39;), sheet = 2))
+kable(res_west2)</code></pre>
+<table>
+<colgroup>
+<col width="10%" />
+<col width="14%" />
+<col width="12%" />
+<col width="15%" />
+<col width="11%" />
+<col width="15%" />
+<col width="10%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">round</th>
+<th align="right">matchup_number</th>
+<th align="left">teamA</th>
+<th align="right">teamA_composite</th>
+<th align="left">teamB</th>
+<th align="right">teamB_composite</th>
+<th align="right">win_prob_A</th>
+<th align="left">winner</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Round of 8</td>
+<td align="right">1</td>
+<td align="left">Florida</td>
+<td align="right">54.12848</td>
+<td align="left">Connecticut</td>
+<td align="right">35.38277</td>
+<td align="right">0.83</td>
+<td align="left">Florida</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 8</td>
+<td align="right">2</td>
+<td align="left">Colorado St.</td>
+<td align="right">33.86279</td>
+<td align="left">Maryland</td>
+<td align="right">41.71405</td>
+<td align="right">0.21</td>
+<td align="left">Maryland</td>
+</tr>
+<tr class="odd">
+<td align="left">Round of 8</td>
+<td align="right">3</td>
+<td align="left">Missouri</td>
+<td align="right">42.28288</td>
+<td align="left">Texas Tech</td>
+<td align="right">44.75263</td>
+<td align="right">0.11</td>
+<td align="left">Texas Tech</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 8</td>
+<td align="right">4</td>
+<td align="left">Kansas</td>
+<td align="right">36.58307</td>
+<td align="left">St. John’s</td>
+<td align="right">39.05403</td>
+<td align="right">0.35</td>
+<td align="left">St. John’s</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>res_west3 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;West_Region.xlsx&#39;), sheet = 3))
+kable(res_west3)</code></pre>
+<table>
+<colgroup>
+<col width="10%" />
+<col width="14%" />
+<col width="10%" />
+<col width="15%" />
+<col width="10%" />
+<col width="15%" />
+<col width="10%" />
+<col width="10%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">round</th>
+<th align="right">matchup_number</th>
+<th align="left">teamA</th>
+<th align="right">teamA_composite</th>
+<th align="left">teamB</th>
+<th align="right">teamB_composite</th>
+<th align="right">win_prob_A</th>
+<th align="left">winner</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Round of 4</td>
+<td align="right">1</td>
+<td align="left">Florida</td>
+<td align="right">54.12848</td>
+<td align="left">Maryland</td>
+<td align="right">41.71405</td>
+<td align="right">0.86</td>
+<td align="left">Florida</td>
+</tr>
+<tr class="even">
+<td align="left">Round of 4</td>
+<td align="right">2</td>
+<td align="left">Texas Tech</td>
+<td align="right">44.75263</td>
+<td align="left">St. John’s</td>
+<td align="right">39.05403</td>
+<td align="right">0.82</td>
+<td align="left">Texas Tech</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>res_west4 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;West_Region.xlsx&#39;), sheet = 4))
+kable(res_west4)</code></pre>
+<table>
+<colgroup>
+<col width="8%" />
+<col width="16%" />
+<col width="8%" />
+<col width="17%" />
+<col width="11%" />
+<col width="17%" />
+<col width="11%" />
+<col width="8%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">round</th>
+<th align="right">matchup_number</th>
+<th align="left">teamA</th>
+<th align="right">teamA_composite</th>
+<th align="left">teamB</th>
+<th align="right">teamB_composite</th>
+<th align="right">win_prob_A</th>
+<th align="left">winner</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Elite 8</td>
+<td align="right">1</td>
+<td align="left">Florida</td>
+<td align="right">54.12848</td>
+<td align="left">Texas Tech</td>
+<td align="right">44.75263</td>
+<td align="right">0.8</td>
+<td align="left">Florida</td>
+</tr>
+</tbody>
+</table>
+</div>
 <div id="final-four-and-championship" class="section level2">
 <h2>Final Four and Championship</h2>
-<pre class="r"><code>res_final_four1 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Final_Four_and_Championship.xlsx&#39;), sheet = 1)
+<pre class="r"><code>res_final_four1 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Final_Four_and_Championship.xlsx&#39;), sheet = 1))
 kable(res_final_four1)</code></pre>
 <table>
 <colgroup>
@@ -1469,7 +1464,7 @@ kable(res_final_four1)</code></pre>
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>res_final_four2 &lt;- read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Final_Four_and_Championship.xlsx&#39;), sheet = 2)
+<pre class="r"><code>res_final_four2 &lt;- sort_matchup_table(read_xlsx(file.path(&#39;bracket_results&#39;, &#39;Final_Four_and_Championship.xlsx&#39;), sheet = 2))
 kable(res_final_four2)</code></pre>
 <table>
 <colgroup>

@@ -129,6 +129,11 @@ scrape_conf_assignments <- function(year) {
         Seed = as.integer(Seed),
         Team = canonicalize_team_name(stringr::str_trim(Team))
     ) %>%
+        dplyr::filter(
+            stringr::str_squish(Region) != "",
+            stringr::str_squish(Team) != ""
+        ) %>%
+        dplyr::distinct(Year, Team, Region, .keep_all = TRUE) %>%
         dplyr::select(Year, Team, Seed, Region, Conf)
 }
 
@@ -161,16 +166,29 @@ scrape_bart_data <- function(year) {
         dplyr::filter(!is.na(Team), stringr::str_squish(Team) != "") %>%
         dplyr::mutate(
             Year = as.character(year),
-            Rk = as.numeric(Rk),
-            G = as.numeric(G),
-            dplyr::across(c(`AdjOE`, `AdjDE`, `Barthag`, `TOR`, `TORD`, `ORB`, `DRB`, `3P%`, `3P%D`, `Adj T.`, `WAB`), as.numeric),
-            Team = canonicalize_team_name(stringr::str_trim(stringr::str_replace(Team, "\\s+\\d+\\s*seed$", ""))),
+            raw_team = as.character(Team),
+            Seed = suppressWarnings(as.integer(stringr::str_match(raw_team, "\\b(\\d{1,2})\\s*seed\\b")[, 2])),
+            Rk = suppressWarnings(as.numeric(Rk)),
+            G = suppressWarnings(as.numeric(G)),
+            dplyr::across(c(`AdjOE`, `AdjDE`, `Barthag`, `TOR`, `TORD`, `ORB`, `DRB`, `3P%`, `3P%D`, `Adj T.`, `WAB`), ~ suppressWarnings(as.numeric(.x))),
+            Team = Team %>%
+                stringr::str_replace(",.*$", "") %>%
+                stringr::str_replace("\\s+\\d+\\s*seed$", "") %>%
+                stringr::str_trim() %>%
+                canonicalize_team_name(),
             team_key = normalize_team_key(Team)
+        ) %>%
+        dplyr::filter(
+            !is.na(AdjOE),
+            !is.na(AdjDE),
+            !is.na(Barthag),
+            !Team %in% c("Team", "")
         ) %>%
         dplyr::select(
             Year,
             Team,
             team_key,
+            Seed,
             Barthag,
             AdjOE,
             AdjDE,
@@ -188,10 +206,11 @@ scrape_bart_data <- function(year) {
 #' Validate the scraped tournament roster
 #'
 #' @param conf_assignments A roster table scraped from the Bart tournament page.
+#' @param require_seed Whether missing seeds should fail validation.
 #'
 #' @return The validated roster with canonical team keys.
 #' @keywords internal
-validate_tournament_roster <- function(conf_assignments) {
+validate_tournament_roster <- function(conf_assignments, require_seed = TRUE) {
     roster <- conf_assignments %>%
         dplyr::mutate(
             Year = as.character(Year),
@@ -226,6 +245,19 @@ validate_tournament_roster <- function(conf_assignments) {
         )
     }
 
+    if (isTRUE(require_seed)) {
+        missing_seed_rows <- roster %>%
+            dplyr::filter(is.na(Seed))
+        if (nrow(missing_seed_rows) > 0) {
+            stop_with_message(
+                sprintf(
+                    "Tournament roster still has missing seeds: %s",
+                    paste(sprintf("%s %s %s", missing_seed_rows$Year, missing_seed_rows$Region, missing_seed_rows$Team), collapse = "; ")
+                )
+            )
+        }
+    }
+
     region_counts <- roster %>%
         dplyr::count(Year, Region, name = "teams") %>%
         dplyr::filter(teams < 16L | teams > 18L)
@@ -238,31 +270,34 @@ validate_tournament_roster <- function(conf_assignments) {
         )
     }
 
-    duplicate_seed_slots <- roster %>%
-        dplyr::count(Year, Region, Seed, name = "n") %>%
-        dplyr::filter(n > 1)
+    if (isTRUE(require_seed)) {
+        duplicate_seed_slots <- roster %>%
+            dplyr::filter(!is.na(Seed)) %>%
+            dplyr::count(Year, Region, Seed, name = "n") %>%
+            dplyr::filter(n > 1)
 
-    invalid_duplicate_slots <- duplicate_seed_slots %>%
-        dplyr::filter(n != 2L)
-    if (nrow(invalid_duplicate_slots) > 0) {
-        stop_with_message(
-            sprintf(
-                "Tournament roster has invalid play-in seed duplication: %s",
-                paste(sprintf("%s %s %s=%s", invalid_duplicate_slots$Year, invalid_duplicate_slots$Region, invalid_duplicate_slots$Seed, invalid_duplicate_slots$n), collapse = "; ")
+        invalid_duplicate_slots <- duplicate_seed_slots %>%
+            dplyr::filter(n != 2L)
+        if (nrow(invalid_duplicate_slots) > 0) {
+            stop_with_message(
+                sprintf(
+                    "Tournament roster has invalid play-in seed duplication: %s",
+                    paste(sprintf("%s %s %s=%s", invalid_duplicate_slots$Year, invalid_duplicate_slots$Region, invalid_duplicate_slots$Seed, invalid_duplicate_slots$n), collapse = "; ")
+                )
             )
-        )
-    }
+        }
 
-    duplicate_slot_years <- duplicate_seed_slots %>%
-        dplyr::count(Year, name = "duplicate_slots") %>%
-        dplyr::filter(duplicate_slots != 4L)
-    if (nrow(duplicate_slot_years) > 0) {
-        stop_with_message(
-            sprintf(
-                "Tournament roster must contain exactly four play-in seed slots per year: %s",
-                paste(sprintf("%s=%s", duplicate_slot_years$Year, duplicate_slot_years$duplicate_slots), collapse = ", ")
+        duplicate_slot_years <- duplicate_seed_slots %>%
+            dplyr::count(Year, name = "duplicate_slots") %>%
+            dplyr::filter(duplicate_slots != 4L)
+        if (nrow(duplicate_slot_years) > 0) {
+            stop_with_message(
+                sprintf(
+                    "Tournament roster must contain exactly four play-in seed slots per year: %s",
+                    paste(sprintf("%s=%s", duplicate_slot_years$Year, duplicate_slot_years$duplicate_slots), collapse = ", ")
+                )
             )
-        )
+        }
     }
 
     roster
@@ -276,7 +311,7 @@ validate_tournament_roster <- function(conf_assignments) {
 #' @return A normalized pre-tournament team feature table.
 #' @keywords internal
 build_team_feature_dataset <- function(bart_data, conf_assignments) {
-    roster <- validate_tournament_roster(conf_assignments)
+    roster <- validate_tournament_roster(conf_assignments, require_seed = FALSE)
     ratings <- bart_data %>%
         dplyr::mutate(
             Year = as.character(Year),
@@ -305,6 +340,7 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
                 dplyr::select(
                     Year,
                     team_key,
+                    Seed,
                     Barthag,
                     AdjOE,
                     AdjDE,
@@ -318,6 +354,9 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
                     `Adj T.`
                 ),
             by = c("Year", "team_key")
+        ) %>%
+        dplyr::mutate(
+            Seed = dplyr::coalesce(Seed.x, Seed.y)
         )
 
     unresolved_roster <- joined %>%
@@ -332,11 +371,23 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
         )
     }
 
+    validate_tournament_roster(
+        joined %>%
+            dplyr::transmute(
+                Year,
+                Team,
+                Seed,
+                Region,
+                Conf
+            ),
+        require_seed = TRUE
+    )
+
     joined %>%
         dplyr::select(
             Year,
             Team,
-            Seed,
+            Seed = Seed,
             Region,
             Conf,
             Barthag,
@@ -425,6 +476,25 @@ parse_tournament_team_result_line <- function(line) {
     )
 }
 
+#' Parse a team-only bracket line without a score
+#'
+#' @param line A line of scraped tournament text.
+#'
+#' @return A one-row tibble with `seed` and `team`, or `NULL`.
+#' @keywords internal
+parse_tournament_team_name_line <- function(line) {
+    pattern <- "^team\\s+\\(?([0-9]{1,2})\\)?\\s+(.+?)$"
+    matched <- stringr::str_match(line, stringr::regex(pattern, ignore_case = TRUE))
+    if (all(is.na(matched))) {
+        return(NULL)
+    }
+
+    tibble::tibble(
+        seed = as.integer(matched[, 2]),
+        team = canonicalize_team_name(stringr::str_trim(matched[, 3]))
+    )
+}
+
 #' Parse tournament bracket text into explicit game results
 #'
 #' @param lines A character vector of bracket text lines.
@@ -437,24 +507,21 @@ parse_tournament_results_lines <- function(lines, year) {
         stringr::str_trim() %>%
         .[nzchar(.)]
 
-    region_alias <- c("East", "West", "South", "Midwest", "National")
-    first_four_seeds <- c(10L, 11L, 12L, 16L)
+    region_alias <- c("East", "Midwest", "South", "West", "National")
     bracket_started <- FALSE
     first_four_counter <- 0L
     main_bracket_counter <- 0L
-    national_counter <- 0L
     regional_order <- c("East", "Midwest", "South", "West")
-    current_region_index <- 1L
-    current_region_counter <- 0L
     pending_game_team <- NULL
-    next_game_is_first_four <- FALSE
+    pending_orphan_team <- NULL
+    current_first_four_region <- NULL
     results <- list()
 
     for (line in lines) {
         if (line %in% region_alias) {
             bracket_started <- TRUE
             pending_game_team <- NULL
-            next_game_is_first_four <- FALSE
+            pending_orphan_team <- NULL
             next
         }
 
@@ -464,14 +531,9 @@ parse_tournament_results_lines <- function(lines, year) {
         )[, 2]
         if (!is.na(first_four_region)) {
             bracket_started <- TRUE
-            matched_region_index <- match(first_four_region, regional_order)
-            if (!is.na(matched_region_index)) {
-                current_region_index <- matched_region_index
-                current_region_counter <- 0L
-                main_bracket_counter <- (matched_region_index - 1L) * 15L
-            }
             pending_game_team <- NULL
-            next_game_is_first_four <- TRUE
+            pending_orphan_team <- NULL
+            current_first_four_region <- first_four_region
             next
         }
 
@@ -485,9 +547,21 @@ parse_tournament_results_lines <- function(lines, year) {
         if (is.null(parsed)) {
             parsed_team <- parse_tournament_team_result_line(line)
             if (is.null(parsed_team)) {
+                orphan_team <- parse_tournament_team_name_line(line)
+                if (!is.null(orphan_team)) {
+                    if (!is.null(pending_orphan_team)) {
+                        current_first_four_region <- NULL
+                        main_bracket_counter <- main_bracket_counter + 1L
+                        pending_orphan_team <- NULL
+                    } else {
+                        pending_orphan_team <- orphan_team
+                    }
+                    next
+                }
                 next
             }
 
+            pending_orphan_team <- NULL
             if (is.null(pending_game_team)) {
                 pending_game_team <- parsed_team
                 next
@@ -504,12 +578,14 @@ parse_tournament_results_lines <- function(lines, year) {
             pending_game_team <- NULL
         } else {
             pending_game_team <- NULL
+            pending_orphan_team <- NULL
         }
 
-        is_equal_seed_play_in <- identical(parsed$teamA_seed, parsed$teamB_seed) &&
-            parsed$teamA_seed %in% first_four_seeds
+        is_equal_seed_matchup <- identical(parsed$teamA_seed, parsed$teamB_seed)
+        is_explicit_first_four <- !is.null(current_first_four_region) && is_equal_seed_matchup
+        is_dayton_first_four <- is_dayton_play_in && is_equal_seed_matchup
 
-        if (isTRUE(next_game_is_first_four) || is_dayton_play_in || is_equal_seed_play_in) {
+        if (is_explicit_first_four || is_dayton_first_four) {
             first_four_counter <- first_four_counter + 1L
             results[[length(results) + 1L]] <- parsed %>%
                 dplyr::mutate(
@@ -519,21 +595,16 @@ parse_tournament_results_lines <- function(lines, year) {
                     game_index = first_four_counter,
                     winner = ifelse(teamA_score > teamB_score, teamA, teamB)
                 )
-            next_game_is_first_four <- FALSE
             next
         }
 
+        current_first_four_region <- NULL
         main_bracket_counter <- main_bracket_counter + 1L
 
         if (main_bracket_counter <= 60L) {
-            expected_region_index <- as.integer((main_bracket_counter - 1L) %/% 15L) + 1L
-            if (expected_region_index != current_region_index) {
-                current_region_index <- expected_region_index
-                current_region_counter <- 0L
-            }
-
-            current_region_counter <- current_region_counter + 1L
-            current_region <- regional_order[current_region_index]
+            current_region_index <- as.integer((main_bracket_counter - 1L) %/% 15L) + 1L
+            current_region_counter <- ((main_bracket_counter - 1L) %% 15L) + 1L
+            current_region <- regional_order[[current_region_index]]
             round_name <- results_round_label(current_region, current_region_counter)
             round_game_index <- dplyr::case_when(
                 round_name == "Round of 64" ~ current_region_counter,
@@ -557,7 +628,7 @@ parse_tournament_results_lines <- function(lines, year) {
             next
         }
 
-        national_counter <- national_counter + 1L
+        national_counter <- main_bracket_counter - 60L
         results[[length(results) + 1L]] <- parsed %>%
             dplyr::mutate(
                 Year = as.character(year),

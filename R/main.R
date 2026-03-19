@@ -10,31 +10,57 @@ library(logger)
 #' @export
 run_tournament_simulation <- function(config = NULL) {
     config <- config %||% load_project_config()
-    initialize_logging(config$output$log_path %||% file.path(config$output$path %||% "output", "logs", "tournament_simulation.log"))
+    output_dir <- config$output$path %||% "output"
+    log_basename <- basename(config$output$log_path %||% "tournament_simulation.log")
+    base_log_path <- file.path(output_dir, "logs", log_basename)
+    run_log_path <- build_run_log_path(base_log_path)
+    initialize_logging(run_log_path)
+    model_cache_dir <- config$output$model_cache_path %||% file.path(output_dir, "model_cache")
+    use_model_cache <- isTRUE(config$output$use_model_cache %||% TRUE)
 
-    logger::log_info("Running tournament simulation pipeline")
+    logger::log_info("Pipeline started")
+    logger::log_info("Loading tournament data")
     data <- load_tournament_data(config)
+    logger::log_info("Fitting tournament model")
     model_results <- fit_tournament_model(
         historical_matchups = data$historical_matchups,
         predictor_columns = config$model$required_predictors,
-        random_seed = config$model$random_seed
+        random_seed = config$model$random_seed,
+        cache_dir = model_cache_dir,
+        use_cache = use_model_cache
     )
+    logger::log_info("Running backtest")
     backtest_results <- if (isTRUE(config$model$backtest)) {
         run_rolling_backtest(
             historical_teams = data$historical_teams,
             historical_actual_results = data$historical_actual_results,
             predictor_columns = config$model$required_predictors,
             random_seed = config$model$random_seed,
-            draws = config$model$n_draws
+            draws = config$model$n_draws,
+            cache_dir = model_cache_dir,
+            use_cache = use_model_cache
         )
     } else {
         NULL
     }
+    logger::log_info("Simulating bracket")
     simulation_results <- simulate_full_bracket(
         all_teams = data$current_teams,
         model_results = model_results,
-        draws = config$model$n_draws
+        draws = config$model$n_draws,
+        log_matchups = FALSE
     )
+    logger::log_info("Generating bracket candidates")
+    candidate_results <- generate_bracket_candidates(
+        all_teams = data$current_teams,
+        model_results = model_results,
+        draws = config$model$n_draws,
+        n_candidates = 2L,
+        n_simulations = 50L,
+        random_seed = config$model$random_seed
+    )
+    decision_sheet <- build_decision_sheet(candidate_results)
+    logger::log_info("Rendering visualization")
     visualization <- create_tournament_visualization(simulation_results)
 
     result_bundle <- list(
@@ -43,12 +69,15 @@ run_tournament_simulation <- function(config = NULL) {
         model = model_results,
         backtest = backtest_results,
         simulations = simulation_results,
+        candidates = candidate_results,
+        decision_sheet = decision_sheet,
         final_four = simulation_results$final_four,
-        visualization = visualization
+        visualization = visualization,
+        output = list(log_path = run_log_path)
     )
 
-    result_bundle$output <- save_results(result_bundle, config$output)
-    logger::log_info("Tournament simulation complete")
+    result_bundle$output <- c(result_bundle$output, save_results(result_bundle, config$output))
+    logger::log_info("Pipeline complete; decision sheet at {result_bundle$output$decision_sheet}")
 
     result_bundle
 }

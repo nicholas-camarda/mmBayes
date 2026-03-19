@@ -6,6 +6,9 @@ test_that("team name canonicalization reconciles known source aliases", {
         "UCSB",
         "St. John's (NY)",
         "St. Peter's",
+        "North Carolina St.",
+        "Louisiana Lafayette",
+        "LIU Brooklyn",
         "Texas A&M Corpus Chris",
         "Wichita St.",
         "Miami FL"
@@ -20,6 +23,9 @@ test_that("team name canonicalization reconciles known source aliases", {
             "UC Santa Barbara",
             "Saint John's",
             "Saint Peter's",
+            "NC State",
+            "Louisiana",
+            "LIU",
             "Texas A&M Corpus Christi",
             "Wichita State",
             "Miami (FL)"
@@ -162,4 +168,43 @@ test_that("parser keeps national 1-seed games out of First Four for affected yea
         expect_equal(sum(parsed$region == "National" & parsed$round == "Final Four"), 2)
         expect_equal(sum(parsed$region == "National" & parsed$round == "Championship"), 1)
     }
+})
+
+test_that("parser handles no-contest bracket slots without shifting later rounds", {
+    west_lines <- c(
+        purrr::map_chr(seq_len(7), function(idx) {
+            sprintf("(1) West_R64_%02dA 80, (16) West_R64_%02dB 60", idx, idx)
+        }),
+        "team 7 Oregon",
+        "team 10 VCU",
+        purrr::map_chr(seq_len(4), function(idx) {
+            sprintf("(1) West_R32_%02dA 80, (8) West_R32_%02dB 60", idx, idx)
+        }),
+        purrr::map_chr(seq_len(2), function(idx) {
+            sprintf("(1) West_S16_%02dA 80, (4) West_S16_%02dB 60", idx, idx)
+        }),
+        "(1) West_E8_A 80, (2) West_E8_B 60"
+    )
+
+    lines <- c(
+        "East",
+        "Midwest",
+        "South",
+        "West",
+        "National",
+        purrr::map_chr(seq_len(45), function(idx) {
+            sprintf("(1) Team_%02dA 80, (16) Team_%02dB 60", idx, idx)
+        }),
+        west_lines,
+        "(11) UCLA 90, (1) Gonzaga 93",
+        "(2) Houston 59, (1) Baylor 78",
+        "(1) Gonzaga 70, (1) Baylor 86"
+    )
+
+    parsed <- parse_tournament_results_lines(lines, 2021L)
+
+    expect_equal(sum(parsed$round == "Round of 64"), 31L)
+    expect_equal(sum(parsed$region == "National" & parsed$round == "Final Four"), 2L)
+    expect_equal(sum(parsed$region == "National" & parsed$round == "Championship"), 1L)
+    expect_false(any(parsed$teamA == "Oregon" & parsed$teamB == "VCU"))
 })

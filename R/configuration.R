@@ -36,10 +36,37 @@ default_project_config <- function() {
         output = list(
             path = "output",
             prefix = "tournament_sim",
+            model_cache_path = "output/model_cache",
             log_path = "output/logs/tournament_simulation.log",
             refresh_log_path = "output/logs/data_refresh.log"
         )
     )
+}
+
+#' Build a unique log file path for the current run
+#'
+#' @param log_path Base log file path to derive from.
+#' @param timestamp Timestamp used to uniquify the file name.
+#' @param process_id Process identifier used to reduce collisions.
+#'
+#' @return A unique log file path in the same directory as `log_path`.
+#' @keywords internal
+build_run_log_path <- function(log_path, timestamp = Sys.time(), process_id = Sys.getpid()) {
+    log_path <- log_path %||% "tournament_simulation.log"
+    log_dir <- dirname(log_path)
+    log_name <- tools::file_path_sans_ext(basename(log_path))
+    log_ext <- tools::file_ext(log_path)
+    unique_stamp <- gsub("\\.", "", format(timestamp, "%Y%m%d_%H%M%OS6"))
+    unique_name <- paste0(log_name, "_", unique_stamp, "_pid", process_id)
+    if (nzchar(log_ext)) {
+        unique_name <- paste0(unique_name, ".", log_ext)
+    }
+
+    if (identical(log_dir, ".")) {
+        unique_name
+    } else {
+        file.path(log_dir, unique_name)
+    }
 }
 
 #' Merge nested configuration lists

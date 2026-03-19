@@ -20,8 +20,6 @@ setwd(project_root)
 pkgload::load_all(project_root, export_all = TRUE, helpers = FALSE, quiet = TRUE)
 
 config <- load_project_config("config.yml")
-log_path <- config$output$log_path %||% file.path(config$output$path %||% "output", "logs", "tournament_simulation.log")
-initialize_logging(log_path)
 results <- run_tournament_simulation(config)
 
 champion <- results$final_four$champion
@@ -39,11 +37,37 @@ for (region in names(results$final_four$semifinalists)) {
     cat(sprintf("- %s: %s\n", region, team$Team[[1]]))
 }
 
+if (!is.null(results$candidates) && length(results$candidates) > 0) {
+    cat("\nBracket candidates:\n")
+    for (candidate in results$candidates) {
+        cat(sprintf("- Candidate %s [%s]: champion=%s | final four=%s\n",
+            candidate$candidate_id,
+            candidate$type,
+            candidate$champion,
+            candidate$final_four
+        ))
+    }
+}
+
 cat("\nOutputs:\n")
 cat(sprintf("- Results: %s\n", results$output$results))
 cat(sprintf("- Model summary: %s\n", results$output$model_summary))
 if (!is.null(results$output$backtest_summary)) {
     cat(sprintf("- Backtest summary: %s\n", results$output$backtest_summary))
 }
+if (!is.null(results$output$candidate_summary)) {
+    cat(sprintf("- Candidate brackets: %s\n", results$output$candidate_summary))
+}
+if (!is.null(results$output$dashboard)) {
+    cat(sprintf("- Dashboard: %s\n", results$output$dashboard))
+}
+if (!is.null(results$output$decision_sheet)) {
+    cat(sprintf("- Decision sheet: %s\n", results$output$decision_sheet))
+}
+if (!is.null(results$output$candidate_csvs)) {
+    for (index in seq_along(results$output$candidate_csvs)) {
+        cat(sprintf("- Candidate %s CSV: %s\n", index, results$output$candidate_csvs[[index]]))
+    }
+}
 cat(sprintf("- Bracket plot: %s\n", results$output$bracket_plot))
-cat(sprintf("- Log: %s\n", log_path))
+cat(sprintf("- Log: %s\n", results$output$log_path))
