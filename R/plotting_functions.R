@@ -261,7 +261,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
 
     build_sequence_view <- function(matchup_column, winner_column) {
-        sequence_round_levels <- c("Round of 64", "Round of 32", "Sweet 16", "Elite 8", "Final Four", "Championship", "First Four")
+        sequence_round_levels <- c("First Four", "Round of 64", "Round of 32", "Sweet 16", "Elite 8", "Final Four", "Championship")
         sequence_region_levels <- c("East", "South", "West", "Midwest")
 
         decision_sheet %>%
@@ -312,16 +312,28 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         collapse = "\n"
     )
 
-    warning_panel <- ""
+    status_panel <- ""
     if (!is.null(play_in_resolution) && nrow(play_in_resolution) > 0 && isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
-        warning_panel <- paste0(
-            "<div class='panel warning-panel'><strong>Warning: First Four still simulated.</strong>",
+        status_panel <- paste0(
+            "<div class='panel status-panel status-simulated'><strong>Status: Simulated bracket path.</strong>",
             " ",
             html_escape(sprintf(
                 "%s of %s play-in slots are still unresolved, so the generated brackets assume simulated First Four winners. Any downstream Round of 64 and later matchups can shift until those games are final.",
                 play_in_resolution$unresolved_slots[[1]],
                 play_in_resolution$expected_slots[[1]]
             )),
+            "</div>"
+        )
+    } else if (!is.null(play_in_resolution) && nrow(play_in_resolution) > 0) {
+        status_panel <- paste0(
+            "<div class='panel status-panel status-final'><strong>Status: Final result.</strong>",
+            " First Four slots are resolved, so the displayed bracket path reflects finalized play-in outcomes.",
+            "</div>"
+        )
+    } else {
+        status_panel <- paste0(
+            "<div class='panel status-panel status-unknown'><strong>Status unavailable.</strong>",
+            " No play-in summary was supplied, so the review panel cannot tell whether these slots are simulated or final.",
             "</div>"
         )
     }
@@ -335,8 +347,11 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".lede{max-width:920px;color:#3f3f46;margin:8px 0 20px 0;}",
         ".card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}",
         ".candidate-card,.panel{background:white;border:1px solid #d6d3d1;border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,0.03);}",
-        ".warning-panel{background:#fff3cd;border:2px solid #d97706;color:#7c2d12;font-size:15px;}",
-        ".warning-panel strong{display:block;margin-bottom:6px;font-size:17px;text-transform:uppercase;letter-spacing:0.03em;}",
+        ".status-panel{font-size:15px;}",
+        ".status-panel strong{display:block;margin-bottom:6px;font-size:17px;text-transform:uppercase;letter-spacing:0.03em;}",
+        ".status-simulated{background:#fff3cd;border:2px solid #d97706;color:#7c2d12;}",
+        ".status-final{background:#ecfdf3;border:2px solid #16a34a;color:#14532d;}",
+        ".status-unknown{background:#eef2ff;border:2px solid #6366f1;color:#312e81;}",
         ".candidate-type{text-transform:uppercase;font-size:11px;letter-spacing:0.08em;color:#57534e;}",
         ".dashboard-table{width:100%;border-collapse:collapse;font-size:13px;background:white;}",
         ".dashboard-table th,.dashboard-table td{border:1px solid #e7e5e4;padding:8px 10px;vertical-align:top;text-align:left;}",
@@ -349,7 +364,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<h1>mmBayes Bracket Decision Console</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year),
         ". Use Candidate 1 as the safest expected-value bracket and Candidate 2 as the bounded-risk alternate. The tables below surface the hardest calls first and show where the alternate bracket meaningfully diverges.</p>",
-        warning_panel,
+        status_panel,
         "<div class='card-grid'>", candidate_cards, "</div>",
         "<h2>Hardest Decisions</h2>",
         "<div class='section-grid'><div class='panel'>",
