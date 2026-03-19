@@ -255,6 +255,58 @@ expected_completed_round_counts <- function(year = NULL) {
     counts
 }
 
+#' Return an empty tournament game-results table
+#'
+#' @return A zero-row tibble with the canonical tournament game-results schema.
+#' @keywords internal
+empty_game_results_table <- function() {
+    tibble::tibble(
+        Year = character(),
+        region = character(),
+        round = character(),
+        game_index = integer(),
+        teamA = character(),
+        teamB = character(),
+        teamA_seed = integer(),
+        teamB_seed = integer(),
+        winner = character()
+    )
+}
+
+#' Summarize current-year First Four resolution status
+#'
+#' @param current_teams A current-year team feature table.
+#' @param actual_play_in_results A normalized current-year First Four results
+#'   table.
+#'
+#' @return A one-row tibble describing expected, resolved, and unresolved
+#'   play-in slots.
+#' @keywords internal
+summarize_play_in_resolution <- function(current_teams, actual_play_in_results = NULL) {
+    duplicate_slots <- current_teams %>%
+        dplyr::count(Region, Seed, name = "n") %>%
+        dplyr::filter(n > 1L) %>%
+        dplyr::transmute(play_in_region = Region, slot_seed = Seed)
+
+    actual_play_in_results <- actual_play_in_results %||%
+        tibble::tibble(play_in_region = character(), slot_seed = integer())
+
+    resolved_slots <- actual_play_in_results %>%
+        dplyr::distinct(play_in_region, slot_seed)
+
+    expected_slots <- nrow(duplicate_slots)
+    resolved_count <- duplicate_slots %>%
+        dplyr::inner_join(resolved_slots, by = c("play_in_region", "slot_seed")) %>%
+        nrow()
+
+    tibble::tibble(
+        expected_slots = expected_slots,
+        resolved_slots = resolved_count,
+        unresolved_slots = max(expected_slots - resolved_count, 0L),
+        has_unresolved_slots = max(expected_slots - resolved_count, 0L) > 0L
+    )
+}
+
 #' Build a single matchup feature row
 #'
 #' @param team_a A one-row team feature data frame for team A.
@@ -819,17 +871,20 @@ build_decision_sheet <- function(candidates, round_weights = default_round_weigh
 #' @param all_teams A current-year team feature table.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws per matchup.
+#' @param actual_play_in_results Optional normalized current-year First Four
+#'   results used to replace simulated duplicate-seed outcomes when available.
 #' @param n_candidates Number of bracket candidates to retain.
 #' @param n_simulations Number of stochastic brackets to explore.
 #' @param random_seed Random seed for stochastic exploration.
 #'
 #' @return A list with candidate metadata and flattened matchup tables.
 #' @export
-generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, n_candidates = 2L, n_simulations = 250L, random_seed = 123) {
+generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, n_candidates = 2L, n_simulations = 250L, random_seed = 123) {
     deterministic_bracket <- simulate_full_bracket(
         all_teams = all_teams,
         model_results = model_results,
         draws = draws,
+        actual_play_in_results = actual_play_in_results,
         deterministic = TRUE,
         log_matchups = FALSE
     )
@@ -866,6 +921,7 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             all_teams = all_teams,
             model_results = model_results,
             draws = draws,
+            actual_play_in_results = actual_play_in_results,
             deterministic = FALSE,
             log_matchups = FALSE
         )
@@ -958,11 +1014,14 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
 #' @param candidates A list of candidate bracket objects.
 #' @param output_dir Directory used for output artifacts.
 #' @param backtest Optional backtest result bundle.
+#' @param play_in_resolution Optional one-row tibble from
+#'   [summarize_play_in_resolution()] describing whether unresolved simulated
+#'   First Four slots remain in the active bracket.
 #'
 #' @return A list of decision-artifact file paths and the in-memory decision
 #'   sheet.
 #' @export
-save_decision_outputs <- function(bracket_year, candidates, output_dir = "output", backtest = NULL) {
+save_decision_outputs <- function(bracket_year, candidates, output_dir = "output", backtest = NULL, play_in_resolution = NULL) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- build_decision_sheet(candidates)
@@ -1004,7 +1063,8 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
             bracket_year = bracket_year,
             decision_sheet = decision_sheet,
             candidates = candidates,
-            backtest = backtest
+            backtest = backtest,
+            play_in_resolution = play_in_resolution
         ),
         dashboard_path
     )
@@ -1050,11 +1110,16 @@ save_results <- function(results, output_config) {
     }
 
     decision_outputs <- if (!is.null(results$candidates) && length(results$candidates) > 0) {
+        play_in_resolution <- summarize_play_in_resolution(
+            current_teams = results$data$current_teams,
+            actual_play_in_results = results$data$current_play_in_results
+        )
         save_decision_outputs(
             bracket_year = results$bracket_year,
             candidates = results$candidates,
             output_dir = output_dir,
-            backtest = results$backtest
+            backtest = results$backtest,
+            play_in_resolution = play_in_resolution
         )
     } else {
         NULL

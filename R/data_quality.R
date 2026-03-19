@@ -72,15 +72,22 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
     team_features <- normalize_team_features(team_features)
     game_results <- normalize_game_results(game_results)
 
-    years <- sort(unique(as.character(game_results$Year)))
-    games_per_year <- game_results %>%
+    current_year <- max(suppressWarnings(as.integer(team_features$Year)), na.rm = TRUE)
+    current_year <- as.character(current_year)
+    historical_results <- game_results %>%
+        dplyr::filter(Year != current_year)
+    current_year_results <- game_results %>%
+        dplyr::filter(Year == current_year)
+
+    years <- sort(unique(as.character(historical_results$Year)))
+    games_per_year <- historical_results %>%
         dplyr::count(Year, name = "games") %>%
         dplyr::rowwise() %>%
         dplyr::mutate(expected_games = sum(expected_completed_round_counts(Year))) %>%
         dplyr::ungroup() %>%
         dplyr::mutate(ok = games == expected_games)
 
-    round_counts <- game_results %>%
+    round_counts <- historical_results %>%
         dplyr::count(Year, round, name = "games") %>%
         dplyr::mutate(round = factor(round, levels = names(expected_completed_round_counts()))) %>%
         dplyr::arrange(Year, round)
@@ -101,6 +108,32 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         ) %>%
         dplyr::filter(!ok)
 
+    current_play_in_results <- prepare_current_play_in_results(team_features, game_results, current_year)
+    valid_current_slots <- team_features %>%
+        dplyr::filter(Year == current_year) %>%
+        dplyr::count(Region, Seed, name = "n") %>%
+        dplyr::filter(n > 1L) %>%
+        dplyr::transmute(play_in_region = Region, slot_seed = Seed)
+
+    current_year_non_play_in <- current_year_results %>%
+        dplyr::filter(round != "First Four")
+
+    invalid_current_play_in <- current_play_in_results %>%
+        dplyr::filter(
+            is.na(play_in_region) |
+                is.na(slot_seed) |
+                teamA_seed != teamB_seed
+        ) %>%
+        dplyr::select(Year, teamA, teamB, winner, play_in_region, slot_seed)
+
+    unmatched_current_slots <- current_play_in_results %>%
+        dplyr::distinct(play_in_region, slot_seed) %>%
+        dplyr::anti_join(valid_current_slots, by = c("play_in_region", "slot_seed"))
+
+    duplicate_current_slots <- current_play_in_results %>%
+        dplyr::count(play_in_region, slot_seed, name = "n") %>%
+        dplyr::filter(n > 1L)
+
     suspicious_first_four <- game_results %>%
         dplyr::filter(
             region == "First Four",
@@ -115,13 +148,21 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
     summary <- tibble::tibble(
         team_rows = nrow(team_features),
         result_rows = nrow(game_results),
-        years = paste(years, collapse = ","),
+        years = paste(sort(unique(as.character(game_results$Year))), collapse = ","),
         bad_game_years = sum(!games_per_year$ok),
         bad_round_rows = nrow(round_count_issues),
+        current_year_non_play_in_rows = nrow(current_year_non_play_in),
+        invalid_current_play_in_rows = nrow(invalid_current_play_in),
+        unmatched_current_slot_rows = nrow(unmatched_current_slots),
+        duplicate_current_slot_rows = nrow(duplicate_current_slots),
         suspicious_first_four_rows = nrow(suspicious_first_four),
         unresolved_team_rows = nrow(unresolved_teams),
         passed = all(games_per_year$ok) &&
             nrow(round_count_issues) == 0 &&
+            nrow(current_year_non_play_in) == 0 &&
+            nrow(invalid_current_play_in) == 0 &&
+            nrow(unmatched_current_slots) == 0 &&
+            nrow(duplicate_current_slots) == 0 &&
             nrow(suspicious_first_four) == 0 &&
             nrow(unresolved_teams) == 0
     )
@@ -131,6 +172,11 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         games_per_year = games_per_year,
         round_counts = round_counts,
         round_count_issues = round_count_issues,
+        current_year_non_play_in = current_year_non_play_in,
+        current_play_in_results = current_play_in_results,
+        invalid_current_play_in = invalid_current_play_in,
+        unmatched_current_slots = unmatched_current_slots,
+        duplicate_current_slots = duplicate_current_slots,
         suspicious_first_four = suspicious_first_four,
         unresolved_teams = unresolved_teams,
         passed = isTRUE(summary$passed[[1]])
@@ -167,6 +213,46 @@ assert_canonical_data_quality <- function(team_features, game_results) {
         issues <- c(
             issues,
             paste("Unexpected per-year round counts:", paste(round_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$current_year_non_play_in) > 0) {
+        current_text <- report$current_year_non_play_in %>%
+            dplyr::mutate(text = sprintf("%s %s vs %s (%s)", Year, teamA, teamB, round)) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Current-year partial results may only include First Four games:", paste(current_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$invalid_current_play_in) > 0) {
+        invalid_text <- report$invalid_current_play_in %>%
+            dplyr::mutate(text = sprintf("%s %s vs %s", Year, teamA, teamB)) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Current-year First Four rows could not be mapped to a valid region/seed slot:", paste(invalid_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$unmatched_current_slots) > 0) {
+        slot_text <- report$unmatched_current_slots %>%
+            dplyr::mutate(text = sprintf("%s %s-seed", play_in_region, slot_seed)) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Current-year First Four rows do not match the active bracket's duplicate seed slots:", paste(slot_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$duplicate_current_slots) > 0) {
+        duplicate_text <- report$duplicate_current_slots %>%
+            dplyr::mutate(text = sprintf("%s %s-seed=%s", play_in_region, slot_seed, n)) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Current-year First Four rows contain duplicate completed slots:", paste(duplicate_text, collapse = "; "))
         )
     }
 

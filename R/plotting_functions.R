@@ -226,10 +226,13 @@ render_leverage_scatter_svg <- function(decision_sheet) {
 #' @param decision_sheet The decision-sheet data frame.
 #' @param candidates A list of candidate bracket objects.
 #' @param backtest Optional backtest result bundle.
+#' @param play_in_resolution Optional one-row tibble from
+#'   [summarize_play_in_resolution()] describing whether unresolved simulated
+#'   First Four slots remain in the active bracket.
 #'
 #' @return A complete HTML document as a scalar character string.
 #' @export
-create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL) {
+create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL, play_in_resolution = NULL) {
     primary <- candidates[[1]]
     alternate <- if (length(candidates) >= 2) candidates[[2]] else candidates[[1]]
 
@@ -309,6 +312,20 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         collapse = "\n"
     )
 
+    warning_panel <- ""
+    if (!is.null(play_in_resolution) && nrow(play_in_resolution) > 0 && isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
+        warning_panel <- paste0(
+            "<div class='panel warning-panel'><strong>Warning: First Four still simulated.</strong>",
+            " ",
+            html_escape(sprintf(
+                "%s of %s play-in slots are still unresolved, so the generated brackets assume simulated First Four winners. Any downstream Round of 64 and later matchups can shift until those games are final.",
+                play_in_resolution$unresolved_slots[[1]],
+                play_in_resolution$expected_slots[[1]]
+            )),
+            "</div>"
+        )
+    }
+
     paste0(
         "<!DOCTYPE html><html><head><meta charset='utf-8'>",
         "<title>mmBayes Bracket Dashboard</title>",
@@ -318,8 +335,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".lede{max-width:920px;color:#3f3f46;margin:8px 0 20px 0;}",
         ".card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}",
         ".candidate-card,.panel{background:white;border:1px solid #d6d3d1;border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,0.03);}",
-        ".warning-panel{background:#fff7e6;border:1px solid #f2c66d;color:#6b4f12;}",
-        ".warning-panel strong{display:block;margin-bottom:4px;}",
+        ".warning-panel{background:#fff3cd;border:2px solid #d97706;color:#7c2d12;font-size:15px;}",
+        ".warning-panel strong{display:block;margin-bottom:6px;font-size:17px;text-transform:uppercase;letter-spacing:0.03em;}",
         ".candidate-type{text-transform:uppercase;font-size:11px;letter-spacing:0.08em;color:#57534e;}",
         ".dashboard-table{width:100%;border-collapse:collapse;font-size:13px;background:white;}",
         ".dashboard-table th,.dashboard-table td{border:1px solid #e7e5e4;padding:8px 10px;vertical-align:top;text-align:left;}",
@@ -332,7 +349,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<h1>mmBayes Bracket Decision Console</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year),
         ". Use Candidate 1 as the safest expected-value bracket and Candidate 2 as the bounded-risk alternate. The tables below surface the hardest calls first and show where the alternate bracket meaningfully diverges.</p>",
-        "<div class='panel warning-panel'><strong>Important:</strong> this review is simulation-based. Play-in results can change later-round matchups, so the bracket path may not match ESPN's pre-game bracket view until tournament start day. Rerun the dashboard on or after the first games for exact placements.</div>",
+        warning_panel,
         "<div class='card-grid'>", candidate_cards, "</div>",
         "<h2>Hardest Decisions</h2>",
         "<div class='section-grid'><div class='panel'>",

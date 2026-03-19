@@ -48,6 +48,7 @@ run_tournament_simulation <- function(config = NULL) {
         all_teams = data$current_teams,
         model_results = model_results,
         draws = config$model$n_draws,
+        actual_play_in_results = data$current_play_in_results,
         log_matchups = FALSE
     )
     logger::log_info("Generating bracket candidates")
@@ -55,6 +56,7 @@ run_tournament_simulation <- function(config = NULL) {
         all_teams = data$current_teams,
         model_results = model_results,
         draws = config$model$n_draws,
+        actual_play_in_results = data$current_play_in_results,
         n_candidates = 2L,
         n_simulations = 50L,
         random_seed = config$model$random_seed

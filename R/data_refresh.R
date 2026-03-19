@@ -652,20 +652,46 @@ parse_tournament_results_lines <- function(lines, year) {
 #' Scrape explicit tournament game results
 #'
 #' @param year The tournament year to scrape.
+#' @param allow_empty Whether to return a zero-row result table when no
+#'   completed games are available yet.
 #'
 #' @return A game-level results table including region, round, teams, and winner.
 #' @keywords internal
-scrape_tournament_results <- function(year) {
+scrape_tournament_results <- function(year, allow_empty = FALSE) {
     url <- sprintf("https://www.sports-reference.com/cbb/postseason/men/%s-ncaa.html", year)
     logger::log_info("Scraping tournament results from {url}")
 
-    page_text <- rvest::read_html(url) %>%
-        rvest::html_text2()
+    page_text <- tryCatch(
+        rvest::read_html(url) %>%
+            rvest::html_text2(),
+        error = function(err) {
+            if (!isTRUE(allow_empty)) {
+                stop(err)
+            }
+            logger::log_warn("Current-year results page for {year} was unavailable: {conditionMessage(err)}")
+            return(NULL)
+        }
+    )
+    if (is.null(page_text)) {
+        return(empty_game_results_table())
+    }
+
     lines <- page_text %>%
         stringr::str_split("\\n", simplify = FALSE) %>%
         purrr::pluck(1)
 
-    parse_tournament_results_lines(lines, year)
+    parsed_results <- tryCatch(
+        parse_tournament_results_lines(lines, year),
+        error = function(err) {
+            if (!isTRUE(allow_empty)) {
+                stop(err)
+            }
+            logger::log_warn("No completed tournament results parsed for {year}; returning an empty current-year result set")
+            empty_game_results_table()
+        }
+    )
+
+    parsed_results
 }
 
 #' Refresh canonical tournament data files
@@ -716,6 +742,10 @@ update_tournament_data <- function(start_year = NULL, bracket_year = as.integer(
         logger::log_info("Refreshing tournament results for {year}")
         scrape_tournament_results(year)
     })
+
+    logger::log_info("Refreshing current-year First Four results for {bracket_year} when available")
+    current_year_results <- scrape_tournament_results(bracket_year, allow_empty = TRUE)
+    tournament_results <- dplyr::bind_rows(tournament_results, current_year_results)
 
     logger::log_info("Running canonical data quality checks")
     assert_canonical_data_quality(team_features, tournament_results)

@@ -36,7 +36,7 @@ test_that("load_tournament_data returns matchup history and current teams", {
     loaded <- load_tournament_data(config)
 
     expect_equal(loaded$bracket_year, "2025")
-    expect_true(all(c("historical_matchups", "historical_teams", "current_teams", "historical_actual_results") %in% names(loaded)))
+    expect_true(all(c("historical_matchups", "historical_teams", "current_teams", "historical_actual_results", "current_play_in_results") %in% names(loaded)))
     expect_gt(nrow(loaded$historical_matchups), 0)
     expect_true(all(config$model$required_predictors %in% names(loaded$historical_matchups)))
     expect_false(any(leakage_columns() %in% names(loaded$historical_teams)))

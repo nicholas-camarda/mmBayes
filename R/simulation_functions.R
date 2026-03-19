@@ -197,15 +197,17 @@ simulate_round <- function(teams, round_name, model_results, draws, deterministi
 #' @param region_teams A region-level team table.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param actual_play_in_results Optional normalized current-year First Four
+#'   results used to replace simulated duplicate-seed outcomes when an actual
+#'   winner is already known.
 #' @param deterministic Whether play-in winners are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
 #'
 #' @return A list containing resolved teams and optional First Four results.
 #' @keywords internal
-resolve_play_in_games <- function(region_teams, model_results, draws, deterministic = TRUE, log_matchups = TRUE) {
-    expected <- 1:16
-    actual <- region_teams$Seed
-    duplicate_counts <- table(actual)
+resolve_play_in_games <- function(region_teams, model_results, draws, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE) {
+    region_name <- unique(region_teams$Region)[1]
+    duplicate_counts <- table(region_teams$Seed)
     dup_seeds <- as.integer(names(duplicate_counts[duplicate_counts > 1]))
 
     if (length(dup_seeds) == 0) {
@@ -228,16 +230,57 @@ resolve_play_in_games <- function(region_teams, model_results, draws, determinis
             stop_with_message("Play-in simulation expects exactly two teams for each duplicate seed")
         }
 
-        matchup <- simulate_matchup(
-            duplicate_rows[1, , drop = FALSE],
-            duplicate_rows[2, , drop = FALSE],
-            "First Four",
-            i,
-            model_results,
-            draws,
-            deterministic = deterministic,
-            log_matchup = log_matchups
-        )
+        actual_result <- actual_play_in_results %||%
+            tibble::tibble(play_in_region = character(), slot_seed = integer(), winner = character())
+        actual_result <- actual_result %>%
+            dplyr::filter(
+                play_in_region == region_name,
+                slot_seed == seed_value
+            )
+
+        if (nrow(actual_result) > 1) {
+            stop_with_message(sprintf("Multiple actual First Four results found for %s %s-seed slot", region_name, seed_value))
+        }
+
+        if (nrow(actual_result) == 1) {
+            actual_winner <- canonicalize_team_name(actual_result$winner[[1]])
+            if (!actual_winner %in% duplicate_rows$Team) {
+                stop_with_message(sprintf("Actual First Four winner %s does not match the active %s %s-seed slot", actual_winner, region_name, seed_value))
+            }
+
+            win_probs <- calculate_win_probabilities(
+                duplicate_rows[1, , drop = FALSE],
+                duplicate_rows[2, , drop = FALSE],
+                "First Four",
+                model_results,
+                draws
+            )
+            matchup_stats <- generate_matchup_stats(
+                duplicate_rows[1, , drop = FALSE],
+                duplicate_rows[2, , drop = FALSE],
+                win_probs
+            )
+            matchup <- create_matchup_result(
+                duplicate_rows[1, , drop = FALSE],
+                duplicate_rows[2, , drop = FALSE],
+                "First Four",
+                i,
+                win_probs,
+                matchup_stats,
+                actual_winner
+            )
+        } else {
+            matchup <- simulate_matchup(
+                duplicate_rows[1, , drop = FALSE],
+                duplicate_rows[2, , drop = FALSE],
+                "First Four",
+                i,
+                model_results,
+                draws,
+                deterministic = deterministic,
+                log_matchup = log_matchups
+            )
+        }
         play_in_results[[i]] <- matchup
         losing_team <- if (matchup$winner[1] == duplicate_rows$Team[1]) duplicate_rows$Team[2] else duplicate_rows$Team[1]
         survivors <- survivors %>%
@@ -257,14 +300,23 @@ resolve_play_in_games <- function(region_teams, model_results, draws, determinis
 #' @param region_teams A region-level team table.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param actual_play_in_results Optional normalized current-year First Four
+#'   results used to replace simulated duplicate-seed outcomes when available.
 #' @param deterministic Whether regional games are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
 #'
 #' @return A list containing regional round results and the region champion.
 #' @export
-simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE) {
+simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE) {
     region_name <- unique(region_teams$Region)[1]
-    play_in <- resolve_play_in_games(region_teams, model_results, draws, deterministic = deterministic, log_matchups = log_matchups)
+    play_in <- resolve_play_in_games(
+        region_teams,
+        model_results,
+        draws,
+        actual_play_in_results = actual_play_in_results,
+        deterministic = deterministic,
+        log_matchups = log_matchups
+    )
     region_teams <- play_in$teams
 
     if (nrow(region_teams) != 16) {
@@ -368,12 +420,14 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
 #' @param all_teams A current-year team feature table.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param actual_play_in_results Optional normalized current-year First Four
+#'   results used to replace simulated duplicate-seed outcomes when available.
 #' @param deterministic Whether all matchups are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
 #'
 #' @return A list containing regional results and Final Four results.
 #' @export
-simulate_full_bracket <- function(all_teams, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE) {
+simulate_full_bracket <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE) {
     regions <- c("East", "West", "South", "Midwest")
     region_counts <- table(all_teams$Region)
 
@@ -390,6 +444,7 @@ simulate_full_bracket <- function(all_teams, model_results, draws = 1000, determ
                 region_teams = dplyr::filter(all_teams, Region == region_name),
                 model_results = model_results,
                 draws = draws,
+                actual_play_in_results = actual_play_in_results,
                 deterministic = deterministic,
                 log_matchups = log_matchups
             )

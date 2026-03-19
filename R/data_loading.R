@@ -73,6 +73,91 @@ normalize_game_results <- function(data) {
         )
 }
 
+#' Normalize current-year First Four rows for bracket resolution
+#'
+#' @param team_features A normalized team feature table.
+#' @param game_results A normalized game-results table.
+#' @param bracket_year The active bracket year.
+#'
+#' @return A tibble containing current-year First Four rows with inferred
+#'   `play_in_region` and `slot_seed` columns.
+#' @keywords internal
+prepare_current_play_in_results <- function(team_features, game_results, bracket_year) {
+    play_in_results <- game_results %>%
+        dplyr::filter(
+            Year == bracket_year,
+            round == "First Four"
+        )
+
+    if (nrow(play_in_results) == 0) {
+        return(tibble::tibble(
+            Year = character(),
+            region = character(),
+            round = character(),
+            game_index = integer(),
+            teamA = character(),
+            teamB = character(),
+            teamA_seed = integer(),
+            teamB_seed = integer(),
+            winner = character(),
+            play_in_region = character(),
+            slot_seed = integer()
+        ))
+    }
+
+    team_lookup <- team_features %>%
+        dplyr::transmute(
+            Year = as.character(Year),
+            team_key = normalize_team_key(Team),
+            lookup_region = Region,
+            lookup_seed = Seed
+        ) %>%
+        dplyr::distinct()
+
+    play_in_results %>%
+        dplyr::mutate(
+            teamA_key = normalize_team_key(teamA),
+            teamB_key = normalize_team_key(teamB)
+        ) %>%
+        dplyr::left_join(
+            team_lookup %>%
+                dplyr::rename(
+                    teamA_region = lookup_region,
+                    teamA_lookup_seed = lookup_seed
+                ),
+            by = c("Year", "teamA_key" = "team_key")
+        ) %>%
+        dplyr::left_join(
+            team_lookup %>%
+                dplyr::rename(
+                    teamB_region = lookup_region,
+                    teamB_lookup_seed = lookup_seed
+                ),
+            by = c("Year", "teamB_key" = "team_key")
+        ) %>%
+        dplyr::mutate(
+            play_in_region = dplyr::case_when(
+                region %in% bracket_region_levels() ~ region,
+                !is.na(teamA_region) & !is.na(teamB_region) & teamA_region == teamB_region ~ teamA_region,
+                TRUE ~ NA_character_
+            ),
+            slot_seed = dplyr::coalesce(teamA_seed, teamB_seed, teamA_lookup_seed, teamB_lookup_seed)
+        ) %>%
+        dplyr::select(
+            Year,
+            region,
+            round,
+            game_index,
+            teamA,
+            teamB,
+            teamA_seed,
+            teamB_seed,
+            winner,
+            play_in_region,
+            slot_seed
+        )
+}
+
 #' Validate the team feature table
 #'
 #' @param data A team-level feature table.
@@ -357,6 +442,7 @@ load_tournament_data <- function(config) {
     historical_teams <- team_features %>%
         dplyr::filter(Year %in% historical_years)
     current_teams <- prepare_current_teams(team_features, bracket_year)
+    current_play_in_results <- prepare_current_play_in_results(team_features, game_results, bracket_year)
     historical_games <- game_results %>%
         dplyr::filter(Year %in% historical_years)
 
@@ -369,6 +455,7 @@ load_tournament_data <- function(config) {
         historical_teams = historical_teams,
         historical_actual_results = historical_actual_results,
         current_teams = current_teams,
+        current_play_in_results = current_play_in_results,
         game_results = game_results
     )
 }

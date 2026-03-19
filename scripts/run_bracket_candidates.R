@@ -41,17 +41,23 @@ candidates <- generate_bracket_candidates(
     all_teams = data$current_teams,
     model_results = model_results,
     draws = config$model$n_draws,
+    actual_play_in_results = data$current_play_in_results,
     n_candidates = 2L,
     n_simulations = 25L,
     random_seed = config$model$random_seed
 )
 
 output_dir <- config$output$path %||% "output"
+play_in_resolution <- summarize_play_in_resolution(
+    current_teams = data$current_teams,
+    actual_play_in_results = data$current_play_in_results
+)
 decision_outputs <- save_decision_outputs(
     bracket_year = data$bracket_year,
     candidates = candidates,
     output_dir = output_dir,
-    backtest = NULL
+    backtest = NULL,
+    play_in_resolution = play_in_resolution
 )
 
 cat("\n=============================================\n")

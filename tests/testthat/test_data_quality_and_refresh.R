@@ -90,6 +90,38 @@ test_that("loader succeeds when result teams use aliased source names", {
     expect_true(all(c("historical_matchups", "historical_teams", "current_teams") %in% names(loaded)))
 })
 
+test_that("quality gates allow current-year First Four results without weakening historical checks", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024)
+    current_play_in_result <- tibble::tibble(
+        Year = "2025",
+        region = "First Four",
+        round = "First Four",
+        game_index = 1L,
+        teamA = "East_11_2025",
+        teamB = "East_11_2025_playin",
+        teamA_seed = 11L,
+        teamB_seed = 11L,
+        winner = "East_11_2025"
+    )
+
+    expect_no_error(
+        assert_canonical_data_quality(team_data, dplyr::bind_rows(results_data, current_play_in_result))
+    )
+
+    expect_error(
+        assert_canonical_data_quality(
+            team_data,
+            dplyr::bind_rows(
+                results_data,
+                current_play_in_result %>%
+                    dplyr::mutate(round = "Round of 64", region = "East")
+            )
+        ),
+        regexp = "Current-year partial results may only include First Four games"
+    )
+})
+
 test_that("year-wide Bart join preserves the full tournament roster", {
     team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
     conf_assignments <- make_fixture_conf_assignments(team_data)
