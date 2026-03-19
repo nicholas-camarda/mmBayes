@@ -280,7 +280,7 @@ This means the logistic model coefficients for continuous predictors are interpr
 
 The active game-winner model in `fit_tournament_model()` is a Bayesian logistic regression fit with `rstanarm::stan_glm(..., family = binomial(link = "logit"))`.
 
-For game `i`:
+For game `i`, the full model is:
 
 $$
 y_i \sim \text{Bernoulli}(p_i)
@@ -289,21 +289,6 @@ $$
 $$
 \text{logit}(p_i) = \eta_i
 $$
-
-$$
-\begin{aligned}
-\eta_i &= \alpha \\
-&\quad + \gamma_{\text{round}}(r_i) \\
-&\quad + \beta_{\text{same\_conf}} \cdot \text{same\_conf}_i \\
-&\quad + \beta_{\text{seed}} \cdot z(\text{seed\_diff}_i) \\
-&\quad + \beta_{\text{barthag}} \cdot z(\text{barthag\_logit\_diff}_i) \\
-&\quad + \beta_{\text{AdjOE}} \cdot z(\text{AdjOE\_diff}_i) \\
-&\quad + \beta_{\text{AdjDE}} \cdot z(\text{AdjDE\_diff}_i) \\
-&\quad + \cdots
-\end{aligned}
-$$
-
-More explicitly, the linear predictor contains all active standardized difference columns:
 
 $$
 \begin{aligned}
@@ -412,6 +397,24 @@ In practice this means the model includes round offsets rather than treating rou
 
 ## Posterior Prediction for Winners
 
+### How posterior draws work
+
+The fitted model does not produce one fixed answer for a matchup. It produces a posterior distribution over the model parameters, and then the runtime propagates that uncertainty forward into matchup-specific quantities.
+
+The figure below is an illustrative example, not an actual bracket matchup. Each dot is one posterior draw from a plausible version of the fitted model. The dark line is the mean, and the light bar is the 95% posterior interval.
+
+![Illustrative posterior-draw example](figures/posterior-draws-example.png)
+
+In practice, this works like running the same matchup through many slightly different versions of the fitted model:
+
+1. fit the model once on the historical games
+2. sample one plausible coefficient set from the posterior
+3. plug the matchup features into that coefficient set
+4. get one implied win probability for team A
+5. repeat hundreds or thousands of times
+
+If one draw says `0.68`, another says `0.74`, and another says `0.71`, the output is not trying to pick one of those as the "true" answer. It is summarizing the whole cloud of plausible answers. The mean is the center of that cloud, and the posterior interval shows how wide it is. On the left panel in the figure, draws clustered above `0.50` mean the model is leaning toward team A; on the right panel, the realized total points cluster around the center but still vary because game-to-game scoring noise remains.
+
 ### What is drawn
 
 For a new matchup row, `predict_matchup_rows()` calls:
@@ -425,6 +428,10 @@ p_i^{(1)}, p_i^{(2)}, \ldots, p_i^{(S)}
 $$
 
 where each draw corresponds to one posterior draw of the fitted model parameters.
+
+In other words, if the model is fit with `S` posterior draws, then draw `s` gives one plausible set of coefficients, one implied linear predictor \(\eta_i^{(s)}\), and one implied win probability \(p_i^{(s)}\). The collection \(\{p_i^{(1)}, p_i^{(2)}, \ldots, p_i^{(S)}\}\) is the posterior for the win probability itself.
+
+That is why the output can say something like "team A is 72% likely to win" while also showing a 95% posterior interval. The 72% is the center of the sampled probabilities, and the interval is the range most of those plausible model versions land in.
 
 ### What gets summarized
 
@@ -498,7 +505,19 @@ $$
 &\quad + \beta_1 \cdot \text{same\_conf}_i \\
 &\quad + \beta_2 \cdot z(\text{seed\_sum}_i) \\
 &\quad + \beta_3 \cdot z(\text{seed\_gap}_i) \\
-&\quad + \cdots
+&\quad + \beta_4 \cdot z(\text{barthag\_logit\_sum}_i) \\
+&\quad + \beta_5 \cdot z(\text{barthag\_logit\_gap}_i) \\
+&\quad + \beta_6 \cdot z(\text{AdjOE\_sum}_i) \\
+&\quad + \beta_7 \cdot z(\text{AdjDE\_sum}_i) \\
+&\quad + \beta_8 \cdot z(\text{WAB\_sum}_i) \\
+&\quad + \beta_9 \cdot z(\text{TOR\_sum}_i) \\
+&\quad + \beta_{10} \cdot z(\text{TORD\_sum}_i) \\
+&\quad + \beta_{11} \cdot z(\text{ORB\_sum}_i) \\
+&\quad + \beta_{12} \cdot z(\text{DRB\_sum}_i) \\
+&\quad + \beta_{13} \cdot z(\text{3P\%\_sum}_i) \\
+&\quad + \beta_{14} \cdot z(\text{3P\%D\_sum}_i) \\
+&\quad + \beta_{15} \cdot z(\text{Adj T.\_mean}_i) \\
+&\quad + \beta_{16} \cdot z(\text{Adj T.\_gap}_i)
 \end{aligned}
 $$
 
@@ -519,7 +538,7 @@ In code, that is:
 - `rstanarm::normal(0, 3, autoscale = FALSE)` for fixed effects
 - `rstanarm::normal(140, 30, autoscale = FALSE)` for the intercept
 
-The prior mean of `140` reflects a rough belief that combined scores in NCAA tournament games tend to land around that scale before looking at the matchup-specific predictors.
+The prior mean of `140` reflects a rough belief that combined scores in NCAA tournament games tend to land around that scale before looking at the matchup-specific predictors. In the current historical workbook, completed tournament games average about `141` total points, so `140` is a rounded prior center rather than a precise fitted estimate.
 
 ### Posterior prediction for totals
 
@@ -527,7 +546,12 @@ For totals, the runtime uses:
 
 - `rstanarm::posterior_predict()`
 
-This returns posterior predictive draws for realized total points, not just expected means. Negative draws are truncated to zero before export.
+This returns posterior predictive draws for realized total points, not just expected means. The difference from the winner model is important:
+
+- `posterior_epred()` gives draws for the expected probability of team A winning
+- `posterior_predict()` gives draws for the realized score total, including observation noise around the mean total
+
+So for totals, each posterior draw first implies a mean total \(\mu_i^{(s)}\), then the predictive step samples a realized game total around that mean. In practice, that means the model can say "the expected total is around 141" while still acknowledging that a particular game could land higher or lower because of game-to-game randomness. Negative draws are truncated to zero before export.
 
 The summaries written out include:
 
@@ -607,7 +631,14 @@ $$
 \end{aligned}
 $$
 
-This favors alternates that:
+The denominators here are heuristic scaling constants, not learned coefficients. They keep the additive adjustments on roughly comparable scales so that \(\text{bracket\_log\_prob}\) remains the main driver while the other terms act as controlled nudges:
+
+- \(\log(1 + \text{frequency}) / 3\) gives repeated simulation paths a modest boost without letting raw frequency dominate.
+- \(\text{leverage\_sum} / 25\) keeps the leverage bonus in the same rough range as the other adjustments.
+- \(\text{diff\_count} / 8\) applies a moderate penalty for making a candidate too different from the primary bracket.
+- \(2 \cdot \max(\text{round64\_diff\_count} - 6, 0)\) lets a candidate change a handful of Round of 64 games, then penalizes broader early-round divergence more aggressively.
+
+In general, this favors alternates that:
 
 - appear repeatedly in stochastic exploration
 - have a strong implied bracket probability
@@ -638,19 +669,17 @@ $$
 
 This is a log probability, not a log-odds.
 
-That distinction matters:
+You should generally expect this value to be negative, because it is the sum of logs of probabilities between 0 and 1. Each additional game multiplies another probability into the bracket path, so the total usually moves farther below zero as the bracket gets longer.
 
-- `logit(p) = log(p / (1 - p))` is a log-odds transform for one event
-- `log(p)` is just the log of a probability
-- `bracket_log_prob` sums `log(picked game probability)` across all picked games
+Higher \(\text{bracket\_log\_prob}\) values are better. Because each \(q_j\) is a probability between 0 and 1, each \(\log(q_j)\) term is typically zero or negative, so the total is usually a negative number. Less negative means the bracket is more probable under the model.
 
-So if you see `bracket_log_prob` in outputs, read it as:
+The main use of this value is comparison between brackets, not standalone interpretation. For example, a bracket with \(\text{bracket\_log\_prob} = -10\) is more probable than one with \(-12\), and the difference of 2 log units means about \(\mathrm{e}^2\) times higher probability under the model.
 
-"the log of the implied probability of the entire chosen bracket path under the model"
+The relevant forms are:
 
-not:
-
-"the log-odds of the bracket."
+- \(\text{logit}(p) = \log\!\bigl(p / (1 - p)\bigr)\), the log-odds transform for one event
+- \(\log(p)\), the log of a probability
+- \(\text{bracket\_log\_prob} = \sum_j \log(q_j)\), the log of the implied probability of the entire chosen bracket path under the model
 
 ## Decision Sheet Logic
 
