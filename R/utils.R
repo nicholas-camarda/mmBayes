@@ -1309,6 +1309,7 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- build_decision_sheet(candidates)
+    model_quality_context <- resolve_model_quality_context(backtest = backtest, output_dir = output_dir)
     summary_path <- file.path(output_dir, "bracket_candidates.txt")
     rds_path <- file.path(output_dir, "bracket_candidates.rds")
     decision_sheet_path <- file.path(output_dir, "bracket_decision_sheet.csv")
@@ -1372,7 +1373,8 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
             candidates = candidates,
             backtest = backtest,
             play_in_resolution = play_in_resolution,
-            total_points_predictions = total_points_predictions
+            total_points_predictions = total_points_predictions,
+            model_quality_context = model_quality_context
         ),
         dashboard_path
     )
@@ -1383,7 +1385,8 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
             candidates = candidates,
             backtest = backtest,
             total_points_predictions = total_points_predictions,
-            play_in_resolution = play_in_resolution
+            play_in_resolution = play_in_resolution,
+            model_quality_context = model_quality_context
         ),
         technical_dashboard_path
     )
@@ -1398,7 +1401,10 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
         candidate_csvs = unname(candidate_csv_paths),
         championship_tiebreaker_summary = if (!is.null(total_points_predictions)) tiebreaker_summary_path else NULL,
         championship_tiebreaker_distribution = if (!is.null(total_points_predictions)) championship_distribution_path else NULL,
-        matchup_total_points = if (!is.null(total_points_predictions)) matchup_totals_path else NULL
+        matchup_total_points = if (!is.null(total_points_predictions)) matchup_totals_path else NULL,
+        model_quality_source_label = model_quality_context$source_label %||% NULL,
+        model_quality_source_path = model_quality_context$source_path %||% NULL,
+        model_quality_used_fallback = isTRUE(model_quality_context$used_fallback)
     )
 }
 
@@ -1432,6 +1438,11 @@ save_results <- function(results, output_config) {
         sink()
     }
 
+    model_quality_artifact <- save_model_quality_artifact(
+        backtest = results$backtest,
+        output_dir = output_dir
+    )
+
     decision_outputs <- if (!is.null(results$candidates) && length(results$candidates) > 0) {
         play_in_resolution <- summarize_play_in_resolution(
             current_teams = results$data$current_teams,
@@ -1453,6 +1464,17 @@ save_results <- function(results, output_config) {
         file.copy(decision_outputs$candidate_summary, candidate_summary_path, overwrite = TRUE)
     }
 
+    model_quality_archive_path <- if (!is.null(model_quality_artifact)) model_quality_artifact$archive_path else NULL
+    model_quality_latest_path <- if (!is.null(model_quality_artifact)) model_quality_artifact$latest_path else NULL
+    model_quality_source_label <- if (!is.null(decision_outputs)) decision_outputs$model_quality_source_label %||% NULL else NULL
+    model_quality_source_path <- if (!is.null(decision_outputs)) decision_outputs$model_quality_source_path %||% NULL else NULL
+    model_quality_used_fallback <- if (!is.null(decision_outputs)) isTRUE(decision_outputs$model_quality_used_fallback) else FALSE
+    decision_dashboard_path <- if (!is.null(decision_outputs)) decision_outputs$dashboard %||% NULL else NULL
+    decision_technical_dashboard_path <- if (!is.null(decision_outputs)) decision_outputs$technical_dashboard %||% NULL else NULL
+    decision_sheet_path <- if (!is.null(decision_outputs)) decision_outputs$decision_sheet_path %||% NULL else NULL
+    decision_csv_paths <- if (!is.null(decision_outputs)) decision_outputs$candidate_csvs %||% NULL else NULL
+    decision_rds_path <- if (!is.null(decision_outputs)) decision_outputs$candidates_rds %||% NULL else NULL
+
     ggplot2::ggsave(
         filename = viz_path,
         plot = results$visualization,
@@ -1467,11 +1489,16 @@ save_results <- function(results, output_config) {
         backtest_summary = if (!is.null(results$backtest)) backtest_summary_path else NULL,
         bracket_plot = viz_path,
         candidate_summary = if (!is.null(results$candidates) && length(results$candidates) > 0) candidate_summary_path else NULL,
-        dashboard = decision_outputs$dashboard %||% NULL,
-        technical_dashboard = decision_outputs$technical_dashboard %||% NULL,
-        decision_sheet = decision_outputs$decision_sheet_path %||% NULL,
-        candidate_csvs = decision_outputs$candidate_csvs %||% NULL,
-        candidates_rds = decision_outputs$candidates_rds %||% NULL
+        dashboard = decision_dashboard_path,
+        technical_dashboard = decision_technical_dashboard_path,
+        decision_sheet = decision_sheet_path,
+        candidate_csvs = decision_csv_paths,
+        candidates_rds = decision_rds_path,
+        model_quality_archive = model_quality_archive_path,
+        model_quality_latest = model_quality_latest_path,
+        model_quality_source_label = model_quality_source_label,
+        model_quality_source_path = model_quality_source_path,
+        model_quality_used_fallback = model_quality_used_fallback
     )
 }
 

@@ -253,6 +253,27 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
 
     output_dir <- tempfile(pattern = "mmBayes-decision-output-")
     dir.create(output_dir, recursive = TRUE)
+    fake_quality_backtest <- list(
+        summary = tibble::tibble(
+            mean_log_loss = 0.401,
+            mean_brier = 0.188,
+            mean_accuracy = 0.713,
+            mean_bracket_score = 85.4,
+            mean_correct_picks = 42.7
+        ),
+        calibration = tibble::tibble(
+            mean_predicted = c(0.35, 0.55, 0.75),
+            empirical_rate = c(0.30, 0.58, 0.78),
+            n_games = c(12L, 16L, 10L)
+        )
+    )
+    quality_artifact <- save_model_quality_artifact(fake_quality_backtest, output_dir = output_dir)
+    expect_true(file.exists(quality_artifact$archive_path))
+    expect_true(file.exists(quality_artifact$latest_path))
+    resolved_quality <- resolve_model_quality_context(backtest = NULL, output_dir = output_dir)
+    expect_true(isTRUE(resolved_quality$used_fallback))
+    expect_match(resolved_quality$source_label, "Latest saved model-quality snapshot")
+
     decision_outputs <- save_decision_outputs(
         bracket_year = 2026L,
         candidates = candidates,
@@ -267,6 +288,10 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(file.exists(decision_outputs$championship_tiebreaker_distribution))
     expect_true(file.exists(decision_outputs$matchup_total_points))
     expect_true(file.exists(decision_outputs$technical_dashboard))
+    expect_true(file.exists(file.path(output_dir, "model_quality", "latest_model_quality.rds")))
+    expect_true(any(stringr::str_detect(list.files(file.path(output_dir, "model_quality")), "^model_quality_.*_pid.*\\.rds$")))
+    expect_true(isTRUE(decision_outputs$model_quality_used_fallback))
+    expect_match(decision_outputs$model_quality_source_label, "Latest saved model-quality snapshot")
     expect_true(all(c("inspection_flag", "inspection_level", "predicted_total_median") %in% names(saved_matchup_totals)))
 
     dashboard_html <- create_bracket_dashboard_html(
@@ -277,6 +302,10 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         play_in_resolution = play_in_resolution,
         total_points_predictions = total_predictions
     )
+    expect_match(dashboard_html, "Stable favorite")
+    expect_match(dashboard_html, "Clear edge")
+    expect_match(dashboard_html, "Near coin flip")
+    expect_match(dashboard_html, "Wide interval")
     expect_match(dashboard_html, "<th>winner</th>")
     expect_match(dashboard_html, "<th>winner</th><th>matchup</th>")
     expect_match(dashboard_html, "Championship Tiebreaker")
@@ -329,9 +358,20 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
             n_games = c(12L, 16L, 10L)
         )),
         total_points_predictions = total_predictions,
-        play_in_resolution = play_in_resolution
+        play_in_resolution = play_in_resolution,
+        model_quality_context = resolved_quality
     )
     expect_match(technical_html, "mmBayes Technical Bracket Dashboard")
+    expect_match(technical_html, "How To Read This")
+    expect_match(technical_html, "posterior mean probability")
+    expect_match(technical_html, "Latest saved model-quality snapshot")
+    expect_match(technical_html, "Log loss")
+    expect_match(technical_html, "Brier score")
+    expect_match(technical_html, "Accuracy")
+    expect_match(technical_html, "calibration plot")
+    expect_match(technical_html, "observed win rate")
+    expect_match(technical_html, "Empirical means the observed win rate")
+    expect_match(technical_html, "quality-grid")
     expect_match(technical_html, "Ranked Decision Board")
     expect_match(technical_html, "Round-by-Region Risk Map")
     expect_match(technical_html, "Upset Opportunity Board")

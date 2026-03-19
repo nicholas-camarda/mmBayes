@@ -101,6 +101,15 @@ cat(sprintf("Technical dashboard: %s\n", decision_outputs$technical_dashboard))
 cat(sprintf("Decision sheet: %s\n", decision_outputs$decision_sheet_path))
 cat(sprintf("Summary: %s\n", decision_outputs$candidate_summary))
 cat(sprintf("RDS: %s\n", decision_outputs$candidates_rds))
+if (!is.null(decision_outputs$model_quality_source_label)) {
+    cat(sprintf("Model quality source: %s\n", decision_outputs$model_quality_source_label))
+}
+if (!is.null(decision_outputs$model_quality_source_path)) {
+    cat(sprintf("Model quality path: %s\n", decision_outputs$model_quality_source_path))
+}
+if (isTRUE(decision_outputs$model_quality_used_fallback)) {
+    cat("Model quality: used latest saved snapshot fallback\n")
+}
 for (index in seq_along(decision_outputs$candidate_csvs)) {
     cat(sprintf("Candidate %s CSV: %s\n", index, decision_outputs$candidate_csvs[[index]]))
 }

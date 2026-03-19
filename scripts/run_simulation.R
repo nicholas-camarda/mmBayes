@@ -64,6 +64,18 @@ if (!is.null(results$output$dashboard)) {
 if (!is.null(results$output$technical_dashboard)) {
     cat(sprintf("- Technical dashboard: %s\n", results$output$technical_dashboard))
 }
+if (!is.null(results$output$model_quality_latest)) {
+    cat(sprintf("- Model quality latest: %s\n", results$output$model_quality_latest))
+}
+if (!is.null(results$output$model_quality_archive)) {
+    cat(sprintf("- Model quality archive: %s\n", results$output$model_quality_archive))
+}
+if (!is.null(results$output$model_quality_source_label)) {
+    cat(sprintf("- Model quality source: %s\n", results$output$model_quality_source_label))
+}
+if (isTRUE(results$output$model_quality_used_fallback)) {
+    cat("- Model quality: used latest saved snapshot fallback\n")
+}
 if (!is.null(results$output$decision_sheet)) {
     cat(sprintf("- Decision sheet: %s\n", results$output$decision_sheet))
 }
