@@ -188,4 +188,13 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(all(c("candidate_1_pick", "candidate_2_pick", "candidate_diff_flag", "decision_score") %in% names(decision_sheet)))
     expect_equal(unique(decision_sheet$region), c("East", "South", "Midwest", "West"))
     expect_true(all(decision_sheet$confidence_tier %in% c("Lock", "Lean", "Toss-up", "Volatile")))
+
+    dashboard_html <- create_bracket_dashboard_html(
+        bracket_year = 2026L,
+        decision_sheet = decision_sheet,
+        candidates = candidates,
+        backtest = NULL
+    )
+    expect_match(dashboard_html, "<th>winner</th>")
+    expect_match(dashboard_html, "<th>matchup</th><th>winner</th>")
 })

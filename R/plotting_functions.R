@@ -266,8 +266,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         dplyr::transmute(
             round = as.character(round),
             region = as.character(region),
+            winner = candidate_1_pick,
             matchup = matchup_label,
-            pick = candidate_1_pick,
             favorite_prob = format_probability(win_prob_favorite),
             interval = sprintf("%s to %s", format_probability(ci_lower), format_probability(ci_upper)),
             tier = confidence_tier
