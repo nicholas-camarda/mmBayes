@@ -197,4 +197,27 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     )
     expect_match(dashboard_html, "<th>winner</th>")
     expect_match(dashboard_html, "<th>matchup</th><th>winner</th>")
+    expect_match(dashboard_html, "simulation-based")
+    expect_match(dashboard_html, "Rerun the dashboard on or after the first games for exact placements")
+    safe_pos <- regexpr("Safe Bracket #1 Sequence", dashboard_html, fixed = TRUE)[[1]]
+    alternate_pos <- regexpr("Bracket #2 Sequence", dashboard_html, fixed = TRUE)[[1]]
+    expect_true(safe_pos > 0)
+    expect_true(alternate_pos > safe_pos)
+
+    safe_chunk <- substr(dashboard_html, safe_pos, alternate_pos - 1L)
+    round64_pos <- regexpr("Round of 64", safe_chunk, fixed = TRUE)[[1]]
+    round32_pos <- regexpr("Round of 32", safe_chunk, fixed = TRUE)[[1]]
+    sweet16_pos <- regexpr("Sweet 16", safe_chunk, fixed = TRUE)[[1]]
+    elite8_pos <- regexpr("Elite 8", safe_chunk, fixed = TRUE)[[1]]
+    finalfour_pos <- regexpr("Final Four", safe_chunk, fixed = TRUE)[[1]]
+    championship_pos <- regexpr("Championship", safe_chunk, fixed = TRUE)[[1]]
+    firstfour_pos <- regexpr("First Four", safe_chunk, fixed = TRUE)[[1]]
+
+    expect_true(round64_pos > 0)
+    expect_true(round64_pos < round32_pos)
+    expect_true(round32_pos < sweet16_pos)
+    expect_true(sweet16_pos < elite8_pos)
+    expect_true(elite8_pos < finalfour_pos)
+    expect_true(finalfour_pos < championship_pos)
+    expect_true(championship_pos < firstfour_pos)
 })

@@ -257,21 +257,28 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             why = alternate_rationale
         )
 
-    bracket_view <- decision_sheet %>%
-        dplyr::mutate(
-            region = factor(region, levels = bracket_region_levels()),
-            round = factor(round, levels = round_levels())
-        ) %>%
-        dplyr::arrange(region, round, matchup_number) %>%
-        dplyr::transmute(
-            round = as.character(round),
-            region = as.character(region),
-            winner = candidate_1_pick,
-            matchup = matchup_label,
-            favorite_prob = format_probability(win_prob_favorite),
-            interval = sprintf("%s to %s", format_probability(ci_lower), format_probability(ci_upper)),
-            tier = confidence_tier
-        )
+    build_sequence_view <- function(matchup_column, winner_column) {
+        sequence_round_levels <- c("Round of 64", "Round of 32", "Sweet 16", "Elite 8", "Final Four", "Championship", "First Four")
+        sequence_region_levels <- c("East", "South", "West", "Midwest")
+
+        decision_sheet %>%
+            dplyr::mutate(
+                round = factor(round, levels = sequence_round_levels),
+                region = factor(region, levels = sequence_region_levels)
+            ) %>%
+            dplyr::arrange(round, region, matchup_number) %>%
+            dplyr::transmute(
+                round = as.character(round),
+                region = as.character(region),
+
+                winner = .data[[winner_column]],
+                matchup = .data[[matchup_column]],
+                tier = confidence_tier
+            )
+    }
+
+    safe_bracket_view <- build_sequence_view("matchup_label", "candidate_1_pick")
+    alternate_bracket_view <- build_sequence_view("candidate_2_matchup", "candidate_2_pick")
 
     calibration_summary <- if (!is.null(backtest) && !is.null(backtest$summary) && nrow(backtest$summary) > 0) {
         backtest$summary %>%
@@ -311,6 +318,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".lede{max-width:920px;color:#3f3f46;margin:8px 0 20px 0;}",
         ".card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}",
         ".candidate-card,.panel{background:white;border:1px solid #d6d3d1;border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,0.03);}",
+        ".warning-panel{background:#fff7e6;border:1px solid #f2c66d;color:#6b4f12;}",
+        ".warning-panel strong{display:block;margin-bottom:4px;}",
         ".candidate-type{text-transform:uppercase;font-size:11px;letter-spacing:0.08em;color:#57534e;}",
         ".dashboard-table{width:100%;border-collapse:collapse;font-size:13px;background:white;}",
         ".dashboard-table th,.dashboard-table td{border:1px solid #e7e5e4;padding:8px 10px;vertical-align:top;text-align:left;}",
@@ -323,6 +332,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<h1>mmBayes Bracket Decision Console</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year),
         ". Use Candidate 1 as the safest expected-value bracket and Candidate 2 as the bounded-risk alternate. The tables below surface the hardest calls first and show where the alternate bracket meaningfully diverges.</p>",
+        "<div class='panel warning-panel'><strong>Important:</strong> this review is simulation-based. Play-in results can change later-round matchups, so the bracket path may not match ESPN's pre-game bracket view until tournament start day. Rerun the dashboard on or after the first games for exact placements.</div>",
         "<div class='card-grid'>", candidate_cards, "</div>",
         "<h2>Hardest Decisions</h2>",
         "<div class='section-grid'><div class='panel'>",
@@ -333,8 +343,12 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<h2>Candidate Differences</h2><div class='panel'>",
         render_html_table(candidate_diff, max_rows = 20),
         "</div>",
-        "<h2>Bracket-Ordered Review</h2><div class='panel'>",
-        render_html_table(bracket_view),
+        "<h2>Bracket-Ordered Review</h2>",
+        "<div class='panel'><h3>Safe Bracket #1 Sequence</h3>",
+        render_html_table(safe_bracket_view),
+        "</div>",
+        "<div class='panel'><h3>Bracket #2 Sequence</h3>",
+        render_html_table(alternate_bracket_view),
         "</div>",
         "<h2>Calibration Snapshot</h2><div class='panel'>",
         render_html_table(calibration_summary),

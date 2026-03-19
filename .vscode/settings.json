@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^python3 - <<'PY'\nfrom pathlib import Path\ntext = Path\\('output/bracket_dashboard\\.html'\\)\\.read_text\\(\\)\nfor needle in \\['simulation-based', 'rerun the dashboard on or after the first games for exact placements'\\]:\n    print\\(needle, needle in text\\)\nPY$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
