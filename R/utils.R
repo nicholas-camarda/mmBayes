@@ -86,6 +86,7 @@ team_name_aliases <- function() {
         "mcneese" = "McNeese State",
         "mcneesest" = "McNeese State",
         "miamifl" = "Miami (FL)",
+        "miamioh" = "Miami OH",
         "michiganst" = "Michigan State",
         "mississippi" = "Mississippi",
         "mississippist" = "Mississippi State",

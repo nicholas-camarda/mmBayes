@@ -52,6 +52,9 @@ back to a different modeling path.
 ## Documentation
 
 - [Methods and Interpretation Guide](docs/methods-and-interpretation.md)
+  This is the main technical reference for the active runtime, including data
+  sources, feature engineering, Bayesian likelihoods and priors, LaTeX model
+  equations, posterior summaries, and bracket decision logic.
 - [Docs Index](docs/README.md)
 
 ## Modeling Design

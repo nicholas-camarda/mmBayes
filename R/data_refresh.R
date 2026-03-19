@@ -712,6 +712,254 @@ scrape_tournament_results <- function(year, allow_empty = FALSE) {
     parsed_results
 }
 
+#' Return candidate ESPN scoreboard dates for First Four fallback
+#'
+#' @param bracket_year The active bracket year.
+#'
+#' @return A character vector of `YYYYMMDD` date keys covering the First Four
+#'   window.
+#' @keywords internal
+first_four_scoreboard_dates <- function(bracket_year) {
+    c(
+        sprintf("%s0317", bracket_year),
+        sprintf("%s0318", bracket_year)
+    )
+}
+
+#' Scrape completed First Four results from the ESPN scoreboard API
+#'
+#' @param bracket_year The active bracket year.
+#' @param team_features A canonical team feature table used to recover bracket
+#'   regions and seeds.
+#' @param date_values Optional character vector of scoreboard dates in
+#'   `YYYYMMDD` format.
+#'
+#' @return A canonical game-results table containing any completed First Four
+#'   games exposed by ESPN.
+#' @keywords internal
+scrape_espn_first_four_results <- function(bracket_year, team_features, date_values = first_four_scoreboard_dates(bracket_year)) {
+    current_teams <- team_features %>%
+        dplyr::filter(Year == as.character(bracket_year)) %>%
+        dplyr::transmute(
+            Year = as.character(Year),
+            Team = canonicalize_team_name(Team),
+            team_key = normalize_team_key(Team),
+            lookup_region = Region,
+            lookup_seed = Seed
+        ) %>%
+        dplyr::distinct()
+
+    if (nrow(current_teams) == 0) {
+        return(empty_game_results_table())
+    }
+
+    events <- purrr::map_dfr(date_values, function(date_value) {
+        url <- sprintf(
+            "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=%s&seasontype=3",
+            date_value
+        )
+        logger::log_info("Checking ESPN scoreboard fallback for current-year First Four results at {url}")
+        payload <- jsonlite::fromJSON(url)
+        payload$events %||% tibble::tibble()
+    })
+
+    if (nrow(events) == 0) {
+        return(empty_game_results_table())
+    }
+
+    parsed <- purrr::map_dfr(seq_len(nrow(events)), function(index) {
+        competition <- events$competitions[[index]]
+        if (is.null(competition) || nrow(competition) == 0) {
+            return(tibble::tibble())
+        }
+        competition <- competition[1, , drop = FALSE]
+        status_completed <- isTRUE(competition$status$type$completed[[1]])
+        if (!status_completed) {
+            return(tibble::tibble())
+        }
+
+        notes_tbl <- competition$notes[[1]] %||% tibble::tibble()
+        headline <- notes_tbl$headline[[1]] %||% events$name[[index]] %||% ""
+        if (!grepl("First Four", headline, fixed = TRUE)) {
+            return(tibble::tibble())
+        }
+
+        competitors <- competition$competitors[[1]]
+        if (is.null(competitors) || nrow(competitors) != 2) {
+            return(tibble::tibble())
+        }
+        competitors <- competitors %>%
+            dplyr::arrange(order)
+
+        region_value <- stringr::str_match(headline, "(East|West|South|Midwest) Region - First Four")[, 2]
+        team_a_name <- canonicalize_team_name(
+            dplyr::coalesce(
+                competitors$team$shortDisplayName[[1]],
+                competitors$team$location[[1]],
+                competitors$team$displayName[[1]]
+            )
+        )
+        team_b_name <- canonicalize_team_name(
+            dplyr::coalesce(
+                competitors$team$shortDisplayName[[2]],
+                competitors$team$location[[2]],
+                competitors$team$displayName[[2]]
+            )
+        )
+        team_a_score <- as.integer(competitors$score[[1]])
+        team_b_score <- as.integer(competitors$score[[2]])
+
+        team_a_lookup <- current_teams %>%
+            dplyr::filter(team_key == normalize_team_key(team_a_name))
+        team_b_lookup <- current_teams %>%
+            dplyr::filter(team_key == normalize_team_key(team_b_name))
+
+        if (nrow(team_a_lookup) != 1 || nrow(team_b_lookup) != 1) {
+            return(tibble::tibble())
+        }
+
+        tibble::tibble(
+            Year = as.character(bracket_year),
+            region = "First Four",
+            round = "First Four",
+            game_index = NA_integer_,
+            teamA = team_a_name,
+            teamB = team_b_name,
+            teamA_seed = as.integer(team_a_lookup$lookup_seed[[1]]),
+            teamB_seed = as.integer(team_b_lookup$lookup_seed[[1]]),
+            teamA_score = team_a_score,
+            teamB_score = team_b_score,
+            total_points = as.integer(team_a_score + team_b_score),
+            winner = ifelse(team_a_score > team_b_score, team_a_name, team_b_name),
+            play_in_region = dplyr::coalesce(region_value, team_a_lookup$lookup_region[[1]], team_b_lookup$lookup_region[[1]]),
+            slot_seed = dplyr::coalesce(as.integer(team_a_lookup$lookup_seed[[1]]), as.integer(team_b_lookup$lookup_seed[[1]]))
+        )
+    })
+
+    if (nrow(parsed) == 0) {
+        return(empty_game_results_table())
+    }
+
+    parsed %>%
+        dplyr::arrange(play_in_region, slot_seed, teamA, teamB) %>%
+        dplyr::mutate(game_index = dplyr::row_number()) %>%
+        dplyr::select(
+            Year,
+            region,
+            round,
+            game_index,
+            teamA,
+            teamB,
+            teamA_seed,
+            teamB_seed,
+            teamA_score,
+            teamB_score,
+            total_points,
+            winner
+        )
+}
+
+#' Fill missing current-year First Four rows with fallback results
+#'
+#' @param game_results A canonical game-results table.
+#' @param team_features A canonical team feature table.
+#' @param bracket_year The active bracket year.
+#' @param fallback_results Optional canonical First Four result rows to merge in
+#'   place of a live fallback scrape.
+#'
+#' @return The game-results table with missing current-year First Four slots
+#'   filled when fallback results are available.
+#' @keywords internal
+fill_current_year_first_four_results <- function(game_results, team_features, bracket_year, fallback_results = NULL) {
+    bracket_year <- as.character(bracket_year)
+    current_teams <- team_features %>%
+        dplyr::filter(Year == bracket_year)
+
+    if (nrow(current_teams) == 0) {
+        return(game_results)
+    }
+
+    expected_slots <- current_teams %>%
+        dplyr::count(Region, Seed, name = "n") %>%
+        dplyr::filter(n > 1L) %>%
+        nrow()
+
+    current_results <- game_results %>%
+        dplyr::filter(Year == bracket_year, round == "First Four")
+
+    if (nrow(current_results) >= expected_slots) {
+        return(game_results)
+    }
+
+    fallback_results <- fallback_results %||% scrape_espn_first_four_results(bracket_year, team_features)
+    if (nrow(fallback_results) == 0) {
+        return(game_results)
+    }
+
+    team_lookup <- current_teams %>%
+        dplyr::transmute(
+            Year = as.character(Year),
+            team_key = normalize_team_key(Team),
+            lookup_region = Region,
+            lookup_seed = Seed
+        ) %>%
+        dplyr::distinct()
+
+    existing_with_slot <- current_results %>%
+        dplyr::mutate(
+            source_priority = 1L,
+            teamA_key = normalize_team_key(teamA),
+            teamB_key = normalize_team_key(teamB)
+        ) %>%
+        dplyr::left_join(
+            team_lookup %>% dplyr::rename(teamA_region = lookup_region, teamA_lookup_seed = lookup_seed),
+            by = c("Year", "teamA_key" = "team_key")
+        ) %>%
+        dplyr::left_join(
+            team_lookup %>% dplyr::rename(teamB_region = lookup_region, teamB_lookup_seed = lookup_seed),
+            by = c("Year", "teamB_key" = "team_key")
+        ) %>%
+        dplyr::mutate(
+            play_in_region = dplyr::coalesce(teamA_region, teamB_region),
+            slot_seed = dplyr::coalesce(teamA_seed, teamB_seed, teamA_lookup_seed, teamB_lookup_seed)
+        )
+
+    fallback_with_slot <- fallback_results %>%
+        dplyr::mutate(
+            source_priority = 2L,
+            play_in_region = team_lookup$lookup_region[match(normalize_team_key(teamA), team_lookup$team_key)],
+            slot_seed = team_lookup$lookup_seed[match(normalize_team_key(teamA), team_lookup$team_key)]
+        )
+
+    merged_current <- dplyr::bind_rows(existing_with_slot, fallback_with_slot) %>%
+        dplyr::filter(!is.na(play_in_region), !is.na(slot_seed)) %>%
+        dplyr::arrange(play_in_region, slot_seed, source_priority) %>%
+        dplyr::group_by(play_in_region, slot_seed) %>%
+        dplyr::slice(1) %>%
+        dplyr::ungroup() %>%
+        dplyr::arrange(play_in_region, slot_seed) %>%
+        dplyr::mutate(game_index = dplyr::row_number()) %>%
+        dplyr::select(
+            Year,
+            region,
+            round,
+            game_index,
+            teamA,
+            teamB,
+            teamA_seed,
+            teamB_seed,
+            teamA_score,
+            teamB_score,
+            total_points,
+            winner
+        )
+
+    historical_results <- game_results %>%
+        dplyr::filter(!(Year == bracket_year & round == "First Four"))
+
+    dplyr::bind_rows(historical_results, merged_current)
+}
+
 #' Refresh canonical tournament data files
 #'
 #' @param start_year Optional starting year for the refresh window.
@@ -764,6 +1012,11 @@ update_tournament_data <- function(start_year = NULL, bracket_year = as.integer(
     logger::log_info("Refreshing current-year First Four results for {bracket_year} when available")
     current_year_results <- scrape_tournament_results(bracket_year, allow_empty = TRUE)
     tournament_results <- dplyr::bind_rows(tournament_results, current_year_results)
+    tournament_results <- fill_current_year_first_four_results(
+        game_results = tournament_results,
+        team_features = team_features,
+        bracket_year = bracket_year
+    )
 
     logger::log_info("Running canonical data quality checks")
     assert_canonical_data_quality(team_features, tournament_results)

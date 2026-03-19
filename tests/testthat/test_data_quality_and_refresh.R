@@ -217,6 +217,55 @@ test_that("quality gates reject score rows with inconsistent totals", {
     )
 })
 
+test_that("current-year First Four fallback fills unresolved slots from a secondary source", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    historical_results <- make_fixture_game_results(team_data, history_years = 2024)
+    partial_current_results <- tibble::tibble(
+        Year = "2025",
+        region = "First Four",
+        round = "First Four",
+        game_index = 1L,
+        teamA = "East_11_2025",
+        teamB = "East_11_2025_playin",
+        teamA_seed = 11L,
+        teamB_seed = 11L,
+        teamA_score = 71L,
+        teamB_score = 68L,
+        total_points = 139L,
+        winner = "East_11_2025"
+    )
+    fallback_results <- tibble::tibble(
+        Year = "2025",
+        region = "First Four",
+        round = "First Four",
+        game_index = 99L,
+        teamA = "Midwest_16_2025",
+        teamB = "Midwest_16_2025_playin",
+        teamA_seed = 16L,
+        teamB_seed = 16L,
+        teamA_score = 65L,
+        teamB_score = 61L,
+        total_points = 126L,
+        winner = "Midwest_16_2025"
+    )
+
+    merged <- fill_current_year_first_four_results(
+        game_results = dplyr::bind_rows(historical_results, partial_current_results),
+        team_features = team_data,
+        bracket_year = 2025L,
+        fallback_results = fallback_results
+    )
+
+    current_play_in <- merged %>%
+        dplyr::filter(Year == "2025", round == "First Four") %>%
+        dplyr::arrange(game_index)
+
+    expect_equal(nrow(current_play_in), 2L)
+    expect_true(any(current_play_in$winner == "East_11_2025"))
+    expect_true(any(current_play_in$winner == "Midwest_16_2025"))
+    expect_true(all(current_play_in$total_points == current_play_in$teamA_score + current_play_in$teamB_score))
+})
+
 test_that("parser handles no-contest bracket slots without shifting later rounds", {
     west_lines <- c(
         purrr::map_chr(seq_len(7), function(idx) {
