@@ -6,7 +6,7 @@ library(logger)
 #'   project config.
 #'
 #' @return A result bundle containing loaded data, fitted model, backtests,
-#'   simulation outputs, visualization, and saved file paths.
+#'   simulation outputs, candidate artifacts, and saved file paths.
 #' @export
 run_tournament_simulation <- function(config = NULL) {
     config <- config %||% load_project_config()
@@ -76,8 +76,6 @@ run_tournament_simulation <- function(config = NULL) {
         total_points_model = total_points_model,
         draws = config$model$n_draws
     )
-    logger::log_info("Rendering visualization")
-    visualization <- create_tournament_visualization(simulation_results)
 
     result_bundle <- list(
         bracket_year = data$bracket_year,
@@ -90,7 +88,6 @@ run_tournament_simulation <- function(config = NULL) {
         decision_sheet = decision_sheet,
         total_points_predictions = total_points_predictions,
         final_four = simulation_results$final_four,
-        visualization = visualization,
         output = list(log_path = run_log_path)
     )
 

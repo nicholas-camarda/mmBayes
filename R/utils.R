@@ -1423,7 +1423,6 @@ save_results <- function(results, output_config) {
     rds_path <- file.path(output_dir, paste0(prefix, ".rds"))
     model_summary_path <- file.path(output_dir, paste0(prefix, "_model_summary.txt"))
     backtest_summary_path <- file.path(output_dir, paste0(prefix, "_backtest_summary.txt"))
-    viz_path <- file.path(output_dir, paste0(prefix, "_bracket.png"))
     candidate_summary_path <- file.path(output_dir, paste0(prefix, "_candidate_brackets.txt"))
 
     saveRDS(results, rds_path)
@@ -1475,19 +1474,10 @@ save_results <- function(results, output_config) {
     decision_csv_paths <- if (!is.null(decision_outputs)) decision_outputs$candidate_csvs %||% NULL else NULL
     decision_rds_path <- if (!is.null(decision_outputs)) decision_outputs$candidates_rds %||% NULL else NULL
 
-    ggplot2::ggsave(
-        filename = viz_path,
-        plot = results$visualization,
-        width = 14,
-        height = 10,
-        dpi = 300
-    )
-
     list(
         results = rds_path,
         model_summary = model_summary_path,
         backtest_summary = if (!is.null(results$backtest)) backtest_summary_path else NULL,
-        bracket_plot = viz_path,
         candidate_summary = if (!is.null(results$candidates) && length(results$candidates) > 0) candidate_summary_path else NULL,
         dashboard = decision_dashboard_path,
         technical_dashboard = decision_technical_dashboard_path,
