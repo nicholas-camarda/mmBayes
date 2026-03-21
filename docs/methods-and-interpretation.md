@@ -463,7 +463,7 @@ $$
 
 where each draw corresponds to one posterior draw of the fitted model parameters.
 
-In other words, if the model is fit with `S` posterior draws, then draw `s` gives one plausible set of coefficients, one implied linear predictor \(\eta_i^{(s)}\), and one implied win probability \(p_i^{(s)}\). The collection \(\{p_i^{(1)}, p_i^{(2)}, \ldots, p_i^{(S)}\}\) is the posterior for the win probability itself.
+In other words, if the model is fit with `S` posterior draws, then draw `s` gives one plausible set of coefficients, one implied linear predictor $\eta_i^{(s)}$, and one implied win probability $p_i^{(s)}$. The collection $\{p_i^{(1)}, p_i^{(2)}, \ldots, p_i^{(S)}\}$ is the posterior for the win probability itself.
 
 That is why the output can say something like "team A is 72% likely to win" while also showing a 95% posterior interval. The 72% is the center of the sampled probabilities, and the interval is the range most of those plausible model versions land in.
 
@@ -585,7 +585,7 @@ This returns posterior predictive draws for realized total points, not just expe
 - `posterior_epred()` gives draws for the expected probability of team A winning
 - `posterior_predict()` gives draws for the realized score total, including observation noise around the mean total
 
-So for totals, each posterior draw first implies a mean total \(\mu_i^{(s)}\), then the predictive step samples a realized game total around that mean. In practice, that means the model can say "the expected total is around 141" while still acknowledging that a particular game could land higher or lower because of game-to-game randomness. Negative draws are truncated to zero before export.
+So for totals, each posterior draw first implies a mean total $\mu_i^{(s)}$, then the predictive step samples a realized game total around that mean. In practice, that means the model can say "the expected total is around 141" while still acknowledging that a particular game could land higher or lower because of game-to-game randomness. Negative draws are truncated to zero before export.
 
 The summaries written out include:
 
@@ -665,12 +665,12 @@ $$
 \end{aligned}
 $$
 
-The denominators here are heuristic scaling constants, not learned coefficients. They keep the additive adjustments on roughly comparable scales so that \(\text{bracket\_log\_prob}\) remains the main driver while the other terms act as controlled nudges:
+The denominators here are heuristic scaling constants, not learned coefficients. They keep the additive adjustments on roughly comparable scales so that $\text{bracket\_log\_prob}$ remains the main driver while the other terms act as controlled nudges:
 
-- \(\log(1 + \text{frequency}) / 3\) gives repeated simulation paths a modest boost without letting raw frequency dominate.
-- \(\text{leverage\_sum} / 25\) keeps the leverage bonus in the same rough range as the other adjustments.
-- \(\text{diff\_count} / 8\) applies a moderate penalty for making a candidate too different from the primary bracket.
-- \(2 \cdot \max(\text{round64\_diff\_count} - 6, 0)\) lets a candidate change a handful of Round of 64 games, then penalizes broader early-round divergence more aggressively.
+- $\log(1 + \text{frequency}) / 3$ gives repeated simulation paths a modest boost without letting raw frequency dominate.
+- $\text{leverage\_sum} / 25$ keeps the leverage bonus in the same rough range as the other adjustments.
+- $\text{diff\_count} / 8$ applies a moderate penalty for making a candidate too different from the primary bracket.
+- $2 \cdot \max(\text{round64\_diff\_count} - 6, 0)$ lets a candidate change a handful of Round of 64 games, then penalizes broader early-round divergence more aggressively.
 
 In general, this favors alternates that:
 
@@ -705,15 +705,15 @@ This is a log probability, not a log-odds.
 
 You should generally expect this value to be negative, because it is the sum of logs of probabilities between 0 and 1. Each additional game multiplies another probability into the bracket path, so the total usually moves farther below zero as the bracket gets longer.
 
-Higher \(\text{bracket\_log\_prob}\) values are better. Because each \(q_j\) is a probability between 0 and 1, each \(\log(q_j)\) term is typically zero or negative, so the total is usually a negative number. Less negative means the bracket is more probable under the model.
+Higher $\text{bracket\_log\_prob}$ values are better. Because each $q_j$ is a probability between 0 and 1, each $\log(q_j)$ term is typically zero or negative, so the total is usually a negative number. Less negative means the bracket is more probable under the model.
 
-The main use of this value is comparison between brackets, not standalone interpretation. For example, a bracket with \(\text{bracket\_log\_prob} = -10\) is more probable than one with \(-12\), and the difference of 2 log units means about \(\mathrm{e}^2\) times higher probability under the model.
+The main use of this value is comparison between brackets, not standalone interpretation. For example, a bracket with $\text{bracket\_log\_prob} = -10$ is more probable than one with $-12$, and the difference of 2 log units means about $\mathrm{e}^2$ times higher probability under the model.
 
 The relevant forms are:
 
-- \(\text{logit}(p) = \log\!\bigl(p / (1 - p)\bigr)\), the log-odds transform for one event
-- \(\log(p)\), the log of a probability
-- \(\text{bracket\_log\_prob} = \sum_j \log(q_j)\), the log of the implied probability of the entire chosen bracket path under the model
+- $\text{logit}(p) = \log\!\bigl(p / (1 - p)\bigr)$, the log-odds transform for one event
+- $\log(p)$, the log of a probability
+- $\text{bracket\_log\_prob} = \sum_j \log(q_j)$, the log of the implied probability of the entire chosen bracket path under the model
 
 ## Decision Sheet Logic
 
