@@ -33,7 +33,8 @@ default_project_config <- function() {
             interaction_terms = character(0),
             prior_type = "normal",
             random_seed = 42,
-            n_draws = 1000
+            n_draws = 1000,
+            market_odds_weight = 0.3
         ),
         output = list(
             path = "output",

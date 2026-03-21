@@ -9,6 +9,8 @@ This document describes the active `mmBayes` runtime as implemented in:
 - `R/model_fitting.R`
 - `R/simulation_functions.R`
 - `R/utils.R`
+- `R/betting_lines.R`
+- `R/bracket_optimizer.R`
 
 It is meant to answer four questions clearly:
 
@@ -936,3 +938,101 @@ If you are trying to understand a run from raw data to final outputs, read in th
 6. Bracket Simulation
 7. Candidate Brackets
 8. Decision Sheet Logic
+
+---
+
+## Betting Lines Integration
+
+The `R/betting_lines.R` module adds optional market-signal support on top of
+the Bayesian posterior probabilities.
+
+### Odds conversion helpers
+
+| Function | Input | Output |
+| --- | --- | --- |
+| `american_odds_to_prob(odds)` | American moneyline (+/−) | Raw implied probability |
+| `decimal_odds_to_prob(odds)` | Decimal / European odds (> 1) | Raw implied probability |
+| `remove_vig(prob_a, prob_b)` | Two raw implied probabilities | Named list of fair probs that sum to 1 |
+
+### Blending model and market
+
+`blend_market_odds(posterior_prob, market_implied_prob, weight = 0.3)` computes
+a simple convex combination:
+
+$$p_{\text{blend}} = (1 - w)\,p_{\text{posterior}} + w\,p_{\text{market}}$$
+
+`weight = 0` returns the pure posterior; `weight = 1` returns the pure market
+estimate.  The default `0.3` reflects a prior belief that the market contributes
+roughly 30 % of the signal.  This can be tuned via `config$model$market_odds_weight`.
+
+### Attaching market odds to a matchup table
+
+`attach_market_odds(matchups, market_odds, weight)` accepts any of three
+input formats in `market_odds`:
+
+- `odds_a` / `odds_b` — raw American moneyline odds
+- `decimal_a` / `decimal_b` — raw decimal odds
+- `implied_prob_a` — a pre-computed fair probability for team A
+
+It joins on `teamA`/`teamB` (after team-name canonicalization) and appends
+`market_prob_A`, `market_prob_B`, and `blended_prob_A` columns.  Matchups
+without a market-odds row retain the raw posterior as `blended_prob_A`.
+
+---
+
+## Bayesian Bracket Path Optimisation
+
+The `R/bracket_optimizer.R` module answers the question: *"given the posterior
+predictive distribution of game outcomes, which bracket picks maximise expected
+bracket score?"*
+
+### The bracket as a directed acyclic graph
+
+A standard bracket is a binary elimination tree: 64 leaf nodes (teams), 63
+internal nodes (games), and one root (the champion).  Filling out a bracket
+means choosing a winner at every internal node.
+
+A pick at slot $(r, g)$ earns points if and only if:
+
+1. the chosen team **reaches** round $r$ (survives all earlier games in its
+   half of the bracket), and
+2. the chosen team **wins** game $g$ once it arrives there.
+
+These two conditions are jointly captured by the *slot-win probability*
+$$P(\text{team } t \text{ wins slot } (r,g))$$
+
+### Monte Carlo estimation of slot-win probabilities
+
+`compute_slot_win_probabilities()` runs $N$ stochastic bracket simulations and
+records, for every slot, how often each team emerges as the winner.  These
+empirical frequencies are Monte Carlo estimates of $P(t \text{ wins slot } (r,g))$,
+integrating over the full conditional bracket structure.  Increasing $N$ reduces
+Monte Carlo noise; the default of 400 simulations is sufficient for stable
+pick selection with low-iteration Stan fits.
+
+### Optimal bracket selection
+
+Under an additive expected-score objective, the optimal pick at slot $(r,g)$ is:
+
+$$\hat{t}^*(r,g) = \arg\max_t \; w_r \cdot P(t \text{ wins slot } (r,g))$$
+
+where $w_r$ is the round scoring weight from `default_round_weights()`.
+Because $w_r$ is constant for a given slot, this reduces to simply picking the
+team with the highest slot-win probability at each slot.
+
+`find_optimal_bracket()` implements this selection and also returns the
+expected bracket score:
+
+$$E[\text{bracket score}] = \sum_{(r,g)} w_r \cdot P(\hat{t}^*(r,g) \text{ wins slot } (r,g))$$
+
+### Comparison with the deterministic bracket
+
+The deterministic candidate (candidate 1) takes the posterior-mean winner in
+every matchup.  The optimal bracket differs in late rounds: a team with a
+strong chance of reaching a particular round but a modest per-game win
+probability can outperform a team with a high per-game probability that may
+never arrive in that slot.
+
+`compare_optimal_to_candidate()` aligns the two pick tables slot-by-slot and
+flags disagreements, making it straightforward to see where the Bayesian
+optimisation diverges from the deterministic approach.
