@@ -22,13 +22,15 @@ run_tournament_simulation <- function(config = NULL) {
     logger::log_info("Loading tournament data")
     data <- load_tournament_data(config)
     logger::log_info("Fitting tournament model")
+    interaction_terms <- as.character(unlist(config$model$interaction_terms %||% character(0)))
+    if (length(interaction_terms) == 0L) interaction_terms <- NULL
     model_results <- fit_tournament_model(
         historical_matchups = data$historical_matchups,
         predictor_columns = config$model$required_predictors,
         random_seed = config$model$random_seed,
         cache_dir = model_cache_dir,
         use_cache = use_model_cache,
-        interaction_terms = config$model$interaction_terms %||% NULL,
+        interaction_terms = interaction_terms,
         prior_type = config$model$prior_type %||% "normal"
     )
     logger::log_info("Fitting total-points model")
@@ -48,7 +50,7 @@ run_tournament_simulation <- function(config = NULL) {
             draws = config$model$n_draws,
             cache_dir = model_cache_dir,
             use_cache = use_model_cache,
-            interaction_terms = config$model$interaction_terms %||% NULL,
+            interaction_terms = interaction_terms,
             prior_type = config$model$prior_type %||% "normal"
         )
     } else {

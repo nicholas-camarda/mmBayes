@@ -157,12 +157,22 @@ build_model_formula <- function(predictor_columns, outcome_column = "actual_outc
 #'   uses a weakly informative Normal(0, 1.5) prior.  `"hs"` uses a regularized
 #'   horseshoe prior that automatically shrinks less-informative coefficients
 #'   toward zero, which can improve calibration when many correlated predictors
-#'   are present.
+#'   are present.  Any other value raises an error.
 #'
 #' @return A list of prior specifications for fixed effects and the intercept.
 #' @export
 configure_priors <- function(prior_type = "normal") {
     require_bayesian_packages()
+
+    valid_prior_types <- c("normal", "hs")
+
+    if (!prior_type %in% valid_prior_types) {
+        stop_with_message(sprintf(
+            "Unknown prior_type '%s'. Must be one of: %s.",
+            prior_type,
+            paste(valid_prior_types, collapse = ", ")
+        ))
+    }
 
     if (identical(prior_type, "hs")) {
         list(

@@ -6,9 +6,9 @@ test_that("build_model_formula includes interaction terms when provided", {
     expect_true(inherits(f_no_interaction, "formula"))
     expect_true(inherits(f_with_interaction, "formula"))
 
-    f_str <- deparse(f_with_interaction)
+    f_str <- paste(deparse(f_with_interaction), collapse = " ")
     expect_true(grepl("barthag_logit_diff:seed_diff", f_str, fixed = TRUE))
-    expect_false(grepl("barthag_logit_diff:seed_diff", deparse(f_no_interaction), fixed = TRUE))
+    expect_false(grepl("barthag_logit_diff:seed_diff", paste(deparse(f_no_interaction), collapse = " "), fixed = TRUE))
 })
 
 test_that("build_model_formula with NULL interaction_terms equals formula without them", {
@@ -23,7 +23,7 @@ test_that("build_model_formula supports multiple interaction terms", {
     preds <- c("round", "seed_diff", "barthag_logit_diff", "WAB_diff")
     terms <- c("barthag_logit_diff:seed_diff", "barthag_logit_diff:WAB_diff")
     f <- build_model_formula(preds, interaction_terms = terms)
-    f_str <- deparse(f)
+    f_str <- paste(deparse(f), collapse = " ")
     expect_true(grepl("barthag_logit_diff:seed_diff", f_str, fixed = TRUE))
     expect_true(grepl("barthag_logit_diff:WAB_diff", f_str, fixed = TRUE))
 })
@@ -40,6 +40,11 @@ test_that("configure_priors returns horseshoe priors when prior_type is 'hs'", {
     expect_true(all(c("fixed", "intercept") %in% names(priors_hs)))
     priors_normal <- configure_priors(prior_type = "normal")
     expect_false(identical(priors_hs$fixed, priors_normal$fixed))
+})
+
+test_that("configure_priors errors on unknown prior_type", {
+    expect_error(configure_priors(prior_type = "horsehoe"), regexp = "Unknown prior_type")
+    expect_error(configure_priors(prior_type = "laplace"), regexp = "Unknown prior_type")
 })
 
 test_that("fit_tournament_model stores interaction_terms and prior_type in result bundle", {
@@ -73,7 +78,7 @@ test_that("fit_tournament_model stores interaction_terms and prior_type in resul
     expect_equal(model_results$interaction_terms, "barthag_logit_diff:seed_diff")
     expect_equal(model_results$prior_type, "normal")
 
-    f_str <- deparse(model_results$formula)
+    f_str <- paste(deparse(model_results$formula), collapse = " ")
     expect_true(grepl("barthag_logit_diff:seed_diff", f_str, fixed = TRUE))
 })
 
