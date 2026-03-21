@@ -126,33 +126,55 @@ prepare_model_data <- function(data, predictor_columns, scaling_reference = NULL
 #'
 #' @param predictor_columns Predictor columns to include in the model.
 #' @param outcome_column Outcome column name.
+#' @param interaction_terms Optional character vector of interaction terms to
+#'   append to the formula (e.g. `"barthag_logit_diff:seed_diff"`).  Each
+#'   element is inserted verbatim so the caller is responsible for correct R
+#'   formula syntax.
 #'
 #' @return A model formula for the requested outcome.
 #' @keywords internal
-build_model_formula <- function(predictor_columns, outcome_column = "actual_outcome") {
+build_model_formula <- function(predictor_columns, outcome_column = "actual_outcome", interaction_terms = NULL) {
     predictor_terms <- predictor_columns[predictor_columns != "round"]
     formula_terms <- c("round", predictor_terms[predictor_terms != "round"])
 
-    stats::as.formula(
-        paste(
-            outcome_column,
-            "~",
-            paste(sprintf("`%s`", formula_terms), collapse = " + ")
-        )
+    base_formula <- paste(
+        outcome_column,
+        "~",
+        paste(sprintf("`%s`", formula_terms), collapse = " + ")
     )
+
+    if (!is.null(interaction_terms) && length(interaction_terms) > 0) {
+        interaction_string <- paste(interaction_terms, collapse = " + ")
+        base_formula <- paste(base_formula, "+", interaction_string)
+    }
+
+    stats::as.formula(base_formula)
 }
 
 #' Configure priors for the matchup model
 #'
+#' @param prior_type Prior type to use for fixed effects.  `"normal"` (default)
+#'   uses a weakly informative Normal(0, 1.5) prior.  `"hs"` uses a regularized
+#'   horseshoe prior that automatically shrinks less-informative coefficients
+#'   toward zero, which can improve calibration when many correlated predictors
+#'   are present.
+#'
 #' @return A list of prior specifications for fixed effects and the intercept.
 #' @export
-configure_priors <- function() {
+configure_priors <- function(prior_type = "normal") {
     require_bayesian_packages()
 
-    list(
-        fixed = rstanarm::normal(0, 1.5, autoscale = FALSE),
-        intercept = rstanarm::normal(0, 2.5, autoscale = TRUE)
-    )
+    if (identical(prior_type, "hs")) {
+        list(
+            fixed = rstanarm::hs(df = 1, df_global = 1, slab_df = 4, slab_scale = 2.5, autoscale = FALSE),
+            intercept = rstanarm::normal(0, 2.5, autoscale = TRUE)
+        )
+    } else {
+        list(
+            fixed = rstanarm::normal(0, 1.5, autoscale = FALSE),
+            intercept = rstanarm::normal(0, 2.5, autoscale = TRUE)
+        )
+    }
 }
 
 #' Build a cache key for a fitted model bundle
@@ -162,16 +184,20 @@ configure_priors <- function() {
 #' @param random_seed Random seed used during fitting.
 #' @param include_diagnostics Whether diagnostics are included in the bundle.
 #' @param model_label Short model label used to namespace the cache entry.
+#' @param interaction_terms Optional interaction terms included in the formula.
+#' @param prior_type Prior type used during fitting.
 #'
 #' @return A cache key suitable for a file name.
 #' @keywords internal
-build_model_fit_cache_key <- function(historical_matchups, predictor_columns, random_seed, include_diagnostics, model_label = "matchup") {
+build_model_fit_cache_key <- function(historical_matchups, predictor_columns, random_seed, include_diagnostics, model_label = "matchup", interaction_terms = NULL, prior_type = "normal") {
     cache_signature <- list(
         model_label = model_label,
         historical_matchups = historical_matchups,
         predictor_columns = predictor_columns,
         random_seed = random_seed,
-        include_diagnostics = include_diagnostics
+        include_diagnostics = include_diagnostics,
+        interaction_terms = interaction_terms %||% character(0),
+        prior_type = prior_type %||% "normal"
     )
 
     signature_file <- tempfile(fileext = ".rds")
@@ -200,17 +226,21 @@ build_model_fit_cache_path <- function(cache_dir, cache_key, model_label = "matc
 #' @param include_diagnostics Whether to compute expensive post-fit diagnostics.
 #' @param cache_dir Optional directory used to store and reload fitted model bundles.
 #' @param use_cache Whether to reuse a cached fit when available.
+#' @param interaction_terms Optional character vector of interaction terms to
+#'   append to the model formula (e.g. `"barthag_logit_diff:seed_diff"`).
+#' @param prior_type Prior type for fixed effects: `"normal"` (default) or
+#'   `"hs"` for a regularized horseshoe prior.
 #'
 #' @return A list containing the fitted Bayesian model, formula, predictors,
 #'   scaling reference, and diagnostics.
 #' @export
-fit_tournament_model <- function(historical_matchups, predictor_columns, random_seed = 123, include_diagnostics = TRUE, cache_dir = NULL, use_cache = TRUE) {
+fit_tournament_model <- function(historical_matchups, predictor_columns, random_seed = 123, include_diagnostics = TRUE, cache_dir = NULL, use_cache = TRUE, interaction_terms = NULL, prior_type = "normal") {
     require_bayesian_packages()
 
     cache_path <- NULL
     if (isTRUE(use_cache) && !is.null(cache_dir)) {
         dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
-        cache_key <- build_model_fit_cache_key(historical_matchups, predictor_columns, random_seed, include_diagnostics, model_label = "matchup")
+        cache_key <- build_model_fit_cache_key(historical_matchups, predictor_columns, random_seed, include_diagnostics, model_label = "matchup", interaction_terms = interaction_terms, prior_type = prior_type)
         cache_path <- build_model_fit_cache_path(cache_dir, cache_key, model_label = "matchup")
         if (file.exists(cache_path)) {
             logger::log_info("Loading cached matchup-level model fit from {cache_path}")
@@ -224,13 +254,14 @@ fit_tournament_model <- function(historical_matchups, predictor_columns, random_
     set.seed(random_seed)
 
     prepared <- prepare_model_data(historical_matchups, predictor_columns, require_outcome = TRUE)
-    formula_input <- build_model_formula(predictor_columns, outcome_column = "actual_outcome")
+    formula_input <- build_model_formula(predictor_columns, outcome_column = "actual_outcome", interaction_terms = interaction_terms)
     chains <- getOption("mmBayes.stan_chains", 4L)
     iter <- getOption("mmBayes.stan_iter", 2000L)
     refresh <- getOption("mmBayes.stan_refresh", 0L)
-    priors <- configure_priors()
+    effective_prior_type <- prior_type %||% "normal"
+    priors <- configure_priors(prior_type = effective_prior_type)
 
-    logger::log_info("Stan settings: chains={chains}, iter={iter}")
+    logger::log_info("Stan settings: chains={chains}, iter={iter}, prior_type={effective_prior_type}")
     model <- rstanarm::stan_glm(
         formula = formula_input,
         data = prepared$data,
@@ -248,6 +279,8 @@ fit_tournament_model <- function(historical_matchups, predictor_columns, random_
         model = model,
         formula = formula_input,
         predictor_columns = predictor_columns,
+        interaction_terms = interaction_terms %||% character(0),
+        prior_type = effective_prior_type,
         scaling_reference = prepared$scaling_reference,
         diagnostics = if (isTRUE(include_diagnostics)) perform_model_diagnostics(model, "bayes") else NULL,
         cache_path = cache_path
@@ -663,11 +696,14 @@ predict_total_points_rows <- function(matchup_rows, model_results, draws = 1000)
 #' @param predictor_columns Predictor columns to include in each backtest fit.
 #' @param random_seed Random seed used during repeated fitting.
 #' @param draws Number of posterior draws used for scoring and simulation.
+#' @param interaction_terms Optional character vector of interaction terms
+#'   forwarded to [fit_tournament_model()].
+#' @param prior_type Prior type forwarded to [fit_tournament_model()].
 #'
 #' @return A list of year-level metrics, predictions, calibration, bracket
 #'   scores, and summary metrics.
 #' @export
-run_rolling_backtest <- function(historical_teams, historical_actual_results, predictor_columns, random_seed = 123, draws = 1000, cache_dir = NULL, use_cache = TRUE) {
+run_rolling_backtest <- function(historical_teams, historical_actual_results, predictor_columns, random_seed = 123, draws = 1000, cache_dir = NULL, use_cache = TRUE, interaction_terms = NULL, prior_type = "normal") {
     years <- sort(unique(as.character(historical_actual_results$Year)))
     if (length(years) < 2) {
         return(list(
@@ -708,7 +744,9 @@ run_rolling_backtest <- function(historical_teams, historical_actual_results, pr
             random_seed = random_seed,
             include_diagnostics = FALSE,
             cache_dir = cache_dir,
-            use_cache = use_cache
+            use_cache = use_cache,
+            interaction_terms = interaction_terms,
+            prior_type = prior_type
         )
 
         holdout_rows <- actual_results_to_matchup_rows(holdout_results)
@@ -762,5 +800,95 @@ run_rolling_backtest <- function(historical_teams, historical_actual_results, pr
         calibration = calibration,
         bracket_scores = bracket_scores_tbl,
         summary = summary_tbl
+    )
+}
+
+#' Compare two model configurations using rolling backtest
+#'
+#' Fits and evaluates two model configurations on the same rolling holdout
+#' splits and returns a side-by-side comparison of their backtest metrics.
+#' This is the primary tool for verifying that a model change improves
+#' performance before promoting it to production.
+#'
+#' @param historical_teams A historical team feature table.
+#' @param historical_actual_results A historical actual-results table with
+#'   joined team features.
+#' @param config_a A list with elements `predictor_columns`, `interaction_terms`
+#'   (optional), and `prior_type` (optional) for the baseline model.
+#' @param config_b A list with the same structure for the candidate model.
+#' @param config_a_label Human-readable label for the baseline model.
+#' @param config_b_label Human-readable label for the candidate model.
+#' @param random_seed Random seed forwarded to each backtest.
+#' @param draws Number of posterior draws forwarded to each backtest.
+#' @param cache_dir Optional cache directory forwarded to each backtest.
+#'
+#' @return A list with elements `config_a`, `config_b`, `delta`, and
+#'   `comparison_table`.  `delta` is a named numeric vector of
+#'   `(config_b metric) - (config_a metric)`; negative deltas for log-loss and
+#'   Brier score and positive deltas for accuracy and bracket-score indicate
+#'   improvement.
+#' @export
+compare_model_configurations <- function(
+    historical_teams,
+    historical_actual_results,
+    config_a,
+    config_b,
+    config_a_label = "Baseline",
+    config_b_label = "Candidate",
+    random_seed = 123,
+    draws = 500,
+    cache_dir = NULL
+) {
+    run_backtest <- function(cfg, label) {
+        logger::log_info("compare_model_configurations: running backtest for '{label}'")
+        run_rolling_backtest(
+            historical_teams = historical_teams,
+            historical_actual_results = historical_actual_results,
+            predictor_columns = cfg$predictor_columns,
+            random_seed = random_seed,
+            draws = draws,
+            cache_dir = cache_dir,
+            use_cache = !is.null(cache_dir),
+            interaction_terms = cfg$interaction_terms,
+            prior_type = cfg$prior_type %||% "normal"
+        )
+    }
+
+    backtest_a <- run_backtest(config_a, config_a_label)
+    backtest_b <- run_backtest(config_b, config_b_label)
+
+    summarize_backtest <- function(bt, label) {
+        if (!model_quality_has_backtest(bt)) {
+            return(tibble::tibble(
+                label = label,
+                mean_log_loss = NA_real_,
+                mean_brier = NA_real_,
+                mean_accuracy = NA_real_,
+                mean_bracket_score = NA_real_,
+                mean_correct_picks = NA_real_
+            ))
+        }
+        dplyr::mutate(bt$summary, label = label) %>%
+            dplyr::select(label, dplyr::everything())
+    }
+
+    summary_a <- summarize_backtest(backtest_a, config_a_label)
+    summary_b <- summarize_backtest(backtest_b, config_b_label)
+
+    metric_cols <- c("mean_log_loss", "mean_brier", "mean_accuracy", "mean_bracket_score", "mean_correct_picks")
+    delta <- stats::setNames(
+        vapply(metric_cols, function(m) {
+            safe_numeric(summary_b[[m]][[1]]) - safe_numeric(summary_a[[m]][[1]])
+        }, numeric(1)),
+        metric_cols
+    )
+
+    comparison_table <- dplyr::bind_rows(summary_a, summary_b)
+
+    list(
+        config_a = list(label = config_a_label, summary = summary_a, backtest = backtest_a),
+        config_b = list(label = config_b_label, summary = summary_b, backtest = backtest_b),
+        delta = delta,
+        comparison_table = comparison_table
     )
 }

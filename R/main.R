@@ -27,7 +27,9 @@ run_tournament_simulation <- function(config = NULL) {
         predictor_columns = config$model$required_predictors,
         random_seed = config$model$random_seed,
         cache_dir = model_cache_dir,
-        use_cache = use_model_cache
+        use_cache = use_model_cache,
+        interaction_terms = config$model$interaction_terms %||% NULL,
+        prior_type = config$model$prior_type %||% "normal"
     )
     logger::log_info("Fitting total-points model")
     total_points_model <- fit_total_points_model(
@@ -45,7 +47,9 @@ run_tournament_simulation <- function(config = NULL) {
             random_seed = config$model$random_seed,
             draws = config$model$n_draws,
             cache_dir = model_cache_dir,
-            use_cache = use_model_cache
+            use_cache = use_model_cache,
+            interaction_terms = config$model$interaction_terms %||% NULL,
+            prior_type = config$model$prior_type %||% "normal"
         )
     } else {
         NULL

@@ -359,6 +359,23 @@ In code, that is:
 - `rstanarm::normal(0, 1.5, autoscale = FALSE)` for fixed effects
 - `rstanarm::normal(0, 2.5, autoscale = TRUE)` for the intercept
 
+### Regularized horseshoe prior (optional)
+
+Setting `prior_type = "hs"` in the model configuration switches the fixed-effect prior to a regularized horseshoe:
+
+$$
+\beta_j \sim \text{Regularized Horseshoe}(\text{df}=1, \text{df\_global}=1, \text{slab\_df}=4, \text{slab\_scale}=2.5)
+$$
+
+The horseshoe is a heavy-tailed shrinkage prior.  Coefficients whose signal is weak are shrunk aggressively toward zero; large coefficients are left relatively unshrunk.  This is useful here because the 14-predictor design matrix contains several highly correlated efficiency metrics.  It helps the model focus on the few predictors with the clearest signal and may reduce overconfident probability estimates for hard-to-call games (e.g. mid-major upsets where seed differentials are deceptive).
+
+To enable horseshoe priors, set the following in `config.yml`:
+
+```yaml
+model:
+  prior_type: "hs"
+```
+
 ### How to interpret the priors
 
 These are weakly informative shrinkage priors.
@@ -380,6 +397,23 @@ So:
 - `\beta = -0.69` means about `0.5x` odds
 
 Because the prior standard deviation is `1.5`, the model allows meaningful effects but still shrinks implausibly large coefficients back toward zero unless the data support them.
+
+### Interaction terms (optional)
+
+Setting `interaction_terms` in the model configuration adds interaction terms to the formula.  These are appended verbatim to the right-hand side of the `stan_glm` formula in the same syntax as base R formulas.
+
+Example: to let the effect of overall quality differential vary by round, add:
+
+```yaml
+model:
+  interaction_terms:
+    - "barthag_logit_diff:round"
+    - "seed_diff:round"
+```
+
+These two interactions capture that the predictive value of team-quality and seeding differences is not constant across rounds.  In early-round matchups (Round of 64, Round of 32), large seed differentials are common but a wider fraction of upsets occur because weaker teams are simply underestimated.  In later rounds the field is leveled and the same quality gap carries different meaning.
+
+The interaction terms receive the same `prior_type` prior as the other fixed effects.
 
 ### Round handling
 
@@ -841,6 +875,42 @@ What it does do is keep the end-to-end chain auditable:
 - explicit priors
 - explicit posterior summaries
 - explicit bracket-selection heuristics
+
+## Model Comparison and Verification
+
+### compare_model_configurations
+
+`compare_model_configurations()` is the primary tool for verifying that a model change improves out-of-sample performance before using it for bracket picks.
+
+It accepts two model configurations (`config_a` for the baseline, `config_b` for the candidate) and runs an independent rolling backtest for each.  Each configuration is a list with:
+
+- `predictor_columns` — required
+- `interaction_terms` — optional character vector
+- `prior_type` — optional, defaults to `"normal"`
+
+The return value contains:
+
+- `comparison_table` — a two-row tibble with per-configuration summary metrics
+- `delta` — a named numeric vector of `(config_b metric) - (config_a metric)`
+- `config_a` / `config_b` — the full backtest bundles for each configuration
+
+Interpreting `delta`:
+
+| Metric | Better direction |
+| --- | --- |
+| `mean_log_loss` | Negative delta (lower is better) |
+| `mean_brier` | Negative delta (lower is better) |
+| `mean_accuracy` | Positive delta (higher is better) |
+| `mean_bracket_score` | Positive delta (higher is better) |
+
+### Recommended improvement workflow
+
+1. Establish the baseline backtest metrics with the current `config.yml` settings.
+2. Define a candidate configuration with the proposed change.
+3. Call `compare_model_configurations()` on your historical data.
+4. Accept the change only if `delta$mean_log_loss < 0` and `delta$mean_brier < 0` consistently.
+5. If the metrics are mixed, prefer the model with lower log-loss since it is a strictly proper scoring rule.
+
 
 ## Quick Glossary
 

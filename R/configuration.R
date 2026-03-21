@@ -30,6 +30,8 @@ default_project_config <- function() {
                 "3P%D_diff",
                 "Adj T._diff"
             ),
+            interaction_terms = character(0),
+            prior_type = "normal",
             random_seed = 42,
             n_draws = 1000
         ),
