@@ -1,13 +1,20 @@
 data/*
 *cache/*
 plots/*
-output/
+
+# Ignore all output except HTML dashboards, run logs, and directory stubs
+output/*
+!output/.gitkeep
+!output/*.html
+!output/logs/
+output/logs/*
+!output/logs/.gitkeep
+!output/logs/*.log
+
 *.Rout
-*.log
 priors/*.rds
 scripts/.Rhistory
 tests/testthat/*.log
-archive/
 
 .DS_Store
 .history/
