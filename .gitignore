@@ -2,14 +2,10 @@ data/*
 *cache/*
 plots/*
 
-# Ignore all output except HTML dashboards, run logs, and directory stubs
+# Ignore all output except HTML dashboards and directory stub
 output/*
 !output/.gitkeep
 !output/*.html
-!output/logs/
-output/logs/*
-!output/logs/.gitkeep
-!output/logs/*.log
 
 *.Rout
 priors/*.rds
