@@ -304,9 +304,9 @@ $$
 &\quad + \beta_8 \cdot z(\text{TORDDiff}_i) \\
 &\quad + \beta_9 \cdot z(\text{ORBDiff}_i) \\
 &\quad + \beta_{10} \cdot z(\text{DRBDiff}_i) \\
-&\quad + \beta_{11} \cdot z(\text{ThreePShootDiff}_i) \\
-&\quad + \beta_{12} \cdot z(\text{ThreePDefDiff}_i) \\
-&\quad + \beta_{13} \cdot z(\text{AdjTDiff}_i)
+&\quad + \beta_{11} \cdot z(\text{ThreePointPctDiff}_i) \\
+&\quad + \beta_{12} \cdot z(\text{ThreePointPctDefDiff}_i) \\
+&\quad + \beta_{13} \cdot z(\text{AdjTempoDiff}_i)
 \end{aligned}
 $$
 
@@ -548,10 +548,10 @@ $$
 &\quad + \beta_{10} \cdot z(\text{TORDSum}_i) \\
 &\quad + \beta_{11} \cdot z(\text{ORBSum}_i) \\
 &\quad + \beta_{12} \cdot z(\text{DRBSum}_i) \\
-&\quad + \beta_{13} \cdot z(\text{ThreePShootSum}_i) \\
-&\quad + \beta_{14} \cdot z(\text{ThreePDefSum}_i) \\
-&\quad + \beta_{15} \cdot z(\text{AdjTMean}_i) \\
-&\quad + \beta_{16} \cdot z(\text{AdjTGap}_i)
+&\quad + \beta_{13} \cdot z(\text{ThreePointPctSum}_i) \\
+&\quad + \beta_{14} \cdot z(\text{ThreePointPctDefSum}_i) \\
+&\quad + \beta_{15} \cdot z(\text{AdjTempoMean}_i) \\
+&\quad + \beta_{16} \cdot z(\text{AdjTempoGap}_i)
 \end{aligned}
 $$
 
