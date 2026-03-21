@@ -133,7 +133,7 @@ In the active runtime, the model actually uses `barthag_logit` rather than raw `
 `add_safe_pre_tournament_features()` creates:
 
 $$
-\text{barthag\_logit} = \log\left(\frac{\text{Barthag}}{1-\text{Barthag}}\right)
+\text{barthagLogit} = \log\left(\frac{\text{Barthag}}{1-\text{Barthag}}\right)
 $$
 
 after clipping `Barthag` into the open interval `(10^{-9}, 1 - 10^{-9})` to avoid infinite values.
@@ -180,7 +180,7 @@ then the reversed row becomes:
 and every signed difference flips sign:
 
 $$
-\text{feature\_diff}_{B,A} = -\text{feature\_diff}_{A,B}
+\text{featureDiff}_{B,A} = -\text{featureDiff}_{A,B}
 $$
 
 This makes the training design approximately symmetric with respect to team labeling.
@@ -239,7 +239,7 @@ Most difference columns are intuitive:
 `seed_diff` is the important exception:
 
 $$
-\text{seed\_diff} = \text{Seed}_A - \text{Seed}_B
+\text{seedDiff} = \text{Seed}_A - \text{Seed}_B
 $$
 
 Since lower numeric seeds are better, a negative `seed_diff` usually favors team A.
@@ -294,19 +294,19 @@ $$
 \begin{aligned}
 \eta_i &= \alpha \\
 &\quad + \gamma_{\text{round}}(r_i) \\
-&\quad + \beta_1 \cdot \text{same\_conf}_i \\
-&\quad + \beta_2 \cdot z(\text{seed\_diff}_i) \\
-&\quad + \beta_3 \cdot z(\text{barthag\_logit\_diff}_i) \\
-&\quad + \beta_4 \cdot z(\text{AdjOE\_diff}_i) \\
-&\quad + \beta_5 \cdot z(\text{AdjDE\_diff}_i) \\
-&\quad + \beta_6 \cdot z(\text{WAB\_diff}_i) \\
-&\quad + \beta_7 \cdot z(\text{TOR\_diff}_i) \\
-&\quad + \beta_8 \cdot z(\text{TORD\_diff}_i) \\
-&\quad + \beta_9 \cdot z(\text{ORB\_diff}_i) \\
-&\quad + \beta_{10} \cdot z(\text{DRB\_diff}_i) \\
-&\quad + \beta_{11} \cdot z(\text{3P\%\_diff}_i) \\
-&\quad + \beta_{12} \cdot z(\text{3P\%D\_diff}_i) \\
-&\quad + \beta_{13} \cdot z(\text{Adj T.\_diff}_i)
+&\quad + \beta_1 \cdot \text{sameConf}_i \\
+&\quad + \beta_2 \cdot z(\text{seedDiff}_i) \\
+&\quad + \beta_3 \cdot z(\text{barthagLogitDiff}_i) \\
+&\quad + \beta_4 \cdot z(\text{AdjOEDiff}_i) \\
+&\quad + \beta_5 \cdot z(\text{AdjDEDiff}_i) \\
+&\quad + \beta_6 \cdot z(\text{WABDiff}_i) \\
+&\quad + \beta_7 \cdot z(\text{TORDiff}_i) \\
+&\quad + \beta_8 \cdot z(\text{TORDDiff}_i) \\
+&\quad + \beta_9 \cdot z(\text{ORBDiff}_i) \\
+&\quad + \beta_{10} \cdot z(\text{DRBDiff}_i) \\
+&\quad + \beta_{11} \cdot z(\text{ThreePointPctDiff}_i) \\
+&\quad + \beta_{12} \cdot z(\text{ThreePointPctDefDiff}_i) \\
+&\quad + \beta_{13} \cdot z(\text{AdjTempoDiff}_i)
 \end{aligned}
 $$
 
@@ -364,7 +364,7 @@ In code, that is:
 Setting `prior_type = "hs"` in the model configuration switches the fixed-effect prior to a regularized horseshoe:
 
 $$
-\beta_j \sim \text{Regularized Horseshoe}(\text{df}=1, \text{df\_global}=1, \text{slab\_df}=4, \text{slab\_scale}=2.5)
+\beta_j \sim \text{Regularized Horseshoe}(\text{df}=1, \text{dfGlobal}=1, \text{slabDf}=4, \text{slabScale}=2.5)
 $$
 
 The horseshoe is a heavy-tailed shrinkage prior.  Coefficients whose signal is weak are shrunk aggressively toward zero; large coefficients are left relatively unshrunk.  This is useful here because the 14-predictor design matrix contains several highly correlated efficiency metrics.  It helps the model focus on the few predictors with the clearest signal and may reduce overconfident probability estimates for hard-to-call games (e.g. mid-major upsets where seed differentials are deceptive).
@@ -536,22 +536,22 @@ $$
 \begin{aligned}
 \mu_i &= \alpha \\
 &\quad + \gamma_{\text{round}}(r_i) \\
-&\quad + \beta_1 \cdot \text{same\_conf}_i \\
-&\quad + \beta_2 \cdot z(\text{seed\_sum}_i) \\
-&\quad + \beta_3 \cdot z(\text{seed\_gap}_i) \\
-&\quad + \beta_4 \cdot z(\text{barthag\_logit\_sum}_i) \\
-&\quad + \beta_5 \cdot z(\text{barthag\_logit\_gap}_i) \\
-&\quad + \beta_6 \cdot z(\text{AdjOE\_sum}_i) \\
-&\quad + \beta_7 \cdot z(\text{AdjDE\_sum}_i) \\
-&\quad + \beta_8 \cdot z(\text{WAB\_sum}_i) \\
-&\quad + \beta_9 \cdot z(\text{TOR\_sum}_i) \\
-&\quad + \beta_{10} \cdot z(\text{TORD\_sum}_i) \\
-&\quad + \beta_{11} \cdot z(\text{ORB\_sum}_i) \\
-&\quad + \beta_{12} \cdot z(\text{DRB\_sum}_i) \\
-&\quad + \beta_{13} \cdot z(\text{3P\%\_sum}_i) \\
-&\quad + \beta_{14} \cdot z(\text{3P\%D\_sum}_i) \\
-&\quad + \beta_{15} \cdot z(\text{Adj T.\_mean}_i) \\
-&\quad + \beta_{16} \cdot z(\text{Adj T.\_gap}_i)
+&\quad + \beta_1 \cdot \text{sameConf}_i \\
+&\quad + \beta_2 \cdot z(\text{seedSum}_i) \\
+&\quad + \beta_3 \cdot z(\text{seedGap}_i) \\
+&\quad + \beta_4 \cdot z(\text{barthagLogitSum}_i) \\
+&\quad + \beta_5 \cdot z(\text{barthagLogitGap}_i) \\
+&\quad + \beta_6 \cdot z(\text{AdjOESum}_i) \\
+&\quad + \beta_7 \cdot z(\text{AdjDESum}_i) \\
+&\quad + \beta_8 \cdot z(\text{WABSum}_i) \\
+&\quad + \beta_9 \cdot z(\text{TORSum}_i) \\
+&\quad + \beta_{10} \cdot z(\text{TORDSum}_i) \\
+&\quad + \beta_{11} \cdot z(\text{ORBSum}_i) \\
+&\quad + \beta_{12} \cdot z(\text{DRBSum}_i) \\
+&\quad + \beta_{13} \cdot z(\text{ThreePointPctSum}_i) \\
+&\quad + \beta_{14} \cdot z(\text{ThreePointPctDefSum}_i) \\
+&\quad + \beta_{15} \cdot z(\text{AdjTempoMean}_i) \\
+&\quad + \beta_{16} \cdot z(\text{AdjTempoGap}_i)
 \end{aligned}
 $$
 
@@ -657,20 +657,20 @@ The ranking score in `generate_bracket_candidates()` is:
 
 $$
 \begin{aligned}
-\text{candidate\_score} &= \text{bracket\_log\_prob} \\
+\text{candidateScore} &= \text{bracketLogProb} \\
 &\quad + \frac{\log(1 + \text{frequency})}{3} \\
-&\quad + \frac{\text{leverage\_sum}}{25} \\
-&\quad - \frac{\text{diff\_count}}{8} \\
-&\quad - 2 \cdot \max(\text{round64\_diff\_count} - 6, 0)
+&\quad + \frac{\text{leverageSum}}{25} \\
+&\quad - \frac{\text{diffCount}}{8} \\
+&\quad - 2 \cdot \max(\text{round64DiffCount} - 6, 0)
 \end{aligned}
 $$
 
-The denominators here are heuristic scaling constants, not learned coefficients. They keep the additive adjustments on roughly comparable scales so that $\text{bracket\_log\_prob}$ remains the main driver while the other terms act as controlled nudges:
+The denominators here are heuristic scaling constants, not learned coefficients. They keep the additive adjustments on roughly comparable scales so that $\text{bracketLogProb}$ remains the main driver while the other terms act as controlled nudges:
 
 - $\log(1 + \text{frequency}) / 3$ gives repeated simulation paths a modest boost without letting raw frequency dominate.
-- $\text{leverage\_sum} / 25$ keeps the leverage bonus in the same rough range as the other adjustments.
-- $\text{diff\_count} / 8$ applies a moderate penalty for making a candidate too different from the primary bracket.
-- $2 \cdot \max(\text{round64\_diff\_count} - 6, 0)$ lets a candidate change a handful of Round of 64 games, then penalizes broader early-round divergence more aggressively.
+- $\text{leverageSum} / 25$ keeps the leverage bonus in the same rough range as the other adjustments.
+- $\text{diffCount} / 8$ applies a moderate penalty for making a candidate too different from the primary bracket.
+- $2 \cdot \max(\text{round64DiffCount} - 6, 0)$ lets a candidate change a handful of Round of 64 games, then penalizes broader early-round divergence more aggressively.
 
 In general, this favors alternates that:
 
@@ -698,22 +698,22 @@ $$
 The code then computes:
 
 $$
-\text{bracket\_log\_prob} = \sum_j \log(q_j)
+\text{bracketLogProb} = \sum_j \log(q_j)
 $$
 
 This is a log probability, not a log-odds.
 
 You should generally expect this value to be negative, because it is the sum of logs of probabilities between 0 and 1. Each additional game multiplies another probability into the bracket path, so the total usually moves farther below zero as the bracket gets longer.
 
-Higher $\text{bracket\_log\_prob}$ values are better. Because each $q_j$ is a probability between 0 and 1, each $\log(q_j)$ term is typically zero or negative, so the total is usually a negative number. Less negative means the bracket is more probable under the model.
+Higher $\text{bracketLogProb}$ values are better. Because each $q_j$ is a probability between 0 and 1, each $\log(q_j)$ term is typically zero or negative, so the total is usually a negative number. Less negative means the bracket is more probable under the model.
 
-The main use of this value is comparison between brackets, not standalone interpretation. For example, a bracket with $\text{bracket\_log\_prob} = -10$ is more probable than one with $-12$, and the difference of 2 log units means about $\mathrm{e}^2$ times higher probability under the model.
+The main use of this value is comparison between brackets, not standalone interpretation. For example, a bracket with $\text{bracketLogProb} = -10$ is more probable than one with $-12$, and the difference of 2 log units means about $\mathrm{e}^2$ times higher probability under the model.
 
 The relevant forms are:
 
 - $\text{logit}(p) = \log\!\bigl(p / (1 - p)\bigr)$, the log-odds transform for one event
 - $\log(p)$, the log of a probability
-- $\text{bracket\_log\_prob} = \sum_j \log(q_j)$, the log of the implied probability of the entire chosen bracket path under the model
+- $\text{bracketLogProb} = \sum_j \log(q_j)$, the log of the implied probability of the entire chosen bracket path under the model
 
 ## Decision Sheet Logic
 
@@ -730,11 +730,11 @@ The candidate CSV files report the team-A view:
 The decision sheet converts each matchup into the favored-side view:
 
 $$
-\text{win\_prob\_favorite} = \max(p_A, 1 - p_A)
+\text{winProbFavorite} = \max(p_A, 1 - p_A)
 $$
 
 $$
-\text{win\_prob\_underdog} = 1 - \text{win\_prob\_favorite}
+\text{winProbUnderdog} = 1 - \text{winProbFavorite}
 $$
 
 If team A is favored:
@@ -775,8 +775,8 @@ The decision score is:
 
 $$
 \begin{aligned}
-\text{decision\_score}
-&= \text{round\_weight} \cdot \left(\text{win\_prob\_underdog} + \text{interval\_width}\right)
+\text{decisionScore}
+&= \text{roundWeight} \cdot \left(\text{winProbUnderdog} + \text{intervalWidth}\right)
 \end{aligned}
 $$
 
@@ -788,8 +788,8 @@ The upset leverage score is:
 
 $$
 \begin{aligned}
-\text{upset\_leverage}
-&= \text{round\_weight} \cdot \text{win\_prob\_underdog} \cdot \left(1 + \text{interval\_width}\right)
+\text{upsetLeverage}
+&= \text{roundWeight} \cdot \text{winProbUnderdog} \cdot \left(1 + \text{intervalWidth}\right)
 \end{aligned}
 $$
 
