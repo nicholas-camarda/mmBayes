@@ -1,0 +1,135 @@
+Year,region,round,game_index,teamA,teamB,teamA_seed,teamB_seed,teamA_score,teamB_score,total_points,winner
+2022,East,First Four,1,East_11_2022,East_11_2022_playin,11,11,50,60,110,East_11_2022_playin
+2022,East,Round of 64,1,East_01_2022,East_16_2022,1,16,78,50,128,East_01_2022
+2022,East,Round of 64,2,East_08_2022,East_09_2022,8,9,58,52,110,East_08_2022
+2022,East,Round of 64,3,East_05_2022,East_12_2022,5,12,67,51,118,East_05_2022
+2022,East,Round of 64,4,East_04_2022,East_13_2022,4,13,68,47,115,East_04_2022
+2022,East,Round of 64,5,East_06_2022,East_11_2022_playin,6,11,58,52,110,East_06_2022
+2022,East,Round of 64,6,East_03_2022,East_14_2022,3,14,70,50,120,East_03_2022
+2022,East,Round of 64,7,East_07_2022,East_10_2022,7,10,60,50,110,East_07_2022
+2022,East,Round of 64,8,East_02_2022,East_15_2022,2,15,76,49,125,East_02_2022
+2022,East,Round of 32,1,East_01_2022,East_08_2022,1,8,67,52,119,East_01_2022
+2022,East,Round of 32,2,East_05_2022,East_04_2022,5,4,52,59,111,East_04_2022
+2022,East,Round of 32,3,East_06_2022,East_03_2022,6,3,52,63,115,East_03_2022
+2022,East,Round of 32,4,East_07_2022,East_02_2022,7,2,52,67,119,East_02_2022
+2022,East,Sweet 16,1,East_01_2022,East_04_2022,1,4,62,54,116,East_01_2022
+2022,East,Sweet 16,2,East_03_2022,East_02_2022,3,2,51,59,110,East_02_2022
+2022,East,Elite 8,1,East_01_2022,East_02_2022,1,2,53,58,111,East_02_2022
+2022,West,First Four,1,West_16_2022,West_16_2022_playin,16,16,50,60,110,West_16_2022_playin
+2022,West,Round of 64,1,West_01_2022,West_16_2022_playin,1,16,75,54,129,West_01_2022
+2022,West,Round of 64,2,West_08_2022,West_09_2022,8,9,59,51,110,West_08_2022
+2022,West,Round of 64,3,West_05_2022,West_12_2022,5,12,68,51,119,West_05_2022
+2022,West,Round of 64,4,West_04_2022,West_13_2022,4,13,68,48,116,West_04_2022
+2022,West,Round of 64,5,West_06_2022,West_11_2022,6,11,61,50,111,West_06_2022
+2022,West,Round of 64,6,West_03_2022,West_14_2022,3,14,71,50,121,West_03_2022
+2022,West,Round of 64,7,West_07_2022,West_10_2022,7,10,60,50,110,West_07_2022
+2022,West,Round of 64,8,West_02_2022,West_15_2022,2,15,76,50,126,West_02_2022
+2022,West,Round of 32,1,West_01_2022,West_08_2022,1,8,67,53,120,West_01_2022
+2022,West,Round of 32,2,West_05_2022,West_04_2022,5,4,52,60,112,West_04_2022
+2022,West,Round of 32,3,West_06_2022,West_03_2022,6,3,52,64,116,West_03_2022
+2022,West,Round of 32,4,West_07_2022,West_02_2022,7,2,53,67,120,West_02_2022
+2022,West,Sweet 16,1,West_01_2022,West_04_2022,1,4,63,53,116,West_01_2022
+2022,West,Sweet 16,2,West_03_2022,West_02_2022,3,2,52,58,110,West_02_2022
+2022,West,Elite 8,1,West_01_2022,West_02_2022,1,2,53,58,111,West_02_2022
+2022,South,First Four,1,South_10_2022,South_10_2022_playin,10,10,52,58,110,South_10_2022_playin
+2022,South,Round of 64,1,South_01_2022,South_16_2022,1,16,78,51,129,South_01_2022
+2022,South,Round of 64,2,South_08_2022,South_09_2022,8,9,59,51,110,South_08_2022
+2022,South,Round of 64,3,South_05_2022,South_12_2022,5,12,69,51,120,South_05_2022
+2022,South,Round of 64,4,South_04_2022,South_13_2022,4,13,69,47,116,South_04_2022
+2022,South,Round of 64,5,South_06_2022,South_11_2022,6,11,62,50,112,South_06_2022
+2022,South,Round of 64,6,South_03_2022,South_14_2022,3,14,71,50,121,South_03_2022
+2022,South,Round of 64,7,South_07_2022,South_10_2022_playin,7,10,62,53,115,South_07_2022
+2022,South,Round of 64,8,South_02_2022,South_15_2022,2,15,76,50,126,South_02_2022
+2022,South,Round of 32,1,South_01_2022,South_08_2022,1,8,68,53,121,South_01_2022
+2022,South,Round of 32,2,South_05_2022,South_04_2022,5,4,53,60,113,South_04_2022
+2022,South,Round of 32,3,South_06_2022,South_03_2022,6,3,53,64,117,South_03_2022
+2022,South,Round of 32,4,South_07_2022,South_02_2022,7,2,53,68,121,South_02_2022
+2022,South,Sweet 16,1,South_01_2022,South_04_2022,1,4,63,54,117,South_01_2022
+2022,South,Sweet 16,2,South_03_2022,South_02_2022,3,2,52,58,110,South_02_2022
+2022,South,Elite 8,1,South_01_2022,South_02_2022,1,2,59,53,112,South_01_2022
+2022,Midwest,First Four,1,Midwest_16_2022,Midwest_16_2022_playin,16,16,51,59,110,Midwest_16_2022_playin
+2022,Midwest,Round of 64,1,Midwest_01_2022,Midwest_16_2022_playin,1,16,79,55,134,Midwest_01_2022
+2022,Midwest,Round of 64,2,Midwest_08_2022,Midwest_09_2022,8,9,59,51,110,Midwest_08_2022
+2022,Midwest,Round of 64,3,Midwest_05_2022,Midwest_12_2022,5,12,69,51,120,Midwest_05_2022
+2022,Midwest,Round of 64,4,Midwest_04_2022,Midwest_13_2022,4,13,69,48,117,Midwest_04_2022
+2022,Midwest,Round of 64,5,Midwest_06_2022,Midwest_11_2022,6,11,62,50,112,Midwest_06_2022
+2022,Midwest,Round of 64,6,Midwest_03_2022,Midwest_14_2022,3,14,72,50,122,Midwest_03_2022
+2022,Midwest,Round of 64,7,Midwest_07_2022,Midwest_10_2022,7,10,60,51,111,Midwest_07_2022
+2022,Midwest,Round of 64,8,Midwest_02_2022,Midwest_15_2022,2,15,76,51,127,Midwest_02_2022
+2022,Midwest,Round of 32,1,Midwest_01_2022,Midwest_08_2022,1,8,68,53,121,Midwest_01_2022
+2022,Midwest,Round of 32,2,Midwest_05_2022,Midwest_04_2022,5,4,53,60,113,Midwest_04_2022
+2022,Midwest,Round of 32,3,Midwest_06_2022,Midwest_03_2022,6,3,53,64,117,Midwest_03_2022
+2022,Midwest,Round of 32,4,Midwest_07_2022,Midwest_02_2022,7,2,53,68,121,Midwest_02_2022
+2022,Midwest,Sweet 16,1,Midwest_01_2022,Midwest_04_2022,1,4,64,54,118,Midwest_01_2022
+2022,Midwest,Sweet 16,2,Midwest_03_2022,Midwest_02_2022,3,2,52,58,110,Midwest_02_2022
+2022,Midwest,Elite 8,1,Midwest_01_2022,Midwest_02_2022,1,2,60,53,113,Midwest_01_2022
+2022,National,Final Four,1,South_01_2022,West_02_2022,1,2,59,52,111,South_01_2022
+2022,National,Final Four,2,East_02_2022,Midwest_01_2022,2,1,52,63,115,Midwest_01_2022
+2022,National,Championship,1,South_01_2022,Midwest_01_2022,1,1,58,52,110,South_01_2022
+2023,East,First Four,1,East_11_2023,East_11_2023_playin,11,11,50,60,110,East_11_2023_playin
+2023,East,Round of 64,1,East_01_2023,East_16_2023,1,16,78,50,128,East_01_2023
+2023,East,Round of 64,2,East_08_2023,East_09_2023,8,9,58,52,110,East_08_2023
+2023,East,Round of 64,3,East_05_2023,East_12_2023,5,12,67,51,118,East_05_2023
+2023,East,Round of 64,4,East_04_2023,East_13_2023,4,13,68,47,115,East_04_2023
+2023,East,Round of 64,5,East_06_2023,East_11_2023_playin,6,11,52,58,110,East_11_2023_playin
+2023,East,Round of 64,6,East_03_2023,East_14_2023,3,14,70,50,120,East_03_2023
+2023,East,Round of 64,7,East_07_2023,East_10_2023,7,10,60,50,110,East_07_2023
+2023,East,Round of 64,8,East_02_2023,East_15_2023,2,15,76,49,125,East_02_2023
+2023,East,Round of 32,1,East_01_2023,East_08_2023,1,8,67,52,119,East_01_2023
+2023,East,Round of 32,2,East_05_2023,East_04_2023,5,4,52,59,111,East_04_2023
+2023,East,Round of 32,3,East_11_2023_playin,East_03_2023,11,3,53,66,119,East_03_2023
+2023,East,Round of 32,4,East_07_2023,East_02_2023,7,2,52,67,119,East_02_2023
+2023,East,Sweet 16,1,East_01_2023,East_04_2023,1,4,62,54,116,East_01_2023
+2023,East,Sweet 16,2,East_03_2023,East_02_2023,3,2,51,59,110,East_02_2023
+2023,East,Elite 8,1,East_01_2023,East_02_2023,1,2,58,53,111,East_01_2023
+2023,West,First Four,1,West_16_2023,West_16_2023_playin,16,16,50,60,110,West_16_2023_playin
+2023,West,Round of 64,1,West_01_2023,West_16_2023_playin,1,16,75,54,129,West_01_2023
+2023,West,Round of 64,2,West_08_2023,West_09_2023,8,9,59,51,110,West_08_2023
+2023,West,Round of 64,3,West_05_2023,West_12_2023,5,12,68,51,119,West_05_2023
+2023,West,Round of 64,4,West_04_2023,West_13_2023,4,13,68,48,116,West_04_2023
+2023,West,Round of 64,5,West_06_2023,West_11_2023,6,11,61,50,111,West_06_2023
+2023,West,Round of 64,6,West_03_2023,West_14_2023,3,14,71,50,121,West_03_2023
+2023,West,Round of 64,7,West_07_2023,West_10_2023,7,10,60,50,110,West_07_2023
+2023,West,Round of 64,8,West_02_2023,West_15_2023,2,15,76,50,126,West_02_2023
+2023,West,Round of 32,1,West_01_2023,West_08_2023,1,8,67,53,120,West_01_2023
+2023,West,Round of 32,2,West_05_2023,West_04_2023,5,4,52,60,112,West_04_2023
+2023,West,Round of 32,3,West_06_2023,West_03_2023,6,3,52,64,116,West_03_2023
+2023,West,Round of 32,4,West_07_2023,West_02_2023,7,2,53,67,120,West_02_2023
+2023,West,Sweet 16,1,West_01_2023,West_04_2023,1,4,63,53,116,West_01_2023
+2023,West,Sweet 16,2,West_03_2023,West_02_2023,3,2,52,58,110,West_02_2023
+2023,West,Elite 8,1,West_01_2023,West_02_2023,1,2,58,53,111,West_01_2023
+2023,South,First Four,1,South_10_2023,South_10_2023_playin,10,10,52,58,110,South_10_2023_playin
+2023,South,Round of 64,1,South_01_2023,South_16_2023,1,16,78,51,129,South_01_2023
+2023,South,Round of 64,2,South_08_2023,South_09_2023,8,9,59,51,110,South_08_2023
+2023,South,Round of 64,3,South_05_2023,South_12_2023,5,12,69,51,120,South_05_2023
+2023,South,Round of 64,4,South_04_2023,South_13_2023,4,13,69,47,116,South_04_2023
+2023,South,Round of 64,5,South_06_2023,South_11_2023,6,11,62,50,112,South_06_2023
+2023,South,Round of 64,6,South_03_2023,South_14_2023,3,14,71,50,121,South_03_2023
+2023,South,Round of 64,7,South_07_2023,South_10_2023_playin,7,10,62,53,115,South_07_2023
+2023,South,Round of 64,8,South_02_2023,South_15_2023,2,15,76,50,126,South_02_2023
+2023,South,Round of 32,1,South_01_2023,South_08_2023,1,8,68,53,121,South_01_2023
+2023,South,Round of 32,2,South_05_2023,South_04_2023,5,4,53,60,113,South_04_2023
+2023,South,Round of 32,3,South_06_2023,South_03_2023,6,3,53,64,117,South_03_2023
+2023,South,Round of 32,4,South_07_2023,South_02_2023,7,2,53,68,121,South_02_2023
+2023,South,Sweet 16,1,South_01_2023,South_04_2023,1,4,63,54,117,South_01_2023
+2023,South,Sweet 16,2,South_03_2023,South_02_2023,3,2,52,58,110,South_02_2023
+2023,South,Elite 8,1,South_01_2023,South_02_2023,1,2,59,53,112,South_01_2023
+2023,Midwest,First Four,1,Midwest_16_2023,Midwest_16_2023_playin,16,16,51,59,110,Midwest_16_2023_playin
+2023,Midwest,Round of 64,1,Midwest_01_2023,Midwest_16_2023_playin,1,16,79,55,134,Midwest_01_2023
+2023,Midwest,Round of 64,2,Midwest_08_2023,Midwest_09_2023,8,9,51,59,110,Midwest_09_2023
+2023,Midwest,Round of 64,3,Midwest_05_2023,Midwest_12_2023,5,12,69,51,120,Midwest_05_2023
+2023,Midwest,Round of 64,4,Midwest_04_2023,Midwest_13_2023,4,13,69,48,117,Midwest_04_2023
+2023,Midwest,Round of 64,5,Midwest_06_2023,Midwest_11_2023,6,11,62,50,112,Midwest_06_2023
+2023,Midwest,Round of 64,6,Midwest_03_2023,Midwest_14_2023,3,14,72,50,122,Midwest_03_2023
+2023,Midwest,Round of 64,7,Midwest_07_2023,Midwest_10_2023,7,10,60,51,111,Midwest_07_2023
+2023,Midwest,Round of 64,8,Midwest_02_2023,Midwest_15_2023,2,15,76,51,127,Midwest_02_2023
+2023,Midwest,Round of 32,1,Midwest_01_2023,Midwest_09_2023,1,9,70,53,123,Midwest_01_2023
+2023,Midwest,Round of 32,2,Midwest_05_2023,Midwest_04_2023,5,4,60,53,113,Midwest_05_2023
+2023,Midwest,Round of 32,3,Midwest_06_2023,Midwest_03_2023,6,3,53,64,117,Midwest_03_2023
+2023,Midwest,Round of 32,4,Midwest_07_2023,Midwest_02_2023,7,2,53,68,121,Midwest_02_2023
+2023,Midwest,Sweet 16,1,Midwest_01_2023,Midwest_05_2023,1,5,62,51,113,Midwest_01_2023
+2023,Midwest,Sweet 16,2,Midwest_03_2023,Midwest_02_2023,3,2,52,58,110,Midwest_02_2023
+2023,Midwest,Elite 8,1,Midwest_01_2023,Midwest_02_2023,1,2,60,53,113,Midwest_01_2023
+2023,National,Final Four,1,South_01_2023,West_01_2023,1,1,58,52,110,South_01_2023
+2023,National,Final Four,2,East_01_2023,Midwest_01_2023,1,1,61,52,113,East_01_2023
+2023,National,Championship,1,South_01_2023,East_01_2023,1,1,58,52,110,South_01_2023
