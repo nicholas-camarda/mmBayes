@@ -1,9 +1,9 @@
 library(dplyr)
 library(logger)
 
-#' Require the Bayesian modeling packages
+#' Require the Stan GLM Bayesian modeling packages
 #'
-#' @return Invisibly validates that required Bayesian packages are installed.
+#' @return Invisibly validates that required packages are installed.
 #' @keywords internal
 require_bayesian_packages <- function() {
     required <- c("rstanarm", "bayesplot", "loo")
@@ -17,6 +17,98 @@ require_bayesian_packages <- function() {
             )
         )
     }
+}
+
+#' Require the BART modeling package
+#'
+#' @return Invisibly validates that the `BART` package is installed.
+#' @keywords internal
+require_bart_packages <- function() {
+    if (!requireNamespace("BART", quietly = TRUE)) {
+        stop_with_message(
+            "Missing required package: BART. Install it with install.packages('BART') before using engine='bart'."
+        )
+    }
+}
+
+#' Resolve BART hyperparameters from configuration
+#'
+#' @param bart_config Optional list of BART hyperparameters.
+#'
+#' @return A normalized list of BART hyperparameters.
+#' @keywords internal
+resolve_bart_config <- function(bart_config = NULL) {
+    defaults <- list(
+        n_trees = 200L,
+        n_burn = 500L,
+        n_post = 1000L,
+        k = 2,
+        power = 2
+    )
+
+    bart_config <- bart_config %||% list()
+    merged <- merge_config_lists(defaults, bart_config)
+
+    merged$n_trees <- as.integer(merged$n_trees %||% defaults$n_trees)
+    merged$n_burn <- as.integer(merged$n_burn %||% defaults$n_burn)
+    merged$n_post <- as.integer(merged$n_post %||% defaults$n_post)
+    merged$k <- suppressWarnings(as.numeric(merged$k %||% defaults$k))
+    merged$power <- suppressWarnings(as.numeric(merged$power %||% defaults$power))
+
+    merged
+}
+
+#' Build a model-matrix formula for BART engines
+#'
+#' @param predictor_columns Predictor columns to include in the model.
+#'
+#' @return A formula suitable for [stats::model.matrix()] without an intercept.
+#' @keywords internal
+build_bart_matrix_formula <- function(predictor_columns) {
+    predictor_columns <- unique(predictor_columns)
+    terms <- c("round", setdiff(predictor_columns, "round"))
+    stats::as.formula(
+        paste(
+            "~",
+            paste(sprintf("`%s`", terms), collapse = " + "),
+            "- 1"
+        )
+    )
+}
+
+#' Build a model matrix for BART with stable column ordering
+#'
+#' @param data A prepared data frame with all predictors present.
+#' @param matrix_formula A model-matrix formula produced by
+#'   [build_bart_matrix_formula()].
+#'
+#' @return A numeric design matrix.
+#' @keywords internal
+build_bart_model_matrix <- function(data, matrix_formula) {
+    matrix <- stats::model.matrix(matrix_formula, data = data)
+    matrix <- as.matrix(matrix)
+    storage.mode(matrix) <- "double"
+    matrix
+}
+
+#' Align a new model matrix to training columns
+#'
+#' @param matrix A numeric matrix for prediction rows.
+#' @param training_columns Character vector of column names from training.
+#'
+#' @return A numeric matrix with columns reordered and padded to match training.
+#' @keywords internal
+align_bart_matrix_columns <- function(matrix, training_columns) {
+    missing_columns <- setdiff(training_columns, colnames(matrix))
+    if (length(missing_columns) > 0) {
+        padding <- matrix(0, nrow = nrow(matrix), ncol = length(missing_columns))
+        colnames(padding) <- missing_columns
+        matrix <- cbind(matrix, padding)
+    }
+
+    matrix <- matrix[, training_columns, drop = FALSE]
+    storage.mode(matrix) <- "double"
+    matrix
 }
 
 #' Build scaling statistics for matchup predictors
@@ -199,9 +291,21 @@ configure_priors <- function(prior_type = "normal") {
 #'
 #' @return A cache key suitable for a file name.
 #' @keywords internal
-build_model_fit_cache_key <- function(historical_matchups, predictor_columns, random_seed, include_diagnostics, model_label = "matchup", interaction_terms = NULL, prior_type = "normal") {
+build_model_fit_cache_key <- function(historical_matchups,
+                                      predictor_columns,
+                                      random_seed,
+                                      include_diagnostics,
+                                      model_label = "matchup",
+                                      interaction_terms = NULL,
+                                      prior_type = "normal",
+                                      engine = "stan_glm",
+                                      engine_config = NULL,
+                                      encoding_metadata = NULL) {
     cache_signature <- list(
         model_label = model_label,
+        engine = engine,
+        engine_config = engine_config,
+        encoding_metadata = encoding_metadata,
         historical_matchups = historical_matchups,
         predictor_columns = predictor_columns,
         random_seed = random_seed,
@@ -232,6 +336,10 @@ build_model_fit_cache_path <- function(cache_dir, cache_key, model_label = "matc
 #'
 #' @param historical_matchups A matchup-level historical training table.
 #' @param predictor_columns Predictor columns to include in the model.
+#' @param engine Modeling engine name. Use `"stan_glm"` for the default Bayesian
+#'   logistic regression or `"bart"` for Bayesian additive regression trees.
+#' @param bart_config Optional list of BART hyperparameters used when
+#'   `engine = "bart"`.
 #' @param random_seed Random seed used during fitting.
 #' @param include_diagnostics Whether to compute expensive post-fit diagnostics.
 #' @param cache_dir Optional directory used to store and reload fitted model bundles.
@@ -244,13 +352,47 @@ build_model_fit_cache_path <- function(cache_dir, cache_key, model_label = "matc
 #' @return A list containing the fitted Bayesian model, formula, predictors,
 #'   scaling reference, and diagnostics.
 #' @export
-fit_tournament_model <- function(historical_matchups, predictor_columns, random_seed = 123, include_diagnostics = TRUE, cache_dir = NULL, use_cache = TRUE, interaction_terms = NULL, prior_type = "normal") {
+fit_tournament_model <- function(historical_matchups,
+                                 predictor_columns,
+                                 engine = c("stan_glm", "bart"),
+                                 bart_config = NULL,
+                                 random_seed = 123,
+                                 include_diagnostics = TRUE,
+                                 cache_dir = NULL,
+                                 use_cache = TRUE,
+                                 interaction_terms = NULL,
+                                 prior_type = "normal") {
+    engine <- match.arg(engine)
+    if (identical(engine, "bart")) {
+        return(
+            fit_tournament_model_bart(
+                historical_matchups = historical_matchups,
+                predictor_columns = predictor_columns,
+                bart_config = bart_config,
+                random_seed = random_seed,
+                cache_dir = cache_dir,
+                use_cache = use_cache
+            )
+        )
+    }
+
     require_bayesian_packages()
 
     cache_path <- NULL
     if (isTRUE(use_cache) && !is.null(cache_dir)) {
         dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
-        cache_key <- build_model_fit_cache_key(historical_matchups, predictor_columns, random_seed, include_diagnostics, model_label = "matchup", interaction_terms = interaction_terms, prior_type = prior_type)
+        cache_key <- build_model_fit_cache_key(
+            historical_matchups,
+            predictor_columns,
+            random_seed,
+            include_diagnostics,
+            model_label = "matchup",
+            interaction_terms = interaction_terms,
+            prior_type = prior_type,
+            engine = engine,
+            engine_config = NULL,
+            encoding_metadata = NULL
+        )
         cache_path <- build_model_fit_cache_path(cache_dir, cache_key, model_label = "matchup")
         if (file.exists(cache_path)) {
             logger::log_info("Loading cached matchup-level model fit from {cache_path}")
@@ -285,20 +427,113 @@ fit_tournament_model <- function(historical_matchups, predictor_columns, random_
     )
 
     fit_result <- list(
-        engine = "bayes",
+        engine = engine,
         model = model,
         formula = formula_input,
         predictor_columns = predictor_columns,
         interaction_terms = interaction_terms %||% character(0),
         prior_type = effective_prior_type,
         scaling_reference = prepared$scaling_reference,
-        diagnostics = if (isTRUE(include_diagnostics)) perform_model_diagnostics(model, "bayes") else NULL,
+        diagnostics = if (isTRUE(include_diagnostics)) perform_model_diagnostics(model, "stan_glm") else NULL,
         cache_path = cache_path
     )
 
     if (!is.null(cache_path)) {
         saveRDS(fit_result, cache_path)
         logger::log_info("Saved matchup-level model fit cache to {cache_path}")
+    }
+
+    fit_result
+}
+
+#' Fit the tournament matchup model using BART
+#'
+#' @param historical_matchups A matchup-level historical training table.
+#' @param predictor_columns Predictor columns to include in the model.
+#' @param bart_config Optional list of BART hyperparameters.
+#' @param random_seed Random seed used during fitting.
+#' @param cache_dir Optional directory used to store and reload fitted model bundles.
+#' @param use_cache Whether to reuse a cached fit when available.
+#'
+#' @return A list containing the fitted BART model, predictors, scaling
+#'   reference, and encoding metadata required for prediction.
+#' @export
+fit_tournament_model_bart <- function(historical_matchups,
+                                      predictor_columns,
+                                      bart_config = NULL,
+                                      random_seed = 123,
+                                      cache_dir = NULL,
+                                      use_cache = TRUE) {
+    require_bart_packages()
+
+    bart_config <- resolve_bart_config(bart_config)
+    matrix_formula <- build_bart_matrix_formula(predictor_columns)
+
+    prepared <- prepare_model_data(historical_matchups, predictor_columns, require_outcome = TRUE)
+    x_train <- build_bart_model_matrix(prepared$data, matrix_formula)
+    y_train <- as.integer(prepared$data$actual_outcome)
+
+    cache_path <- NULL
+    if (isTRUE(use_cache) && !is.null(cache_dir)) {
+        dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+        encoding_metadata <- list(
+            matrix_formula = format(matrix_formula),
+            model_matrix_columns = colnames(x_train),
+            round_levels = levels(prepared$data$round)
+        )
+        cache_key <- build_model_fit_cache_key(
+            historical_matchups,
+            predictor_columns,
+            random_seed,
+            include_diagnostics = FALSE,
+            model_label = "matchup",
+            interaction_terms = NULL,
+            prior_type = "bart",
+            engine = "bart",
+            engine_config = bart_config,
+            encoding_metadata = encoding_metadata
+        )
+        cache_path <- build_model_fit_cache_path(cache_dir, cache_key, model_label = "matchup")
+        if (file.exists(cache_path)) {
+            logger::log_info("Loading cached BART matchup model fit from {cache_path}")
+            cached_result <- readRDS(cache_path)
+            cached_result$cache_path <- cache_path
+            return(cached_result)
+        }
+    }
+
+    logger::log_info(
+        "Starting matchup-level BART model fitting (ntree={bart_config$n_trees}, burn={bart_config$n_burn}, post={bart_config$n_post})"
+    )
+    set.seed(random_seed)
+
+    model <- BART::pbart(
+        x.train = x_train,
+        y.train = y_train,
+        ntree = bart_config$n_trees,
+        nskip = bart_config$n_burn,
+        ndpost = bart_config$n_post,
+        k = bart_config$k,
+        power = bart_config$power,
+        printevery = 1000L
+    )
+
+    fit_result <- list(
+        engine = "bart",
+        model = model,
+        predictor_columns = predictor_columns,
+        scaling_reference = prepared$scaling_reference,
+        bart_config = bart_config,
+        matrix_formula = matrix_formula,
+        model_matrix_columns = colnames(x_train),
+        round_levels = levels(prepared$data$round),
+        diagnostics = NULL,
+        cache_path = cache_path
+    )
+
+    if (!is.null(cache_path)) {
+        saveRDS(fit_result, cache_path)
+        logger::log_info("Saved BART matchup model fit cache to {cache_path}")
     }
 
     fit_result
@@ -461,6 +696,10 @@ build_total_points_training_rows <- function(actual_results) {
 #'
 #' @param historical_total_points A matchup-level historical total-points table.
 #' @param predictor_columns Predictor columns to include in the model.
+#' @param engine Modeling engine name. Use `"stan_glm"` for the default Bayesian
+#'   regression or `"bart"` for Bayesian additive regression trees.
+#' @param bart_config Optional list of BART hyperparameters used when
+#'   `engine = "bart"`.
 #' @param random_seed Random seed used during fitting.
 #' @param include_diagnostics Whether to compute expensive post-fit diagnostics.
 #' @param cache_dir Optional directory used to store and reload fitted model bundles.
@@ -469,13 +708,43 @@ build_total_points_training_rows <- function(actual_results) {
 #' @return A list containing the fitted Bayesian model, formula, predictors,
 #'   scaling reference, and diagnostics.
 #' @export
-fit_total_points_model <- function(historical_total_points, predictor_columns = default_total_points_predictors(), random_seed = 123, include_diagnostics = FALSE, cache_dir = NULL, use_cache = TRUE) {
+fit_total_points_model <- function(historical_total_points,
+                                   predictor_columns = default_total_points_predictors(),
+                                   engine = c("stan_glm", "bart"),
+                                   bart_config = NULL,
+                                   random_seed = 123,
+                                   include_diagnostics = FALSE,
+                                   cache_dir = NULL,
+                                   use_cache = TRUE) {
+    engine <- match.arg(engine)
+    if (identical(engine, "bart")) {
+        return(
+            fit_total_points_model_bart(
+                historical_total_points = historical_total_points,
+                predictor_columns = predictor_columns,
+                bart_config = bart_config,
+                random_seed = random_seed,
+                cache_dir = cache_dir,
+                use_cache = use_cache
+            )
+        )
+    }
+
     require_bayesian_packages()
 
     cache_path <- NULL
     if (isTRUE(use_cache) && !is.null(cache_dir)) {
         dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
-        cache_key <- build_model_fit_cache_key(historical_total_points, predictor_columns, random_seed, include_diagnostics, model_label = "totals")
+        cache_key <- build_model_fit_cache_key(
+            historical_total_points,
+            predictor_columns,
+            random_seed,
+            include_diagnostics,
+            model_label = "totals",
+            engine = engine,
+            engine_config = NULL,
+            encoding_metadata = NULL
+        )
         cache_path <- build_model_fit_cache_path(cache_dir, cache_key, model_label = "totals")
         if (file.exists(cache_path)) {
             logger::log_info("Loading cached total-points model fit from {cache_path}")
@@ -509,19 +778,113 @@ fit_total_points_model <- function(historical_total_points, predictor_columns = 
     )
 
     fit_result <- list(
-        engine = "bayes",
+        engine = engine,
         outcome = "total_points",
         model = model,
         formula = formula_input,
         predictor_columns = predictor_columns,
         scaling_reference = prepared$scaling_reference,
-        diagnostics = if (isTRUE(include_diagnostics)) perform_model_diagnostics(model, "bayes_gaussian") else NULL,
+        diagnostics = if (isTRUE(include_diagnostics)) perform_model_diagnostics(model, "stan_glm_gaussian") else NULL,
         cache_path = cache_path
     )
 
     if (!is.null(cache_path)) {
         saveRDS(fit_result, cache_path)
         logger::log_info("Saved total-points model fit cache to {cache_path}")
+    }
+
+    fit_result
+}
+
+#' Fit the tournament total-points model using BART
+#'
+#' @param historical_total_points A matchup-level historical total-points table.
+#' @param predictor_columns Predictor columns to include in the model.
+#' @param bart_config Optional list of BART hyperparameters.
+#' @param random_seed Random seed used during fitting.
+#' @param cache_dir Optional directory used to store and reload fitted model bundles.
+#' @param use_cache Whether to reuse a cached fit when available.
+#'
+#' @return A list containing the fitted BART model, predictors, scaling
+#'   reference, and encoding metadata required for prediction.
+#' @export
+fit_total_points_model_bart <- function(historical_total_points,
+                                        predictor_columns = default_total_points_predictors(),
+                                        bart_config = NULL,
+                                        random_seed = 123,
+                                        cache_dir = NULL,
+                                        use_cache = TRUE) {
+    require_bart_packages()
+
+    bart_config <- resolve_bart_config(bart_config)
+    matrix_formula <- build_bart_matrix_formula(predictor_columns)
+
+    prepared <- prepare_total_points_model_data(historical_total_points, predictor_columns, require_outcome = TRUE)
+    x_train <- build_bart_model_matrix(prepared$data, matrix_formula)
+    y_train <- safe_numeric(prepared$data$total_points, default = NA_real_)
+
+    cache_path <- NULL
+    if (isTRUE(use_cache) && !is.null(cache_dir)) {
+        dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+        encoding_metadata <- list(
+            matrix_formula = format(matrix_formula),
+            model_matrix_columns = colnames(x_train),
+            round_levels = levels(prepared$data$round)
+        )
+        cache_key <- build_model_fit_cache_key(
+            historical_total_points,
+            predictor_columns,
+            random_seed,
+            include_diagnostics = FALSE,
+            model_label = "totals",
+            interaction_terms = NULL,
+            prior_type = "bart",
+            engine = "bart",
+            engine_config = bart_config,
+            encoding_metadata = encoding_metadata
+        )
+        cache_path <- build_model_fit_cache_path(cache_dir, cache_key, model_label = "totals")
+        if (file.exists(cache_path)) {
+            logger::log_info("Loading cached BART total-points model fit from {cache_path}")
+            cached_result <- readRDS(cache_path)
+            cached_result$cache_path <- cache_path
+            return(cached_result)
+        }
+    }
+
+    logger::log_info(
+        "Starting total-points BART model fitting (ntree={bart_config$n_trees}, burn={bart_config$n_burn}, post={bart_config$n_post})"
+    )
+    set.seed(random_seed)
+
+    model <- BART::wbart(
+        x.train = x_train,
+        y.train = y_train,
+        ntree = bart_config$n_trees,
+        nskip = bart_config$n_burn,
+        ndpost = bart_config$n_post,
+        k = bart_config$k,
+        power = bart_config$power,
+        printevery = 1000L
+    )
+
+    fit_result <- list(
+        engine = "bart",
+        outcome = "total_points",
+        model = model,
+        predictor_columns = predictor_columns,
+        scaling_reference = prepared$scaling_reference,
+        bart_config = bart_config,
+        matrix_formula = matrix_formula,
+        model_matrix_columns = colnames(x_train),
+        round_levels = levels(prepared$data$round),
+        diagnostics = NULL,
+        cache_path = cache_path
+    )
+
+    if (!is.null(cache_path)) {
+        saveRDS(fit_result, cache_path)
+        logger::log_info("Saved BART total-points model fit cache to {cache_path}")
     }
 
     fit_result
@@ -610,6 +973,52 @@ actual_results_to_matchup_rows <- function(actual_results) {
 #' @return A draw-by-game matrix of posterior expected win probabilities.
 #' @keywords internal
 predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
+    engine <- model_results$engine %||% "stan_glm"
+    if (engine %in% c("bayes", "bayes_glm")) {
+        engine <- "stan_glm"
+    }
+
+    if (identical(engine, "bart")) {
+        prepared <- prepare_model_data(
+            matchup_rows,
+            predictor_columns = model_results$predictor_columns,
+            scaling_reference = model_results$scaling_reference,
+            scaled_columns = names(model_results$scaling_reference %||% list()),
+            require_outcome = FALSE
+        )
+
+        prediction_data <- prepared$data
+        training_round_levels <- model_results$round_levels %||% NULL
+        if (!is.null(training_round_levels) && "round" %in% names(prediction_data)) {
+            round_values <- as.character(prediction_data$round)
+            round_values[!round_values %in% training_round_levels & round_values == "First Four"] <- "Round of 64"
+            prediction_data$round <- factor(round_values, levels = training_round_levels)
+        }
+
+        x_test <- build_bart_model_matrix(prediction_data, model_results$matrix_formula)
+        x_test <- align_bart_matrix_columns(x_test, model_results$model_matrix_columns)
+
+        if (anyNA(x_test)) {
+            stop_with_message("Prediction rows contain missing values after model-matrix encoding")
+        }
+
+        pred <- stats::predict(model_results$model, newdata = x_test)
+        draw_matrix <- if (is.matrix(pred)) {
+            pred
+        } else if (is.list(pred) && !is.null(pred$prob.test)) {
+            pred$prob.test
+        } else {
+            stop_with_message("BART prediction did not return a prob.test draw matrix")
+        }
+
+        draw_matrix <- as.matrix(draw_matrix)
+        storage.mode(draw_matrix) <- "double"
+        draw_matrix <- pmin(pmax(draw_matrix, 0), 1)
+
+        draws <- max(1L, min(as.integer(draws), nrow(draw_matrix)))
+        return(draw_matrix[seq_len(draws), , drop = FALSE])
+    }
+
     prepared <- prepare_model_data(
         matchup_rows,
         predictor_columns = model_results$predictor_columns,
@@ -657,6 +1066,44 @@ predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
 #' @return A draw-by-game matrix of posterior predictive total points.
 #' @export
 predict_total_points_rows <- function(matchup_rows, model_results, draws = 1000) {
+    engine <- model_results$engine %||% "stan_glm"
+    if (engine %in% c("bayes", "bayes_glm")) {
+        engine <- "stan_glm"
+    }
+
+    if (identical(engine, "bart")) {
+        prepared <- prepare_total_points_model_data(
+            matchup_rows,
+            predictor_columns = model_results$predictor_columns,
+            scaling_reference = model_results$scaling_reference,
+            require_outcome = FALSE
+        )
+
+        prediction_data <- prepared$data
+        training_round_levels <- model_results$round_levels %||% NULL
+        if (!is.null(training_round_levels) && "round" %in% names(prediction_data)) {
+            round_values <- as.character(prediction_data$round)
+            round_values[!round_values %in% training_round_levels & round_values == "First Four"] <- "Round of 64"
+            prediction_data$round <- factor(round_values, levels = training_round_levels)
+        }
+
+        x_test <- build_bart_model_matrix(prediction_data, model_results$matrix_formula)
+        x_test <- align_bart_matrix_columns(x_test, model_results$model_matrix_columns)
+
+        if (anyNA(x_test)) {
+            stop_with_message("Total-points prediction rows contain missing values after model-matrix encoding")
+        }
+
+        pred <- stats::predict(model_results$model, newdata = x_test)
+        draw_matrix <- as.matrix(pred)
+        storage.mode(draw_matrix) <- "double"
+
+        draws <- max(1L, min(as.integer(draws), nrow(draw_matrix)))
+        draw_matrix <- draw_matrix[seq_len(draws), , drop = FALSE]
+        draw_matrix[draw_matrix < 0] <- 0
+        return(draw_matrix)
+    }
+
     prepared <- prepare_total_points_model_data(
         matchup_rows,
         predictor_columns = model_results$predictor_columns,

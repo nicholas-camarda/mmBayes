@@ -1,0 +1,368 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'><title>mmBayes Bracket Dashboard</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f7f4ee;color:#1b1b1b;margin:0;padding:24px;line-height:1.4;}h1,h2,h3{margin:0 0 8px 0;} h1{font-size:30px;} h2{margin-top:28px;font-size:20px;} h3{font-size:17px;}.lede{max-width:920px;color:#3f3f46;margin:8px 0 20px 0;}.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}.candidate-card,.panel{background:white;border:1px solid #d6d3d1;border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,0.03);}.muted{color:#6b7280;}.status-panel{font-size:15px;}.status-panel strong{display:block;margin-bottom:6px;font-size:17px;text-transform:uppercase;letter-spacing:0.03em;}.status-simulated{background:#fff3cd;border:2px solid #d97706;color:#7c2d12;}.status-final{background:#ecfdf3;border:2px solid #16a34a;color:#14532d;}.status-unknown{background:#eef2ff;border:2px solid #6366f1;color:#312e81;}.candidate-type{text-transform:uppercase;font-size:11px;letter-spacing:0.08em;color:#57534e;}.tiebreaker-block{margin-top:14px;padding:14px;border-radius:12px;background:#102542;color:#f8fafc;}.tiebreaker-label{text-transform:uppercase;font-size:11px;letter-spacing:0.08em;color:#bfdbfe;margin-bottom:4px;}.tiebreaker-points{font-size:34px;font-weight:700;line-height:1;margin-bottom:8px;}.dashboard-table{width:100%;border-collapse:collapse;font-size:13px;background:white;}.dashboard-table th,.dashboard-table td{border:1px solid #e7e5e4;padding:8px 10px;vertical-align:top;text-align:left;}.dashboard-table th{background:#f5f5f4;}.dashboard-table tr.inspection-primary td{background:#fff7cc;}.dashboard-table tr.inspection-primary td:first-child{border-left:4px solid #d97706;}.dashboard-table tr.inspection-secondary td{background:#fff1eb;}.dashboard-table tr.inspection-secondary td:first-child{border-left:4px solid #ea580c;}.section-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;align-items:start;}.distribution-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}.distribution-meta p{margin:0 0 8px 0;}.distribution-note{font-size:13px;color:#475569;max-width:54ch;}.tier-pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#f3f4f6;}.legend-row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 18px 0;}.legend-chip{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:white;border:1px solid #d6d3d1;font-size:13px;}.legend-swatch{width:12px;height:12px;border-radius:999px;display:inline-block;}.legend-copy{font-size:12px;color:#6b7280;}.legend-primary{background:#fbbf24;}.legend-secondary{background:#fb923c;}.empty-state{color:#6b7280;font-style:italic;}.scatter-svg{width:100%;height:auto;background:white;border:1px solid #d6d3d1;border-radius:14px;padding:8px;}</style></head><body><h1>mmBayes Bracket Decision Console</h1><p class='lede'>Bracket year 2026. Use Candidate 1 as the safest expected-value bracket and Candidate 2 as the bounded-risk alternate. The tables below surface the hardest calls first, make the championship tiebreaker explicit for each bracket, and highlight the rows that deserve closer inspection.</p><div class='panel status-panel status-final'><strong>Status: Final result.</strong> First Four slots are resolved, so the displayed bracket path reflects finalized play-in outcomes.</div><div class='legend-row'><div class='legend-chip'><span class='legend-swatch legend-primary'></span><strong>Inspect now</strong> Toss-up rows worth a closer user review.</div><div class='legend-chip'><span class='legend-swatch legend-secondary'></span><strong>Watch closely</strong> Volatile rows with wider uncertainty.</div></div><div class='legend-row'><div class='legend-chip'><span class='legend-swatch' style='background:#2a9d8f'></span><div><strong>Lock</strong><div class='legend-copy'>Stable favorite</div></div></div>
+<div class='legend-chip'><span class='legend-swatch' style='background:#457b9d'></span><div><strong>Lean</strong><div class='legend-copy'>Clear edge</div></div></div>
+<div class='legend-chip'><span class='legend-swatch' style='background:#e9c46a'></span><div><strong>Toss-up</strong><div class='legend-copy'>Near coin flip</div></div></div>
+<div class='legend-chip'><span class='legend-swatch' style='background:#e76f51'></span><div><strong>Volatile</strong><div class='legend-copy'>Wide interval</div></div></div></div><div class='card-grid'><div class='candidate-card'><h3>Candidate 1 <span class='candidate-type'>safe</span></h3><p><strong>Champion:</strong> Michigan</p><p><strong>Final Four:</strong> Duke, Arizona, Illinois, Michigan</p><p><strong>Bracket log probability:</strong> -21.505</p><p><strong>Mean picked-game probability:</strong> 0.762</p><p><strong>Guidance:</strong> Primary bracket built from the higher posterior-mean pick in every slot.</p><div class='tiebreaker-block'><div class='tiebreaker-label'>Championship Tiebreaker</div><div class='tiebreaker-points'>162</div><p><strong>Projected title game:</strong> Illinois vs Michigan</p><p><strong>Median total:</strong> 161.8 <span class='muted'>| 80% interval 140-182</span></p></div></div>
+<div class='candidate-card'><h3>Candidate 2 <span class='candidate-type'>alternate</span></h3><p><strong>Champion:</strong> Arizona</p><p><strong>Final Four:</strong> Duke, Arizona, Illinois, Iowa State</p><p><strong>Bracket log probability:</strong> -24.372</p><p><strong>Mean picked-game probability:</strong> 0.744</p><p><strong>Guidance:</strong> Michigan State (Round of 32); Connecticut (Sweet 16); VCU (Round of 64)</p><div class='tiebreaker-block'><div class='tiebreaker-label'>Championship Tiebreaker</div><div class='tiebreaker-points'>150</div><p><strong>Projected title game:</strong> Arizona vs Duke</p><p><strong>Median total:</strong> 150.5 <span class='muted'>| 80% interval 129-172</span></p></div></div></div><h2>Hardest Decisions</h2><div class='section-grid'><div class='panel'><table class='dashboard-table'><thead><tr><th>round</th><th>region</th><th>matchup</th><th>recommended_pick</th><th>favorite_prob</th><th>tier</th><th>review</th><th>rationale</th></tr></thead><tbody><tr class='inspection-secondary'><td>Championship</td><td>NA</td><td>Illinois vs Michigan</td><td>Michigan</td><td>55.5%</td><td>Volatile</td><td>Watch closely</td><td>Late-round leverage spot. The underdog path is still live.</td></tr>
+<tr class='inspection-secondary'><td>Final Four</td><td>NA</td><td>Illinois vs Arizona</td><td>Illinois</td><td>56.4%</td><td>Volatile</td><td>Watch closely</td><td>Late-round leverage spot. The underdog path is still live.</td></tr>
+<tr class='inspection-secondary'><td>Final Four</td><td>NA</td><td>Duke vs Michigan</td><td>Michigan</td><td>53.5%</td><td>Volatile</td><td>Watch closely</td><td>Late-round leverage spot. The underdog path is still live.</td></tr>
+<tr class='inspection-secondary'><td>Elite 8</td><td>4</td><td>Arizona vs Purdue</td><td>Arizona</td><td>63.3%</td><td>Volatile</td><td>Watch closely</td><td>Late-round leverage spot. The underdog path is still live.</td></tr>
+<tr class='inspection-primary'><td>Elite 8</td><td>2</td><td>Vanderbilt vs Illinois</td><td>Illinois</td><td>70.3%</td><td>Toss-up</td><td>Inspect now</td><td>The favorite has the edge, but uncertainty is still meaningful.</td></tr>
+<tr class='inspection-secondary'><td>Sweet 16</td><td>2</td><td>Florida vs Vanderbilt</td><td>Vanderbilt</td><td>53.9%</td><td>Volatile</td><td>Watch closely</td><td>Wide posterior interval. This matchup is unstable enough to swing a bracket.</td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>3</td><td>Tennessee vs Iowa State</td><td>Iowa State</td><td>52.0%</td><td>Toss-up</td><td>Inspect now</td><td>Near coin flip. Either side is defensible in pool play.</td></tr>
+<tr class=''><td>Elite 8</td><td>3</td><td>Michigan vs Iowa State</td><td>Michigan</td><td>83.7%</td><td>Lock</td><td></td><td>Take the favorite. The posterior edge is strong and stable.</td></tr>
+<tr class=''><td>Elite 8</td><td>1</td><td>Duke vs Connecticut</td><td>Duke</td><td>82.0%</td><td>Lock</td><td></td><td>Take the favorite. The posterior edge is strong and stable.</td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>2</td><td>Illinois vs Houston</td><td>Illinois</td><td>57.7%</td><td>Toss-up</td><td>Inspect now</td><td>Near coin flip. Either side is defensible in pool play.</td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>1</td><td>Louisville vs Connecticut</td><td>Connecticut</td><td>61.2%</td><td>Toss-up</td><td>Inspect now</td><td>The favorite has the edge, but uncertainty is still meaningful.</td></tr>
+<tr class=''><td>Sweet 16</td><td>3</td><td>Michigan vs Texas Tech</td><td>Michigan</td><td>77.3%</td><td>Lean</td><td></td><td>Lean favorite. The safer side is clear, but it is not a lock.</td></tr>
+<tr class=''><td>Sweet 16</td><td>4</td><td>Arizona vs Arkansas</td><td>Arizona</td><td>78.2%</td><td>Lean</td><td></td><td>Lean favorite. The safer side is clear, but it is not a lock.</td></tr>
+<tr class=''><td>Sweet 16</td><td>4</td><td>Gonzaga vs Purdue</td><td>Purdue</td><td>83.0%</td><td>Lock</td><td></td><td>Take the favorite. The posterior edge is strong and stable.</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>1</td><td>Saint John's vs Kansas</td><td>Saint John's</td><td>53.2%</td><td>Toss-up</td><td>Inspect now</td><td>Near coin flip. Either side is defensible in pool play.</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>3</td><td>Tennessee vs Virginia</td><td>Tennessee</td><td>52.8%</td><td>Toss-up</td><td>Inspect now</td><td>Near coin flip. Either side is defensible in pool play.</td></tr></tbody></table></div><div><svg viewBox='0 0 680 260' class='scatter-svg' role='img' aria-label='Leverage scatter'><line x1='40' y1='224' x2='672' y2='224' stroke='#9aa0a6' stroke-width='1'/><line x1='40' y1='8' x2='40' y2='224' stroke='#9aa0a6' stroke-width='1'/><text x='40' y='256' font-size='11'>50%</text><text x='640' y='256' font-size='11'>100%</text><text x='8' y='16' font-size='11'>Leverage</text><text x='550' y='256' font-size='11'>Favorite win probability</text><circle cx='108.7' cy='8.0' r='6' fill='#e76f51'><title>NA | Championship | Michigan over Illinois | fav=55.5% | tier=Volatile</title></circle>
+<circle cx='119.8' cy='132.0' r='6' fill='#e76f51'><title>NA | Final Four | Illinois over Arizona | fav=56.4% | tier=Volatile</title></circle>
+<circle cx='83.8' cy='128.5' r='6' fill='#e76f51'><title>NA | Final Four | Michigan over Duke | fav=53.5% | tier=Volatile</title></circle>
+<circle cx='205.6' cy='187.8' r='6' fill='#e76f51'><title>West | Elite 8 | Arizona over Purdue | fav=63.3% | tier=Volatile</title></circle>
+<circle cx='293.3' cy='195.7' r='6' fill='#e9c46a'><title>South | Elite 8 | Illinois over Vanderbilt | fav=70.3% | tier=Toss-up</title></circle>
+<circle cx='88.9' cy='197.7' r='6' fill='#e76f51'><title>South | Sweet 16 | Vanderbilt over Florida | fav=53.9% | tier=Volatile</title></circle>
+<circle cx='64.6' cy='201.0' r='6' fill='#e9c46a'><title>Midwest | Sweet 16 | Iowa State over Tennessee | fav=52.0% | tier=Toss-up</title></circle>
+<circle cx='460.5' cy='209.5' r='6' fill='#2a9d8f'><title>Midwest | Elite 8 | Michigan over Iowa State | fav=83.7% | tier=Lock</title></circle>
+<circle cx='439.6' cy='208.2' r='6' fill='#2a9d8f'><title>East | Elite 8 | Duke over Connecticut | fav=82.0% | tier=Lock</title></circle>
+<circle cx='136.3' cy='203.9' r='6' fill='#e9c46a'><title>South | Sweet 16 | Illinois over Houston | fav=57.7% | tier=Toss-up</title></circle>
+<circle cx='179.2' cy='206.4' r='6' fill='#e9c46a'><title>East | Sweet 16 | Connecticut over Louisville | fav=61.2% | tier=Toss-up</title></circle>
+<circle cx='380.8' cy='213.9' r='6' fill='#457b9d'><title>Midwest | Sweet 16 | Michigan over Texas Tech | fav=77.3% | tier=Lean</title></circle>
+<circle cx='392.3' cy='214.4' r='6' fill='#457b9d'><title>West | Sweet 16 | Arizona over Arkansas | fav=78.2% | tier=Lean</title></circle>
+<circle cx='451.4' cy='216.6' r='6' fill='#2a9d8f'><title>West | Sweet 16 | Purdue over Gonzaga | fav=83.0% | tier=Lock</title></circle>
+<circle cx='79.4' cy='213.4' r='6' fill='#e9c46a'><title>East | Round of 32 | Saint John's over Kansas | fav=53.2% | tier=Toss-up</title></circle>
+<circle cx='75.1' cy='213.6' r='6' fill='#e9c46a'><title>Midwest | Round of 32 | Tennessee over Virginia | fav=52.8% | tier=Toss-up</title></circle>
+<circle cx='204.6' cy='215.3' r='6' fill='#e9c46a'><title>West | Round of 32 | Gonzaga over Texas | fav=63.2% | tier=Toss-up</title></circle>
+<circle cx='138.7' cy='214.5' r='6' fill='#e9c46a'><title>Midwest | Round of 32 | Texas Tech over Alabama | fav=57.9% | tier=Toss-up</title></circle>
+<circle cx='99.4' cy='214.1' r='6' fill='#e9c46a'><title>West | Round of 32 | Arkansas over Wisconsin | fav=54.8% | tier=Toss-up</title></circle>
+<circle cx='111.6' cy='214.2' r='6' fill='#e9c46a'><title>East | Round of 32 | Connecticut over UCLA | fav=55.7% | tier=Toss-up</title></circle></svg></div></div><h2>Candidate Differences</h2><div class='panel'><table class='dashboard-table'><thead><tr><th>round</th><th>region</th><th>slot</th><th>candidate_1</th><th>candidate_2</th><th>tier</th><th>review</th><th>why</th></tr></thead><tbody><tr class='inspection-primary'><td>Round of 32</td><td>1</td><td>3</td><td>Louisville from Louisville vs Michigan State</td><td>Michigan State from Louisville vs Michigan State</td><td>Toss-up</td><td>Inspect now</td><td>Near coin flip, so the alternate bracket takes the other side.</td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>1</td><td>2</td><td>Connecticut from Louisville vs Connecticut</td><td>Connecticut from Michigan State vs Connecticut</td><td>Toss-up</td><td>Inspect now</td><td>High-leverage late-round pivot.</td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>2</td><td>5</td><td>North Carolina from North Carolina vs VCU</td><td>VCU from North Carolina vs VCU</td><td>Toss-up</td><td>Inspect now</td><td>Live underdog pivot in a volatile matchup.</td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>2</td><td>7</td><td>Texas A&amp;M from Saint Mary's vs Texas A&amp;M</td><td>Saint Mary's from Saint Mary's vs Texas A&amp;M</td><td>Toss-up</td><td>Inspect now</td><td>Near coin flip, so the alternate bracket takes the other side.</td></tr>
+<tr class=''><td>Round of 32</td><td>2</td><td>3</td><td>Illinois from North Carolina vs Illinois</td><td>Illinois from VCU vs Illinois</td><td>Lock</td><td></td><td>Controlled alternate path with a plausible downstream payoff.</td></tr>
+<tr class=''><td>Round of 32</td><td>2</td><td>4</td><td>Houston from Texas A&amp;M vs Houston</td><td>Houston from Saint Mary's vs Houston</td><td>Lock</td><td></td><td>Controlled alternate path with a plausible downstream payoff.</td></tr>
+<tr class=''><td>Elite 8</td><td>3</td><td>1</td><td>Michigan from Michigan vs Iowa State</td><td>Iowa State from Michigan vs Iowa State</td><td>Lock</td><td></td><td>High-leverage late-round pivot.</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>4</td><td>2</td><td>Arkansas from Wisconsin vs Arkansas</td><td>Wisconsin from Wisconsin vs Arkansas</td><td>Toss-up</td><td>Inspect now</td><td>Live underdog pivot in a volatile matchup.</td></tr>
+<tr class=''><td>Sweet 16</td><td>4</td><td>1</td><td>Arizona from Arizona vs Arkansas</td><td>Arizona from Arizona vs Wisconsin</td><td>Lean</td><td></td><td>High-leverage late-round pivot.</td></tr>
+<tr class='inspection-secondary'><td>Final Four</td><td>NA</td><td>1</td><td>Illinois from Illinois vs Arizona</td><td>Arizona from Illinois vs Arizona</td><td>Volatile</td><td>Watch closely</td><td>High-leverage late-round pivot.</td></tr>
+<tr class='inspection-secondary'><td>Final Four</td><td>NA</td><td>2</td><td>Michigan from Duke vs Michigan</td><td>Duke from Duke vs Iowa State</td><td>Volatile</td><td>Watch closely</td><td>High-leverage late-round pivot.</td></tr>
+<tr class='inspection-secondary'><td>Championship</td><td>NA</td><td>1</td><td>Michigan from Illinois vs Michigan</td><td>Arizona from Arizona vs Duke</td><td>Volatile</td><td>Watch closely</td><td>High-leverage late-round pivot.</td></tr></tbody></table></div><h2>Championship Tiebreaker Distribution</h2><div class='distribution-grid'><div class='panel'><h3>Candidate 1 Championship Distribution</h3><div class='distribution-meta'><p><strong>Projected title game:</strong> Illinois vs Michigan</p><p><strong>Recommended tiebreaker:</strong> 162</p><p><strong>Median:</strong> 161.8 <span class='muted'>| 80% interval 140-182</span></p><p><strong>Most likely total:</strong> 169 <span class='muted'>| peak probability 3.5%</span></p><p class='distribution-note'>Use the recommended tiebreaker as the default entry. It is the model's rounded median championship total, so it minimizes miss distance more often than chasing an extreme outcome.</p></div><svg viewBox='0 0 460 220' class='tech-svg tiebreaker-svg' role='img' aria-label='Championship tiebreaker distribution'><line x1='42' y1='178' x2='436' y2='178' stroke='#94a3b8' stroke-width='1'/><line x1='42' y1='18' x2='42' y2='178' stroke='#94a3b8' stroke-width='1'/><rect x='199.7' y='24.0' width='129.3' height='148.0' fill='#fde68a' fill-opacity='0.35' rx='5'/><line x1='268.5' y1='18.0' x2='268.5' y2='178.0' stroke='#dc2626' stroke-width='2' stroke-dasharray='6 4'/><line x1='267.7' y1='18.0' x2='267.7' y2='178.0' stroke='#1d4ed8' stroke-width='2'/><circle cx='290.2' cy='18.0' r='4.5' fill='#1d4ed8' stroke='white' stroke-width='1.5'/><rect x='55.4' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='105.1' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='117.5' y='168.9' width='4.1' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='120.6' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='123.7' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='126.8' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='133.0' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='136.1' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='139.2' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='142.3' y='164.3' width='4.1' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='145.4' y='168.9' width='4.1' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='148.5' y='164.3' width='4.1' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='151.6' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='154.7' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='157.8' y='164.3' width='4.1' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='160.9' y='159.7' width='4.1' height='18.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='164.0' y='150.6' width='4.1' height='27.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='167.1' y='150.6' width='4.1' height='27.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='170.2' y='146.0' width='4.1' height='32.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='173.3' y='150.6' width='4.1' height='27.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='176.4' y='155.1' width='4.1' height='22.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='179.5' y='159.7' width='4.1' height='18.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='182.6' y='159.7' width='4.1' height='18.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='185.7' y='164.3' width='4.1' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='188.8' y='132.3' width='4.1' height='45.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='191.9' y='141.4' width='4.1' height='36.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='195.0' y='146.0' width='4.1' height='32.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='198.1' y='104.9' width='4.1' height='73.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='201.2' y='118.6' width='4.1' height='59.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='204.4' y='150.6' width='4.1' height='27.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='207.5' y='104.9' width='4.1' height='73.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='210.6' y='136.9' width='4.1' height='41.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='213.7' y='114.0' width='4.1' height='64.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='216.8' y='82.0' width='4.1' height='96.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='219.9' y='86.6' width='4.1' height='91.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='223.0' y='91.1' width='4.1' height='86.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='226.1' y='82.0' width='4.1' height='96.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='229.2' y='109.4' width='4.1' height='68.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='232.3' y='45.4' width='4.1' height='132.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='235.4' y='77.4' width='4.1' height='100.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='238.5' y='95.7' width='4.1' height='82.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='241.6' y='100.3' width='4.1' height='77.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='244.7' y='72.9' width='4.1' height='105.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='247.8' y='82.0' width='4.1' height='96.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='250.9' y='82.0' width='4.1' height='96.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='254.0' y='31.7' width='4.1' height='146.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='257.1' y='86.6' width='4.1' height='91.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='260.2' y='77.4' width='4.1' height='100.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='263.3' y='40.9' width='4.1' height='137.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='266.4' y='86.6' width='4.1' height='91.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='269.5' y='86.6' width='4.1' height='91.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='272.6' y='54.6' width='4.1' height='123.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='275.7' y='72.9' width='4.1' height='105.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='278.8' y='72.9' width='4.1' height='105.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='281.9' y='54.6' width='4.1' height='123.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='285.0' y='59.1' width='4.1' height='118.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='288.1' y='18.0' width='4.1' height='160.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='291.2' y='118.6' width='4.1' height='59.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='294.3' y='123.1' width='4.1' height='54.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='297.4' y='86.6' width='4.1' height='91.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='300.5' y='114.0' width='4.1' height='64.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='303.6' y='86.6' width='4.1' height='91.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='306.7' y='82.0' width='4.1' height='96.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='309.8' y='132.3' width='4.1' height='45.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='312.9' y='114.0' width='4.1' height='64.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='316.0' y='123.1' width='4.1' height='54.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='319.1' y='100.3' width='4.1' height='77.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='322.2' y='104.9' width='4.1' height='73.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='325.3' y='141.4' width='4.1' height='36.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='328.4' y='118.6' width='4.1' height='59.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='331.5' y='146.0' width='4.1' height='32.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='334.7' y='146.0' width='4.1' height='32.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='337.8' y='127.7' width='4.1' height='50.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='340.9' y='155.1' width='4.1' height='22.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='344.0' y='132.3' width='4.1' height='45.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='347.1' y='164.3' width='4.1' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='350.2' y='132.3' width='4.1' height='45.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='353.3' y='155.1' width='4.1' height='22.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='356.4' y='168.9' width='4.1' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='359.5' y='168.9' width='4.1' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='362.6' y='168.9' width='4.1' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='365.7' y='168.9' width='4.1' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='368.8' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='371.9' y='164.3' width='4.1' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='375.0' y='164.3' width='4.1' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='378.1' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='381.2' y='168.9' width='4.1' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='384.3' y='164.3' width='4.1' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='390.5' y='159.7' width='4.1' height='18.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='393.6' y='164.3' width='4.1' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='399.8' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='402.9' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='406.0' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='427.7' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='433.9' y='173.4' width='4.1' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/><text x='42' y='210' font-size='11' fill='#6b7280'>89</text><text x='436' y='210' text-anchor='end' font-size='11' fill='#6b7280'>216</text><text x='239' y='210' text-anchor='middle' font-size='11' fill='#6b7280'>Championship total points</text><text x='12' y='98' font-size='11' fill='#6b7280' transform='rotate(-90 12 98)'>Probability</text><rect x='292' y='14' width='10' height='10' fill='#fde68a' fill-opacity='0.55' rx='2'/><text x='308' y='23' font-size='10' fill='#6b7280'>80% interval</text><line x1='292' y1='38' x2='304' y2='38' stroke='#1d4ed8' stroke-width='2'/><text x='308' y='41' font-size='10' fill='#6b7280'>Median</text><line x1='364' y1='38' x2='376' y2='38' stroke='#dc2626' stroke-width='2' stroke-dasharray='6 4'/><text x='380' y='41' font-size='10' fill='#6b7280'>Recommended</text></svg></div>
+<div class='panel'><h3>Candidate 2 Championship Distribution</h3><div class='distribution-meta'><p><strong>Projected title game:</strong> Arizona vs Duke</p><p><strong>Recommended tiebreaker:</strong> 150</p><p><strong>Median:</strong> 150.5 <span class='muted'>| 80% interval 129-172</span></p><p><strong>Most likely total:</strong> 151 <span class='muted'>| peak probability 3.5%</span></p><p class='distribution-note'>Use the recommended tiebreaker as the default entry. It is the model's rounded median championship total, so it minimizes miss distance more often than chasing an extreme outcome.</p></div><svg viewBox='0 0 460 220' class='tech-svg tiebreaker-svg' role='img' aria-label='Championship tiebreaker distribution'><line x1='42' y1='178' x2='436' y2='178' stroke='#94a3b8' stroke-width='1'/><line x1='42' y1='18' x2='42' y2='178' stroke='#94a3b8' stroke-width='1'/><rect x='167.5' y='24.0' width='131.3' height='148.0' fill='#fde68a' fill-opacity='0.35' rx='5'/><line x1='231.2' y1='18.0' x2='231.2' y2='178.0' stroke='#dc2626' stroke-width='2' stroke-dasharray='6 4'/><line x1='232.7' y1='18.0' x2='232.7' y2='178.0' stroke='#1d4ed8' stroke-width='2'/><circle cx='234.3' cy='18.0' r='4.5' fill='#1d4ed8' stroke='white' stroke-width='1.5'/><rect x='39.9' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='70.9' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='86.4' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='89.5' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='98.8' y='168.9' width='4.3' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='101.9' y='168.9' width='4.3' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='108.1' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='111.2' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='114.3' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='117.4' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='120.5' y='164.3' width='4.3' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='123.6' y='164.3' width='4.3' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='126.7' y='146.0' width='4.3' height='32.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='129.8' y='168.9' width='4.3' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='132.9' y='168.9' width='4.3' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='136.0' y='164.3' width='4.3' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='139.1' y='164.3' width='4.3' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='142.2' y='150.6' width='4.3' height='27.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='145.3' y='146.0' width='4.3' height='32.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='148.4' y='132.3' width='4.3' height='45.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='151.5' y='155.1' width='4.3' height='22.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='154.6' y='132.3' width='4.3' height='45.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='157.7' y='136.9' width='4.3' height='41.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='160.9' y='136.9' width='4.3' height='41.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='164.0' y='141.4' width='4.3' height='36.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='167.1' y='136.9' width='4.3' height='41.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='170.2' y='118.6' width='4.3' height='59.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='173.3' y='136.9' width='4.3' height='41.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='176.4' y='118.6' width='4.3' height='59.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='179.5' y='123.1' width='4.3' height='54.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='182.6' y='127.7' width='4.3' height='50.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='185.7' y='104.9' width='4.3' height='73.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='188.8' y='109.4' width='4.3' height='68.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='191.9' y='104.9' width='4.3' height='73.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='195.0' y='86.6' width='4.3' height='91.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='198.1' y='72.9' width='4.3' height='105.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='201.2' y='127.7' width='4.3' height='50.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='204.3' y='104.9' width='4.3' height='73.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='207.4' y='72.9' width='4.3' height='105.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='210.5' y='36.3' width='4.3' height='141.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='213.6' y='77.4' width='4.3' height='100.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='216.7' y='59.1' width='4.3' height='118.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='219.8' y='72.9' width='4.3' height='105.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='222.9' y='82.0' width='4.3' height='96.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='226.0' y='50.0' width='4.3' height='128.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='229.1' y='100.3' width='4.3' height='77.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='232.2' y='18.0' width='4.3' height='160.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='235.3' y='72.9' width='4.3' height='105.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='238.4' y='82.0' width='4.3' height='96.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='241.5' y='77.4' width='4.3' height='100.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='244.6' y='54.6' width='4.3' height='123.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='247.7' y='118.6' width='4.3' height='59.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='250.8' y='36.3' width='4.3' height='141.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='253.9' y='54.6' width='4.3' height='123.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='257.0' y='91.1' width='4.3' height='86.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='260.1' y='91.1' width='4.3' height='86.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='263.2' y='86.6' width='4.3' height='91.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='266.3' y='132.3' width='4.3' height='45.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='269.4' y='45.4' width='4.3' height='132.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='272.5' y='104.9' width='4.3' height='73.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='275.6' y='77.4' width='4.3' height='100.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='278.7' y='118.6' width='4.3' height='59.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='281.8' y='91.1' width='4.3' height='86.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='284.9' y='141.4' width='4.3' height='36.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='288.0' y='132.3' width='4.3' height='45.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='291.2' y='91.1' width='4.3' height='86.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='294.3' y='118.6' width='4.3' height='59.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='297.4' y='141.4' width='4.3' height='36.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='300.5' y='123.1' width='4.3' height='54.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='303.6' y='127.7' width='4.3' height='50.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='306.7' y='136.9' width='4.3' height='41.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='309.8' y='146.0' width='4.3' height='32.0' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='312.9' y='155.1' width='4.3' height='22.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='316.0' y='127.7' width='4.3' height='50.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='319.1' y='150.6' width='4.3' height='27.4' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='322.2' y='159.7' width='4.3' height='18.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='325.3' y='159.7' width='4.3' height='18.3' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='328.4' y='164.3' width='4.3' height='13.7' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='331.5' y='141.4' width='4.3' height='36.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='334.6' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='337.7' y='168.9' width='4.3' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='340.8' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='343.9' y='155.1' width='4.3' height='22.9' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='347.0' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='353.2' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='356.3' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='359.4' y='168.9' width='4.3' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='362.5' y='168.9' width='4.3' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='365.6' y='168.9' width='4.3' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='378.0' y='168.9' width='4.3' height='9.1' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='399.7' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/>
+<rect x='405.9' y='173.4' width='4.3' height='4.6' rx='1.5' fill='#7c9bff' fill-opacity='0.75'/><text x='42' y='210' font-size='11' fill='#6b7280'>89</text><text x='436' y='210' text-anchor='end' font-size='11' fill='#6b7280'>216</text><text x='239' y='210' text-anchor='middle' font-size='11' fill='#6b7280'>Championship total points</text><text x='12' y='98' font-size='11' fill='#6b7280' transform='rotate(-90 12 98)'>Probability</text><rect x='292' y='14' width='10' height='10' fill='#fde68a' fill-opacity='0.55' rx='2'/><text x='308' y='23' font-size='10' fill='#6b7280'>80% interval</text><line x1='292' y1='38' x2='304' y2='38' stroke='#1d4ed8' stroke-width='2'/><text x='308' y='41' font-size='10' fill='#6b7280'>Median</text><line x1='364' y1='38' x2='376' y2='38' stroke='#dc2626' stroke-width='2' stroke-dasharray='6 4'/><text x='380' y='41' font-size='10' fill='#6b7280'>Recommended</text></svg></div></div><h2>Bracket-Ordered Review</h2><div class='panel'><h3>Safe Bracket #1 Sequence</h3><table class='dashboard-table'><thead><tr><th>round</th><th>region</th><th>winner</th><th>matchup</th><th>tier</th><th>review</th></tr></thead><tbody><tr class='inspection-primary'><td>First Four</td><td>South</td><td>Prairie View A&amp;M</td><td>Prairie View A&amp;M vs Lehigh</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>First Four</td><td>West</td><td>Texas</td><td>NC State vs Texas</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>First Four</td><td>Midwest</td><td>Miami OH</td><td>SMU vs Miami OH</td><td>Lock</td><td></td></tr>
+<tr class='inspection-secondary'><td>First Four</td><td>Midwest</td><td>Howard</td><td>UMBC vs Howard</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Duke</td><td>Duke vs Siena</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Ohio State</td><td>Ohio State vs TCU</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Saint John's</td><td>Saint John's vs Northern Iowa</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Kansas</td><td>Kansas vs Cal Baptist</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Louisville</td><td>Louisville vs South Florida</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Michigan State</td><td>Michigan State vs North Dakota State</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>UCLA</td><td>UCLA vs UCF</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Connecticut</td><td>Connecticut vs Furman</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Florida</td><td>Florida vs Prairie View A&amp;M</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>South</td><td>Iowa</td><td>Clemson vs Iowa</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Vanderbilt</td><td>Vanderbilt vs McNeese State</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Nebraska</td><td>Nebraska vs Troy</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>South</td><td>North Carolina</td><td>North Carolina vs VCU</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Illinois</td><td>Illinois vs Penn</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>South</td><td>Texas A&amp;M</td><td>Saint Mary's vs Texas A&amp;M</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Houston</td><td>Houston vs Idaho</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Arizona</td><td>Arizona vs LIU</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>West</td><td>Utah State</td><td>Villanova vs Utah State</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Wisconsin</td><td>Wisconsin vs High Point</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Arkansas</td><td>Arkansas vs Hawaii</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>West</td><td>Texas</td><td>BYU vs Texas</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Gonzaga</td><td>Gonzaga vs Kennesaw State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>West</td><td>Missouri</td><td>Miami (FL) vs Missouri</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Purdue</td><td>Purdue vs Queens</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Michigan</td><td>Michigan vs Howard</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>Midwest</td><td>Georgia</td><td>Georgia vs Saint Louis</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Texas Tech</td><td>Texas Tech vs Akron</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Alabama</td><td>Alabama vs Hofstra</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Tennessee</td><td>Tennessee vs Miami OH</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Virginia</td><td>Virginia vs Wright State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>Midwest</td><td>Santa Clara</td><td>Kentucky vs Santa Clara</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Iowa State</td><td>Iowa State vs Tennessee St.</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>East</td><td>Duke</td><td>Duke vs Ohio State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>East</td><td>Saint John's</td><td>Saint John's vs Kansas</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>East</td><td>Louisville</td><td>Louisville vs Michigan State</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>East</td><td>Connecticut</td><td>UCLA vs Connecticut</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 32</td><td>South</td><td>Florida</td><td>Florida vs Iowa</td><td>Lean</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>South</td><td>Vanderbilt</td><td>Vanderbilt vs Nebraska</td><td>Lean</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>South</td><td>Illinois</td><td>North Carolina vs Illinois</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>South</td><td>Houston</td><td>Texas A&amp;M vs Houston</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>West</td><td>Arizona</td><td>Arizona vs Utah State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>West</td><td>Arkansas</td><td>Wisconsin vs Arkansas</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>West</td><td>Gonzaga</td><td>Texas vs Gonzaga</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 32</td><td>West</td><td>Purdue</td><td>Missouri vs Purdue</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>Midwest</td><td>Michigan</td><td>Michigan vs Georgia</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>Midwest</td><td>Texas Tech</td><td>Texas Tech vs Alabama</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>Midwest</td><td>Tennessee</td><td>Tennessee vs Virginia</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>Midwest</td><td>Iowa State</td><td>Santa Clara vs Iowa State</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Sweet 16</td><td>East</td><td>Duke</td><td>Duke vs Saint John's</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>East</td><td>Connecticut</td><td>Louisville vs Connecticut</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-secondary'><td>Sweet 16</td><td>South</td><td>Vanderbilt</td><td>Florida vs Vanderbilt</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>South</td><td>Illinois</td><td>Illinois vs Houston</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Sweet 16</td><td>West</td><td>Arizona</td><td>Arizona vs Arkansas</td><td>Lean</td><td></td></tr>
+<tr class=''><td>Sweet 16</td><td>West</td><td>Purdue</td><td>Gonzaga vs Purdue</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Sweet 16</td><td>Midwest</td><td>Michigan</td><td>Michigan vs Texas Tech</td><td>Lean</td><td></td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>Midwest</td><td>Iowa State</td><td>Tennessee vs Iowa State</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Elite 8</td><td>East</td><td>Duke</td><td>Duke vs Connecticut</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Elite 8</td><td>South</td><td>Illinois</td><td>Vanderbilt vs Illinois</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-secondary'><td>Elite 8</td><td>West</td><td>Arizona</td><td>Arizona vs Purdue</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class=''><td>Elite 8</td><td>Midwest</td><td>Michigan</td><td>Michigan vs Iowa State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-secondary'><td>Final Four</td><td>NA</td><td>Illinois</td><td>Illinois vs Arizona</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class='inspection-secondary'><td>Final Four</td><td>NA</td><td>Michigan</td><td>Duke vs Michigan</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class='inspection-secondary'><td>Championship</td><td>NA</td><td>Michigan</td><td>Illinois vs Michigan</td><td>Volatile</td><td>Watch closely</td></tr></tbody></table></div><div class='panel'><h3>Bracket #2 Sequence</h3><table class='dashboard-table'><thead><tr><th>round</th><th>region</th><th>winner</th><th>matchup</th><th>tier</th><th>review</th></tr></thead><tbody><tr class='inspection-primary'><td>First Four</td><td>South</td><td>Prairie View A&amp;M</td><td>Prairie View A&amp;M vs Lehigh</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>First Four</td><td>West</td><td>Texas</td><td>NC State vs Texas</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>First Four</td><td>Midwest</td><td>Miami OH</td><td>SMU vs Miami OH</td><td>Lock</td><td></td></tr>
+<tr class='inspection-secondary'><td>First Four</td><td>Midwest</td><td>Howard</td><td>UMBC vs Howard</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Duke</td><td>Duke vs Siena</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Ohio State</td><td>Ohio State vs TCU</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Saint John's</td><td>Saint John's vs Northern Iowa</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Kansas</td><td>Kansas vs Cal Baptist</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Louisville</td><td>Louisville vs South Florida</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Michigan State</td><td>Michigan State vs North Dakota State</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>UCLA</td><td>UCLA vs UCF</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>East</td><td>Connecticut</td><td>Connecticut vs Furman</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Florida</td><td>Florida vs Prairie View A&amp;M</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>South</td><td>Iowa</td><td>Clemson vs Iowa</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Vanderbilt</td><td>Vanderbilt vs McNeese State</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Nebraska</td><td>Nebraska vs Troy</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>South</td><td>VCU</td><td>North Carolina vs VCU</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Illinois</td><td>Illinois vs Penn</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>South</td><td>Saint Mary's</td><td>Saint Mary's vs Texas A&amp;M</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>South</td><td>Houston</td><td>Houston vs Idaho</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Arizona</td><td>Arizona vs LIU</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>West</td><td>Utah State</td><td>Villanova vs Utah State</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Wisconsin</td><td>Wisconsin vs High Point</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Arkansas</td><td>Arkansas vs Hawaii</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>West</td><td>Texas</td><td>BYU vs Texas</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Gonzaga</td><td>Gonzaga vs Kennesaw State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>West</td><td>Missouri</td><td>Miami (FL) vs Missouri</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>West</td><td>Purdue</td><td>Purdue vs Queens</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Michigan</td><td>Michigan vs Howard</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>Midwest</td><td>Georgia</td><td>Georgia vs Saint Louis</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Texas Tech</td><td>Texas Tech vs Akron</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Alabama</td><td>Alabama vs Hofstra</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Tennessee</td><td>Tennessee vs Miami OH</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Virginia</td><td>Virginia vs Wright State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 64</td><td>Midwest</td><td>Santa Clara</td><td>Kentucky vs Santa Clara</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 64</td><td>Midwest</td><td>Iowa State</td><td>Iowa State vs Tennessee St.</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>East</td><td>Duke</td><td>Duke vs Ohio State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>East</td><td>Saint John's</td><td>Saint John's vs Kansas</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>East</td><td>Michigan State</td><td>Louisville vs Michigan State</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>East</td><td>Connecticut</td><td>UCLA vs Connecticut</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 32</td><td>South</td><td>Florida</td><td>Florida vs Iowa</td><td>Lean</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>South</td><td>Vanderbilt</td><td>Vanderbilt vs Nebraska</td><td>Lean</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>South</td><td>Illinois</td><td>VCU vs Illinois</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>South</td><td>Houston</td><td>Saint Mary's vs Houston</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>West</td><td>Arizona</td><td>Arizona vs Utah State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>West</td><td>Wisconsin</td><td>Wisconsin vs Arkansas</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>West</td><td>Gonzaga</td><td>Texas vs Gonzaga</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Round of 32</td><td>West</td><td>Purdue</td><td>Missouri vs Purdue</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Round of 32</td><td>Midwest</td><td>Michigan</td><td>Michigan vs Georgia</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>Midwest</td><td>Texas Tech</td><td>Texas Tech vs Alabama</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>Midwest</td><td>Tennessee</td><td>Tennessee vs Virginia</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-primary'><td>Round of 32</td><td>Midwest</td><td>Iowa State</td><td>Santa Clara vs Iowa State</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Sweet 16</td><td>East</td><td>Duke</td><td>Duke vs Saint John's</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>East</td><td>Connecticut</td><td>Michigan State vs Connecticut</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-secondary'><td>Sweet 16</td><td>South</td><td>Vanderbilt</td><td>Florida vs Vanderbilt</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>South</td><td>Illinois</td><td>Illinois vs Houston</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Sweet 16</td><td>West</td><td>Arizona</td><td>Arizona vs Wisconsin</td><td>Lean</td><td></td></tr>
+<tr class=''><td>Sweet 16</td><td>West</td><td>Purdue</td><td>Gonzaga vs Purdue</td><td>Lock</td><td></td></tr>
+<tr class=''><td>Sweet 16</td><td>Midwest</td><td>Michigan</td><td>Michigan vs Texas Tech</td><td>Lean</td><td></td></tr>
+<tr class='inspection-primary'><td>Sweet 16</td><td>Midwest</td><td>Iowa State</td><td>Tennessee vs Iowa State</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class=''><td>Elite 8</td><td>East</td><td>Duke</td><td>Duke vs Connecticut</td><td>Lock</td><td></td></tr>
+<tr class='inspection-primary'><td>Elite 8</td><td>South</td><td>Illinois</td><td>Vanderbilt vs Illinois</td><td>Toss-up</td><td>Inspect now</td></tr>
+<tr class='inspection-secondary'><td>Elite 8</td><td>West</td><td>Arizona</td><td>Arizona vs Purdue</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class=''><td>Elite 8</td><td>Midwest</td><td>Iowa State</td><td>Michigan vs Iowa State</td><td>Lock</td><td></td></tr>
+<tr class='inspection-secondary'><td>Final Four</td><td>NA</td><td>Arizona</td><td>Illinois vs Arizona</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class='inspection-secondary'><td>Final Four</td><td>NA</td><td>Duke</td><td>Duke vs Iowa State</td><td>Volatile</td><td>Watch closely</td></tr>
+<tr class='inspection-secondary'><td>Championship</td><td>NA</td><td>Arizona</td><td>Arizona vs Duke</td><td>Volatile</td><td>Watch closely</td></tr></tbody></table></div><h2>Calibration Snapshot</h2><div class='panel'><p class='panel-caption'><strong>Source:</strong> Latest saved model-quality snapshot from 2026-03-19 23:33 UTC</p><table class='dashboard-table'><thead><tr><th>mean_log_loss</th><th>mean_brier</th><th>mean_accuracy</th><th>mean_bracket_score</th><th>mean_correct_picks</th></tr></thead><tbody><tr class=''><td>0.532</td><td>0.174</td><td>74.8%</td><td>103.8</td><td>42.8</td></tr></tbody></table></div><h2>How To Use This</h2><div class='panel'><p><strong>Pick rule:</strong> start with Candidate 1, then only override with Candidate 2 on games that appear in the diff table and still feel plausible to you.</p><p><strong>Confidence tiers:</strong> Locks are stable favorite spots. Leans still favor one side. Toss-ups are real decisions. Volatile games carry wide uncertainty even if one team is favored.</p><p><strong>Inspection workflow:</strong> use the highlighted Toss-up and Volatile rows as the short list for manual re-checks. Full matchup total-points detail is exported to CSVs if you want a deeper scoring review.</p><p><strong>Best pool behavior:</strong> late-round volatility matters more than noisy Round of 64 upset hunting under standard scoring.</p></div></body></html>

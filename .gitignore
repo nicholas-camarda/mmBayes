@@ -6,8 +6,13 @@ plots/*
 output/*
 !output/.gitkeep
 !output/*.html
-!output/*.csv
-!output/*.txt
+output/*.csv
+output/*.txt
+output/*.log
+tests/testthat/output/logs
+tests/testthat/output/model_cache
+
+archive/
 
 *.Rout
 priors/*.rds

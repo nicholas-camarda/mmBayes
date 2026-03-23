@@ -14,6 +14,14 @@ default_project_config <- function() {
         model = list(
             history_window = 8L,
             backtest = TRUE,
+            engine = "stan_glm",
+            bart = list(
+                n_trees = 200L,
+                n_burn = 500L,
+                n_post = 1000L,
+                k = 2,
+                power = 2
+            ),
             required_predictors = c(
                 "round",
                 "same_conf",

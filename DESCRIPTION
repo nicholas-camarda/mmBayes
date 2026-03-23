@@ -27,6 +27,7 @@ Imports:
     writexl,
     yaml
 Suggests:
+    BART,
     config,
     pkgload,
     roxygen2,
