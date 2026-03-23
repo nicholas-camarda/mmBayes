@@ -21,6 +21,11 @@ run_tournament_simulation <- function(config = NULL) {
     logger::log_info("Pipeline started")
     logger::log_info("Loading tournament data")
     data <- load_tournament_data(config)
+    betting_context <- resolve_latest_matchup_lines(
+        config = config,
+        bracket_year = data$bracket_year,
+        current_teams = data$current_teams
+    )
     logger::log_info("Fitting tournament model")
     model_results <- fit_tournament_model(
         historical_matchups = data$historical_matchups,
@@ -28,6 +33,16 @@ run_tournament_simulation <- function(config = NULL) {
         random_seed = config$model$random_seed,
         cache_dir = model_cache_dir,
         use_cache = use_model_cache
+    )
+    model_results$betting <- list(
+        enabled = isTRUE(config$betting$enabled %||% FALSE),
+        blend_weight = suppressWarnings(as.numeric(config$betting$blend_weight %||% 0)),
+        blend_rounds = config$betting$blend_rounds %||% character(),
+        lines_matchups = betting_context$lines_matchups %||% NULL,
+        source_label = betting_context$source_label %||% NULL,
+        used_api_call = isTRUE(betting_context$used_api_call %||% FALSE),
+        latest_lines_matchups_path = betting_context$latest_lines_matchups_path %||% NULL,
+        snapshot_path = betting_context$snapshot_path %||% NULL
     )
     logger::log_info("Fitting total-points model")
     total_points_model <- fit_total_points_model(
@@ -88,6 +103,7 @@ run_tournament_simulation <- function(config = NULL) {
         decision_sheet = decision_sheet,
         total_points_predictions = total_points_predictions,
         final_four = simulation_results$final_four,
+        betting = model_results$betting,
         output = list(log_path = run_log_path)
     )
 

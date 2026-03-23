@@ -55,6 +55,21 @@ Run the full simulation pipeline:
 Rscript scripts/run_simulation.R
 ```
 
+Capture a private Odds API snapshot (build local historical odds going forward):
+
+```sh
+ODDS_API_KEY=... Rscript scripts/capture_odds_snapshot.R
+# or put ODDS_API_KEY in a gitignored .env and run:
+Rscript scripts/capture_odds_snapshot.R
+```
+
+After the tournament is complete, derive an approximate "closing line" table from
+the saved snapshots (no API calls):
+
+```sh
+Rscript scripts/build_closing_lines.R --year=2026
+```
+
 Refresh the canonical tournament data files:
 
 ```sh
@@ -88,6 +103,18 @@ The canonical data refresh writes two files:
 - `data/tournament_game_results.xlsx`
 
 The default model uses the most recent eight completed tournaments available in the data files, skips 2020, and backtests on rolling held-out years before predicting the current bracket.
+
+## Betting Lines (Optional)
+
+The pipeline can optionally blend sportsbook-implied probabilities into the
+matchup simulation. Odds snapshots are stored under `data/odds_history/`, which
+is gitignored in this repo so the history stays local/private.
+
+- The Odds API key is read from `ODDS_API_KEY` and is never written to disk.
+- Bookmakers default to `draftkings`, `fanduel`, `betmgm`, and `betrivers`.
+- Markets default to `h2h` (moneyline) and `spreads`.
+- When enabled, the main pipeline only calls the API if no local snapshot exists
+  yet for the bracket year; otherwise it reuses `data/odds_history/<year>/latest_lines_matchups.csv`.
 
 ## How The Model Works
 

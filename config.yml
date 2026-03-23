@@ -22,6 +22,27 @@ default:
       - Adj T._diff
     random_seed: 42
     n_draws: 1000
+  betting:
+    enabled: true
+    provider: "odds_api"
+    api_key_env: "ODDS_API_KEY"
+    sport_key: "basketball_ncaab"
+    regions: "us"
+    markets:
+      - "h2h"
+      - "spreads"
+    bookmakers:
+      - "draftkings"
+      - "fanduel"
+      - "betmgm"
+      - "betrivers"
+    odds_format: "american"
+    date_format: "iso"
+    history_dir: "data/odds_history"
+    fetch_policy: "if_missing"
+    blend_weight: 0.35
+    blend_rounds:
+      - "Round of 64"
   output:
     path: "output"
     prefix: "tournament_sim"

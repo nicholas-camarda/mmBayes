@@ -33,6 +33,21 @@ default_project_config <- function() {
             random_seed = 42,
             n_draws = 1000
         ),
+        betting = list(
+            enabled = FALSE,
+            provider = "odds_api",
+            api_key_env = "ODDS_API_KEY",
+            sport_key = "basketball_ncaab",
+            regions = "us",
+            markets = c("h2h", "spreads"),
+            bookmakers = c("draftkings", "fanduel", "betmgm", "betrivers"),
+            odds_format = "american",
+            date_format = "iso",
+            history_dir = "data/odds_history",
+            fetch_policy = "if_missing",
+            blend_weight = 0.35,
+            blend_rounds = c("Round of 64")
+        ),
         output = list(
             path = "output",
             prefix = "tournament_sim",

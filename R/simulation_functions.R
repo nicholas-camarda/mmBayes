@@ -55,14 +55,35 @@ predict_matchup_probabilities <- function(teamA, teamB, round_name, model_result
 #' @return A list containing posterior summary statistics and draws.
 #' @export
 calculate_win_probabilities <- function(teamA, teamB, round_name, model_results, draws = 1000) {
-    draw_probs <- predict_matchup_probabilities(teamA, teamB, round_name, model_results, draws)
+    model_draw_probs <- predict_matchup_probabilities(teamA, teamB, round_name, model_results, draws)
+    model_mean <- mean(model_draw_probs)
+
+    betting <- model_results$betting %||% list()
+    blend_rounds <- betting$blend_rounds %||% character()
+    blend_weight <- suppressWarnings(as.numeric(betting$blend_weight %||% 0))
+    blend_weight <- max(0, min(1, blend_weight))
+    line_prob <- NA_real_
+    used_betting_line <- FALSE
+
+    draw_probs <- model_draw_probs
+    if (isTRUE(betting$enabled %||% FALSE) && !is.null(betting$lines_matchups) && round_name %in% blend_rounds) {
+        line_prob <- lookup_line_prob_for_team_a(betting$lines_matchups, teamA$Team[1], teamB$Team[1])
+        if (is.finite(line_prob) && !is.na(line_prob)) {
+            draw_probs <- (1 - blend_weight) * model_draw_probs + blend_weight * line_prob
+            used_betting_line <- TRUE
+        }
+    }
 
     list(
         mean = mean(draw_probs),
         ci_lower = as.numeric(stats::quantile(draw_probs, 0.025)),
         ci_upper = as.numeric(stats::quantile(draw_probs, 0.975)),
         sd = stats::sd(draw_probs),
-        draws = draw_probs
+        draws = draw_probs,
+        model_mean = model_mean,
+        line_prob = line_prob,
+        blend_weight = blend_weight,
+        used_betting_line = used_betting_line
     )
 }
 
@@ -111,6 +132,10 @@ create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_
         teamB_seed = team_b_seed,
         teamB_strength = matchup_stats$teamB_strength,
         win_prob_A = win_probs$mean,
+        model_win_prob_A = win_probs$model_mean %||% NA_real_,
+        line_prob_A = win_probs$line_prob %||% NA_real_,
+        betting_blend_weight = win_probs$blend_weight %||% NA_real_,
+        used_betting_line = isTRUE(win_probs$used_betting_line %||% FALSE),
         ci_lower = win_probs$ci_lower,
         ci_upper = win_probs$ci_upper,
         prediction_sd = win_probs$sd,

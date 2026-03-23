@@ -12,3 +12,5 @@ archive/
 .DS_Store
 .history/
 .lintr
+.env
+

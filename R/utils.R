@@ -37,6 +37,59 @@ safe_numeric <- function(x, default = 0) {
     ifelse(is.na(value) | !is.finite(value), default, value)
 }
 
+#' Load environment variables from a `.env`-style file
+#'
+#' This helper supports simple `KEY=VALUE` lines, optionally quoted values, and
+#' ignores blank lines or comments beginning with `#`. It is designed to avoid
+#' introducing new dependencies while keeping secrets out of version control.
+#'
+#' @param path Path to the `.env` file.
+#' @param override Whether to override existing environment variables.
+#'
+#' @return Invisibly returns a character vector of environment keys loaded.
+#' @export
+load_dotenv_file <- function(path = ".env", override = FALSE) {
+    if (!file.exists(path)) {
+        return(invisible(character()))
+    }
+
+    lines <- readLines(path, warn = FALSE)
+    loaded <- character()
+
+    for (line in lines) {
+        line <- stringr::str_trim(line %||% "")
+        if (!nzchar(line) || startsWith(line, "#")) {
+            next
+        }
+
+        if (!grepl("=", line, fixed = TRUE)) {
+            next
+        }
+
+        parts <- strsplit(line, "=", fixed = TRUE)[[1]]
+        key <- stringr::str_trim(parts[[1]] %||% "")
+        value <- paste(parts[-1], collapse = "=")
+        value <- stringr::str_trim(value)
+        if (!nzchar(key)) {
+            next
+        }
+
+        if ((startsWith(value, "\"") && endsWith(value, "\"")) ||
+            (startsWith(value, "'") && endsWith(value, "'"))) {
+            value <- substr(value, 2, nchar(value) - 1)
+        }
+
+        if (!isTRUE(override) && nzchar(Sys.getenv(key, unset = ""))) {
+            next
+        }
+
+        do.call(Sys.setenv, stats::setNames(list(value), key))
+        loaded <- c(loaded, key)
+    }
+
+    invisible(unique(loaded))
+}
+
 #' Build a raw normalization key for team names
 #'
 #' @param x A character vector of team names.
