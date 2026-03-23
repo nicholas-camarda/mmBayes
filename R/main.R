@@ -27,12 +27,16 @@ run_tournament_simulation <- function(config = NULL) {
         current_teams = data$current_teams
     )
     logger::log_info("Fitting tournament model")
+    interaction_terms <- as.character(unlist(config$model$interaction_terms %||% character(0)))
+    if (length(interaction_terms) == 0L) interaction_terms <- NULL
     model_results <- fit_tournament_model(
         historical_matchups = data$historical_matchups,
         predictor_columns = config$model$required_predictors,
         random_seed = config$model$random_seed,
         cache_dir = model_cache_dir,
-        use_cache = use_model_cache
+        use_cache = use_model_cache,
+        interaction_terms = interaction_terms,
+        prior_type = config$model$prior_type %||% "normal"
     )
     model_results$betting <- list(
         enabled = isTRUE(config$betting$enabled %||% FALSE),
@@ -60,7 +64,9 @@ run_tournament_simulation <- function(config = NULL) {
             random_seed = config$model$random_seed,
             draws = config$model$n_draws,
             cache_dir = model_cache_dir,
-            use_cache = use_model_cache
+            use_cache = use_model_cache,
+            interaction_terms = interaction_terms,
+            prior_type = config$model$prior_type %||% "normal"
         )
     } else {
         NULL

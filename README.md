@@ -1,22 +1,20 @@
 # mmBayes
 
-`mmBayes` is an R-based NCAA tournament bracket lab. It turns pre-tournament team data and historical results into Bayesian win probabilities, bracket candidates, and review artifacts for manual entry.
+An R-based NCAA tournament bracket lab. Turns pre-tournament team data and historical results into Bayesian win probabilities, ranked bracket candidates, and review artifacts for manual entry.
 
-## What It Produces
+## Table of Contents
 
-The repository is built to generate a small set of decision-ready outputs:
+- [Preview](#preview)
+- [Quick Start](#quick-start)
+- [Outputs](#outputs)
+- [Commands](#commands)
+- [How It Works](#how-it-works)
+- [Model Details](#model-details)
+- [Betting Lines](#betting-lines-optional)
+- [Repository Layout](#repository-layout)
+- [Documentation](#documentation)
 
-- `output/bracket_dashboard.html`: the main bracket review console
-- `output/technical_dashboard.html`: the technical model-and-simulation dashboard
-- `output/bracket_decision_sheet.csv`: the ranked decision sheet for manual picks
-- `output/bracket_candidate_1.csv` and `output/bracket_candidate_2.csv`: the safe bracket and alternate bracket paths
-- `output/bracket_candidates.txt` and `output/bracket_candidates.rds`: candidate summaries and serialized bracket candidates
-- `output/tournament_sim_candidate_brackets.txt`: a text summary of the candidate bracket set
-- `output/tournament_sim.rds`: the full simulation bundle
-- `output/tournament_sim_model_summary.txt` and `output/tournament_sim_backtest_summary.txt`: model and backtest summaries
-- `output/candidate_matchup_total_points.csv`: matchup-level total points support
-- `output/championship_tiebreaker_summary.csv` and `output/championship_tiebreaker_distribution.csv`: tiebreaker outputs
-- `output/model_quality/latest_model_quality.rds` plus timestamped archives in `output/model_quality/`: reusable model-quality snapshots for the dashboards
+---
 
 ## Preview
 
@@ -25,180 +23,169 @@ This repo is meant to produce bracket-entry materials you can review quickly in 
 [Open the bracket dashboard](output/bracket_dashboard.html)
 [Open the technical dashboard](output/technical_dashboard.html)
 
-And the main review loop usually looks like this:
+The main review loop usually looks like this:
 
-1. open `output/bracket_dashboard.html` to compare the safe bracket and alternate bracket
-2. scan `output/bracket_decision_sheet.csv` for the hardest decisions first
-3. use `output/bracket_candidate_1.csv` and `output/bracket_candidate_2.csv` if you want the underlying pick paths
+1. open [output/bracket_dashboard.html](output/bracket_dashboard.html) to compare the safe bracket and alternate bracket
+2. scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) for the hardest decisions first
+3. use [output/bracket_candidate_1.csv](output/bracket_candidate_1.csv) and [output/bracket_candidate_2.csv](output/bracket_candidate_2.csv) if you want the underlying pick paths
 4. check the status banner to see whether First Four slots are still simulated or already final
 
 The dashboard is designed to answer two questions fast: which picks matter most, where the bracket is still sensitive to unresolved play-in games, and whether the most recent backtest snapshot says the model is sharp and calibrated enough to trust.
 
-## Core Workflow
-
-The standard simulation run does the following:
-
-1. loads `config.yml`
-2. reads canonical team features and historical tournament results from `data/`
-3. fits a Bayesian matchup-level winner model
-4. runs a rolling held-out-tournament backtest
-5. simulates the current bracket forward using posterior probabilities
-6. builds the dashboard, decision sheet, and candidate bracket exports
-
-The active runtime lives in `R/`. The supported command-line entry points live in `scripts/`.
-
-## Supported Commands
-
-Run the full simulation pipeline:
+## Quick Start
 
 ```sh
-Rscript scripts/run_simulation.R
-```
-
-Capture a private Odds API snapshot (build local historical odds going forward):
-
-```sh
-ODDS_API_KEY=... Rscript scripts/capture_odds_snapshot.R
-# or put ODDS_API_KEY in a gitignored .env and run:
-Rscript scripts/capture_odds_snapshot.R
-```
-
-After the tournament is complete, derive an approximate "closing line" table from
-the saved snapshots (no API calls):
-
-```sh
-Rscript scripts/build_closing_lines.R --year=2026
-```
-
-Refresh the canonical tournament data files:
-
-```sh
+# 1. Refresh the canonical data files
 Rscript scripts/update_data.R
+
+# 2. Run the full simulation and generate all outputs
+Rscript scripts/run_simulation.R
+
+# 3. Open the bracket dashboard in your browser
+open output/bracket_dashboard.html
 ```
 
-Generate faster bracket-entry artifacts without the full backtest:
+Then scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) to identify the highest-leverage picks before filling out your entry.
 
-```sh
-Rscript scripts/run_bracket_candidates.R
-```
+---
 
-Run a data-quality check:
+## Outputs
 
-```sh
-Rscript scripts/data_quality_check.R
-```
+After a pipeline run the following files are generated in `output/`. HTML dashboards and the human-readable CSV / TXT artifacts are committed to the repo so they can be reviewed directly on GitHub.
 
-## Modeling Design
+### Dashboards (HTML)
 
-The active modeling core is matchup-based:
+| File | Description |
+|------|-------------|
+| [bracket_dashboard.html](output/bracket_dashboard.html) | Main bracket review console |
+| [technical_dashboard.html](output/technical_dashboard.html) | Model diagnostics and simulation detail |
 
-- historical training data is one row per actual tournament game
-- predictors are restricted to pre-tournament season features and matchup context
-- leakage-prone tournament outcome features are excluded from active modeling
-- bracket picks are derived from calibrated game probabilities rather than a team-level `Champ` target
+### Decision Artifacts (CSV)
 
-The canonical data refresh writes two files:
+| File | Description |
+|------|-------------|
+| [bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) | Ranked picks sorted by leverage - start here |
+| [bracket_candidate_1.csv](output/bracket_candidate_1.csv) | Safe bracket path |
+| [bracket_candidate_2.csv](output/bracket_candidate_2.csv) | Alternate bracket path |
+| [candidate_matchup_total_points.csv](output/candidate_matchup_total_points.csv) | Matchup-level total-points support |
+| [championship_tiebreaker_summary.csv](output/championship_tiebreaker_summary.csv) | Championship tiebreaker summary |
+| [championship_tiebreaker_distribution.csv](output/championship_tiebreaker_distribution.csv) | Full tiebreaker score distribution |
 
-- `data/pre_tournament_team_features.xlsx`
-- `data/tournament_game_results.xlsx`
+### Summaries (TXT)
 
-The default model uses the most recent eight completed tournaments available in the data files, skips 2020, and backtests on rolling held-out years before predicting the current bracket.
+| File | Description |
+|------|-------------|
+| [tournament_sim_candidate_brackets.txt](output/tournament_sim_candidate_brackets.txt) | Text summary of all candidate brackets |
+| [tournament_sim_model_summary.txt](output/tournament_sim_model_summary.txt) | Fitted model coefficient summary |
+| [tournament_sim_backtest_summary.txt](output/tournament_sim_backtest_summary.txt) | Rolling backtest accuracy report |
+| [bracket_candidates.txt](output/bracket_candidates.txt) | Concise candidate bracket listing |
 
-## Betting Lines (Optional)
+### Heavy Artifacts (ignored by git)
 
-The pipeline can optionally blend sportsbook-implied probabilities into the
-matchup simulation. Odds snapshots are stored under `data/odds_history/`, which
-is gitignored in this repo so the history stays local/private.
+- `tournament_sim.rds` - full simulation bundle
+- `bracket_candidates.rds` - serialized bracket candidates
+- `model_cache/` - cached model fits
+- `model_quality/` - model-quality snapshots
 
-- The Odds API key is read from `ODDS_API_KEY` and is never written to disk.
-- Bookmakers default to `draftkings`, `fanduel`, `betmgm`, and `betrivers`.
-- Markets default to `h2h` (moneyline) and `spreads`.
-- When enabled, the main pipeline only calls the API if no local snapshot exists
-  yet for the bracket year; otherwise it reuses `data/odds_history/<year>/latest_lines_matchups.csv`.
+---
 
-## How The Model Works
+## Commands
 
-The modeling approach is intentionally simple to explain:
+| Command | Purpose |
+|---------|---------|
+| `Rscript scripts/run_simulation.R` | Full pipeline: fit, backtest, simulate, export |
+| `Rscript scripts/update_data.R` | Refresh canonical data files from source |
+| `Rscript scripts/run_bracket_candidates.R` | Fast bracket export without full backtest |
+| `Rscript scripts/data_quality_check.R` | Data-quality validation |
+| `Rscript scripts/capture_odds_snapshot.R` | Capture a private Odds API snapshot |
+| `Rscript scripts/build_closing_lines.R --year=2026` | Derive closing-line estimates from saved snapshots |
 
-1. each historical tournament game becomes one training row
-2. the model compares the two teams using pre-tournament metrics like efficiency, resume strength, and seed
-3. a Bayesian logistic regression estimates the probability that team A wins the matchup
-4. posterior draws turn those probabilities into a ranked decision sheet and candidate bracket paths
+---
 
-In plain English, the model does not try to guess the whole bracket directly. It estimates game-by-game win probabilities, then rolls those probabilities forward through the bracket to see which picks survive and where the leverage spots are.
+## How It Works
 
-The Bayesian part matters because it keeps uncertainty visible. Instead of one hard yes/no answer, the model produces a posterior distribution, which is why the dashboard can show probabilities, intervals, and alternate bracket paths rather than just a single deterministic bracket.
+The pipeline runs in six steps:
 
-## Model Snapshot
+1. Load `config.yml` and read team features plus historical results from `data/`
+2. Build one training row per historical tournament game at the matchup level
+3. Fit a Bayesian logistic regression for game-winner probability
+4. Run a rolling held-out-tournament backtest to validate calibration
+5. Simulate the current bracket forward round by round using posterior draws
+6. Export dashboards, the decision sheet, and candidate bracket files
 
-The active winner model is a Bayesian logistic regression with a logit link:
+The model estimates game-by-game win probabilities rather than predicting the whole bracket at once. Posterior draws surface those probabilities as ranked picks, uncertainty intervals, and alternate bracket paths, so the dashboard shows where the bracket is settled and where it is still sensitive to unresolved play-in games.
+
+Data sources:
+
+- `data/pre_tournament_team_features.xlsx` - pre-tournament season metrics per team
+- `data/tournament_game_results.xlsx` - historical tournament game results
+
+The default configuration uses the eight most recent completed tournaments, skips 2020, and backtests on rolling held-out years.
+
+---
+
+## Model Details
+
+### Winner Model
+
+A Bayesian logistic regression with a logit link:
 
 $$
 \Pr(\text{team A wins}) = \text{logit}^{-1}(\alpha + \beta_{round} + \beta_{same\_conf} + \beta_{seed} + \beta_{barthag} + \cdots)
 $$
 
-In practice, the model uses these matchup predictors:
+Matchup predictors (differences between the two teams):
 
-- `round`
-- `same_conf`
-- `seed_diff`
-- `barthag_logit_diff`
-- `AdjOE_diff`
-- `AdjDE_diff`
-- `WAB_diff`
-- `TOR_diff`
-- `TORD_diff`
-- `ORB_diff`
-- `DRB_diff`
-- `3P%_diff`
-- `3P%D_diff`
-- `Adj T._diff`
+| Predictor | Description |
+|-----------|-------------|
+| `round` | Tournament round |
+| `same_conf` | Conference matchup indicator |
+| `seed_diff` | Seed difference |
+| `barthag_logit_diff` | Logit-transformed Barthag rating difference |
+| `AdjOE_diff` | Adjusted offensive efficiency difference |
+| `AdjDE_diff` | Adjusted defensive efficiency difference |
+| `WAB_diff` | Wins Above Bubble difference |
+| `TOR_diff` / `TORD_diff` | Turnover rate (off / def) difference |
+| `ORB_diff` / `DRB_diff` | Rebounding rate (off / def) difference |
+| `3P%_diff` / `3P%D_diff` | Three-point shooting / defense difference |
+| `Adj T._diff` | Adjusted tempo difference |
 
-If you want the short version of what tends to matter most, it is usually the seed and efficiency-style terms: `seed_diff`, `barthag_logit_diff`, `AdjOE_diff`, `AdjDE_diff`, and `WAB_diff`. I would treat those as the most important drivers, not because the README is trying to rank them statistically, but because they are the most directly informative inputs in the model.
+The seed and efficiency terms (`seed_diff`, `barthag_logit_diff`, `AdjOE_diff`, `AdjDE_diff`, `WAB_diff`) tend to carry the most posterior weight.
 
-That said, this is a Bayesian model, so I would avoid phrasing things as simple "significant predictors" unless you are looking at posterior intervals or coefficient summaries from a specific fit. In this setup, the more useful question is which predictors have the clearest posterior contribution and which games remain uncertain after combining all the terms.
+### Tiebreaker Model
 
-The repo also fits a separate Bayesian total-points model for tiebreaker support, so the dashboard can surface both pick quality and championship-score estimates.
+A separate Bayesian Gaussian model estimates total championship points, powering the tiebreaker outputs in the dashboard.
+
+---
+
+## Betting Lines (Optional)
+
+The pipeline can optionally blend sportsbook-implied probabilities into the matchup simulation. Odds snapshots are stored under `data/odds_history/`, which is gitignored in this repo so the history stays local/private.
+
+- The Odds API key is read from `ODDS_API_KEY` and is never written to disk.
+- Bookmakers default to `draftkings`, `fanduel`, `betmgm`, and `betrivers`.
+- Markets default to `h2h` moneyline and `spreads`.
+- When enabled, the main pipeline only calls the API if no local snapshot exists yet for the bracket year; otherwise it reuses `data/odds_history/<year>/latest_lines_matchups.csv`.
+
+---
 
 ## Repository Layout
 
-- `R/`: active package runtime
-- `scripts/`: supported command-line entry points
-- `tests/`: automated tests and fixtures
-- `output/`: generated bracket outputs and model artifacts
-- `docs/methods-and-interpretation.md`: technical methods plus plain-English interpretation guide
-- `docs/reference/`: background papers and supporting reference material
+```
+mmBayes/
+├── R/                  # Active package runtime
+├── scripts/            # Command-line entry points
+├── tests/              # Automated tests and fixtures
+├── data/               # Canonical team features and game results (git-ignored)
+├── output/             # Generated artifacts (HTML, CSV, TXT committed; RDS ignored)
+├── docs/               # Methods guide and reference material
+├── archive/            # Historical material no longer in the active workflow
+└── config.yml          # Pipeline configuration
+```
+
+---
 
 ## Documentation
 
-- [Methods and Interpretation Guide](docs/methods-and-interpretation.md): the main technical reference for the active runtime, including data sources, feature engineering, Bayesian likelihoods and priors, posterior summaries, and bracket decision logic.
+- [Methods and Interpretation Guide](docs/methods-and-interpretation.md) - data sources, feature engineering, Bayesian likelihoods and priors, posterior summaries, bracket decision logic
 - [Docs Index](docs/README.md)
-
-## Example Outputs
-
-If you want concrete examples of what the repo generates, these are the most useful artifacts to open first:
-
-- [Bracket dashboard](output/bracket_dashboard.html)
-- [Technical dashboard](output/technical_dashboard.html)
-- [Decision sheet](output/bracket_decision_sheet.csv)
-- [Safe bracket path](output/bracket_candidate_1.csv)
-- [Alternate bracket path](output/bracket_candidate_2.csv)
-
-The dashboard is the best place to start if you are trying to make picks. The spreadsheet files are better if you want to review or copy entries into a pool form.
-
-## Manual Validation
-
-From the repository root, run:
-
-```sh
-Rscript scripts/run_simulation.R
-git status --short
-```
-
-Successful validation means:
-
-- the Bayesian simulation command completes
-- the backtest summary is written
-- the dashboard and decision artifacts are regenerated
-- only expected runtime artifacts are created
-- no legacy script is used in the active workflow

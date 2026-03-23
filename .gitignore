@@ -1,13 +1,18 @@
 data/*
 *cache/*
 plots/*
-output/
+
+# Ignore generated output except human-readable artifacts and directory stub
+output/*
+!output/.gitkeep
+!output/*.html
+!output/*.csv
+!output/*.txt
+
 *.Rout
-*.log
 priors/*.rds
 scripts/.Rhistory
 tests/testthat/*.log
-archive/
 
 .DS_Store
 .history/
