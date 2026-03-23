@@ -25,7 +25,7 @@ test_that("fit_tournament_model returns a matchup-model object", {
 
     expect_true(is.list(model_results))
     expect_true(all(c("engine", "model", "diagnostics", "scaling_reference", "predictor_columns") %in% names(model_results)))
-    expect_equal(model_results$engine, "bayes")
+    expect_equal(model_results$engine, "stan_glm")
 })
 
 test_that("fit_total_points_model returns a score-total model object", {

@@ -21,6 +21,13 @@ pkgload::load_all(project_root, export_all = TRUE, helpers = FALSE, quiet = TRUE
 
 config <- load_project_config("config.yml")
 config$model$backtest <- FALSE
+engine <- config$model$engine %||% "stan_glm"
+bart_config <- config$model$bart %||% list()
+draws_budget <- if (identical(engine, "bart")) {
+    as.integer(bart_config$n_post %||% 1000L)
+} else {
+    as.integer(config$model$n_draws %||% 1000L)
+}
 model_cache_dir <- config$output$model_cache_path %||% file.path(config$output$path %||% "output", "model_cache")
 
 log_path <- file.path(config$output$path %||% "output", "logs", "bracket_candidates.log")
@@ -32,12 +39,16 @@ data <- load_tournament_data(config)
 model_results <- fit_tournament_model(
     historical_matchups = data$historical_matchups,
     predictor_columns = config$model$required_predictors,
+    engine = engine,
+    bart_config = bart_config,
     random_seed = config$model$random_seed,
     cache_dir = model_cache_dir,
     use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
 )
 total_points_model <- fit_total_points_model(
     historical_total_points = build_total_points_training_rows(data$historical_actual_results),
+    engine = engine,
+    bart_config = bart_config,
     random_seed = config$model$random_seed,
     cache_dir = model_cache_dir,
     use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
@@ -46,7 +57,7 @@ total_points_model <- fit_total_points_model(
 candidates <- generate_bracket_candidates(
     all_teams = data$current_teams,
     model_results = model_results,
-    draws = config$model$n_draws,
+    draws = draws_budget,
     actual_play_in_results = data$current_play_in_results,
     n_candidates = 2L,
     n_simulations = 25L,
@@ -56,7 +67,7 @@ total_points_predictions <- predict_candidate_total_points(
     candidates = candidates,
     current_teams = data$current_teams,
     total_points_model = total_points_model,
-    draws = config$model$n_draws
+    draws = draws_budget
 )
 
 output_dir <- config$output$path %||% "output"

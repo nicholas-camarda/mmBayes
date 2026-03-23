@@ -11,6 +11,13 @@ library(logger)
 run_tournament_simulation <- function(config = NULL) {
     config <- config %||% load_project_config()
     output_dir <- config$output$path %||% "output"
+    engine <- config$model$engine %||% "stan_glm"
+    bart_config <- config$model$bart %||% list()
+    draws_budget <- if (identical(engine, "bart")) {
+        as.integer(bart_config$n_post %||% 1000L)
+    } else {
+        as.integer(config$model$n_draws %||% 1000L)
+    }
     log_basename <- basename(config$output$log_path %||% "tournament_simulation.log")
     base_log_path <- file.path(output_dir, "logs", log_basename)
     run_log_path <- build_run_log_path(base_log_path)
@@ -32,6 +39,8 @@ run_tournament_simulation <- function(config = NULL) {
     model_results <- fit_tournament_model(
         historical_matchups = data$historical_matchups,
         predictor_columns = config$model$required_predictors,
+        engine = engine,
+        bart_config = bart_config,
         random_seed = config$model$random_seed,
         cache_dir = model_cache_dir,
         use_cache = use_model_cache,
@@ -51,6 +60,8 @@ run_tournament_simulation <- function(config = NULL) {
     logger::log_info("Fitting total-points model")
     total_points_model <- fit_total_points_model(
         historical_total_points = build_total_points_training_rows(data$historical_actual_results),
+        engine = engine,
+        bart_config = bart_config,
         random_seed = config$model$random_seed,
         cache_dir = model_cache_dir,
         use_cache = use_model_cache
@@ -61,8 +72,10 @@ run_tournament_simulation <- function(config = NULL) {
             historical_teams = data$historical_teams,
             historical_actual_results = data$historical_actual_results,
             predictor_columns = config$model$required_predictors,
+            engine = engine,
+            bart_config = bart_config,
             random_seed = config$model$random_seed,
-            draws = config$model$n_draws,
+            draws = draws_budget,
             cache_dir = model_cache_dir,
             use_cache = use_model_cache,
             interaction_terms = interaction_terms,
@@ -75,7 +88,7 @@ run_tournament_simulation <- function(config = NULL) {
     simulation_results <- simulate_full_bracket(
         all_teams = data$current_teams,
         model_results = model_results,
-        draws = config$model$n_draws,
+        draws = draws_budget,
         actual_play_in_results = data$current_play_in_results,
         log_matchups = FALSE
     )
@@ -83,7 +96,7 @@ run_tournament_simulation <- function(config = NULL) {
     candidate_results <- generate_bracket_candidates(
         all_teams = data$current_teams,
         model_results = model_results,
-        draws = config$model$n_draws,
+        draws = draws_budget,
         actual_play_in_results = data$current_play_in_results,
         n_candidates = 2L,
         n_simulations = 50L,
@@ -95,7 +108,7 @@ run_tournament_simulation <- function(config = NULL) {
         candidates = candidate_results,
         current_teams = data$current_teams,
         total_points_model = total_points_model,
-        draws = config$model$n_draws
+        draws = draws_budget
     )
 
     result_bundle <- list(

@@ -276,6 +276,17 @@ This means the logistic model coefficients for continuous predictors are interpr
 
 ## Winner Model
 
+### Model engine
+
+`mmBayes` supports two interchangeable Bayesian engines for producing per-game win probabilities:
+
+- `stan_glm` (default): Bayesian logistic regression via `rstanarm::stan_glm()`.
+- `bart`: Bayesian additive regression trees via `BART::pbart()`.
+
+Both engines ultimately produce a **draw-by-game matrix** of posterior win probabilities, and everything downstream (bracket simulation, candidate generation, decision-sheet uncertainty tiers) consumes those draws in the same way.
+
+When using `bart`, the draw budget is controlled by `config$model$bart$n_post` (the number of post-burn-in draws stored by BART).
+
 ### Likelihood
 
 The active game-winner model in `fit_tournament_model()` is a Bayesian logistic regression fit with `rstanarm::stan_glm(..., family = binomial(link = "logit"))`.
@@ -487,6 +498,13 @@ that means the posterior mean win probability for team A is `72%`, and the centr
 ## Total-Points Model
 
 The project also fits a separate total-points model for tiebreaker support and matchup-level scoring summaries.
+
+As with the winner model, the total-points model can be fit with:
+
+- `stan_glm` (default): Bayesian linear regression via `rstanarm::stan_glm(family = gaussian())`.
+- `bart`: Bayesian additive regression trees via `BART::wbart()`.
+
+Both engines produce a **draw-by-game matrix** of predicted totals, which is what drives the championship tiebreaker distribution and matchup total summaries.
 
 ### Total-points predictors
 

@@ -268,7 +268,13 @@ configure_priors <- function(prior_type = "normal") {
 
     if (identical(prior_type, "hs")) {
         list(
-            fixed = rstanarm::hs(df = 1, df_global = 1, slab_df = 4, slab_scale = 2.5, autoscale = FALSE),
+            fixed = rstanarm::hs(
+                df = 1,
+                global_df = 1,
+                global_scale = 0.01,
+                slab_df = 4,
+                slab_scale = 2.5
+            ),
             intercept = rstanarm::normal(0, 2.5, autoscale = TRUE)
         )
     } else {
@@ -1151,6 +1157,10 @@ predict_total_points_rows <- function(matchup_rows, model_results, draws = 1000)
 #' @param historical_actual_results A historical actual-results table with joined
 #'   team features.
 #' @param predictor_columns Predictor columns to include in each backtest fit.
+#' @param engine Modeling engine name. Use `"stan_glm"` for the default Bayesian
+#'   logistic regression or `"bart"` for Bayesian additive regression trees.
+#' @param bart_config Optional list of BART hyperparameters used when
+#'   `engine = "bart"`.
 #' @param random_seed Random seed used during repeated fitting.
 #' @param draws Number of posterior draws used for scoring and simulation.
 #' @param interaction_terms Optional character vector of interaction terms
@@ -1160,7 +1170,18 @@ predict_total_points_rows <- function(matchup_rows, model_results, draws = 1000)
 #' @return A list of year-level metrics, predictions, calibration, bracket
 #'   scores, and summary metrics.
 #' @export
-run_rolling_backtest <- function(historical_teams, historical_actual_results, predictor_columns, random_seed = 123, draws = 1000, cache_dir = NULL, use_cache = TRUE, interaction_terms = NULL, prior_type = "normal") {
+run_rolling_backtest <- function(historical_teams,
+                                 historical_actual_results,
+                                 predictor_columns,
+                                 engine = c("stan_glm", "bart"),
+                                 bart_config = NULL,
+                                 random_seed = 123,
+                                 draws = 1000,
+                                 cache_dir = NULL,
+                                 use_cache = TRUE,
+                                 interaction_terms = NULL,
+                                 prior_type = "normal") {
+    engine <- match.arg(engine)
     years <- sort(unique(as.character(historical_actual_results$Year)))
     if (length(years) < 2) {
         return(list(
@@ -1198,6 +1219,8 @@ run_rolling_backtest <- function(historical_teams, historical_actual_results, pr
         model_results <- fit_tournament_model(
             historical_matchups = build_explicit_matchup_history(train_teams, train_results),
             predictor_columns = predictor_columns,
+            engine = engine,
+            bart_config = bart_config,
             random_seed = random_seed,
             include_diagnostics = FALSE,
             cache_dir = cache_dir,

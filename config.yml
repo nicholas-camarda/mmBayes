@@ -5,6 +5,13 @@ default:
   model:
     history_window: 8
     backtest: true
+    engine: "stan_glm"
+    bart:
+      n_trees: 200
+      n_burn: 500
+      n_post: 1000
+      k: 2
+      power: 2
     required_predictors:
       - round
       - same_conf
