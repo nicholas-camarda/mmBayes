@@ -55,6 +55,7 @@ default_project_config <- function() {
             date_format = "iso",
             history_dir = "data/odds_history",
             fetch_policy = "if_missing",
+            snapshot_cooldown_minutes = 10L,
             blend_weight = 0.35,
             blend_rounds = c("Round of 64")
         ),

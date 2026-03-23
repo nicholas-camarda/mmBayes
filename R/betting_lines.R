@@ -49,6 +49,201 @@ ensure_odds_history_dirs <- function(paths) {
     invisible(TRUE)
 }
 
+#' Find the most recent snapshot timestamp in a saved matchup-lines table
+#'
+#' @param path Path to `latest_lines_matchups.csv` or `lines_matchups.csv`.
+#'
+#' @return A POSIXct timestamp in UTC, or `NA` when unavailable.
+#' @keywords internal
+read_latest_snapshot_time_utc <- function(path) {
+    if (!file.exists(path)) {
+        return(as.POSIXct(NA, tz = "UTC"))
+    }
+
+    tbl <- tryCatch(
+        utils::read.csv(path, stringsAsFactors = FALSE),
+        error = function(e) NULL
+    )
+    if (is.null(tbl) || !"snapshot_time_utc" %in% names(tbl)) {
+        return(as.POSIXct(NA, tz = "UTC"))
+    }
+
+    times <- suppressWarnings(as.POSIXct(tbl$snapshot_time_utc, tz = "UTC"))
+    times <- times[is.finite(times) & !is.na(times)]
+    if (length(times) == 0) {
+        return(as.POSIXct(NA, tz = "UTC"))
+    }
+
+    max(times, na.rm = TRUE)
+}
+
+#' Find the most recent saved Odds API snapshot JSON file
+#'
+#' @param snapshots_dir Directory containing snapshot JSON files.
+#'
+#' @return The path to the most recently modified snapshot JSON, or `NULL`.
+#' @keywords internal
+find_latest_snapshot_json <- function(snapshots_dir) {
+    if (!dir.exists(snapshots_dir)) {
+        return(NULL)
+    }
+
+    candidates <- list.files(snapshots_dir, pattern = "\\.json$", full.names = TRUE)
+    if (length(candidates) == 0) {
+        return(NULL)
+    }
+
+    info <- file.info(candidates)
+    latest <- candidates[order(info$mtime, decreasing = TRUE)][[1]]
+    latest %||% NULL
+}
+
+#' Parse a UTC timestamp from an Odds API snapshot filename
+#'
+#' Snapshot files are named like `odds_api_YYYYMMDD_HHMMSSffffff.json`, where
+#' the fractional component is microseconds. When parsing fails, this returns
+#' `NA`.
+#'
+#' @param snapshot_path Path to a snapshot JSON file.
+#'
+#' @return A POSIXct timestamp in UTC, or `NA`.
+#' @keywords internal
+parse_snapshot_time_from_filename <- function(snapshot_path) {
+    stamp <- basename(snapshot_path %||% "")
+    stamp <- sub("^odds_api_", "", stamp)
+    stamp <- sub("\\.json$", "", stamp)
+    stamp <- gsub("[^0-9_]", "", stamp)
+    if (!grepl("^[0-9]{8}_[0-9]{6}", stamp)) {
+        return(as.POSIXct(NA, tz = "UTC"))
+    }
+
+    date_part <- substr(stamp, 1, 8)
+    time_part <- substr(stamp, 10, nchar(stamp))
+    hh <- substr(time_part, 1, 2)
+    mm <- substr(time_part, 3, 4)
+    ss <- substr(time_part, 5, 6)
+    frac <- substr(time_part, 7, nchar(time_part))
+    frac <- if (nzchar(frac)) paste0(".", frac) else ""
+
+    iso <- sprintf(
+        "%s-%s-%s %s:%s:%s%s",
+        substr(date_part, 1, 4),
+        substr(date_part, 5, 6),
+        substr(date_part, 7, 8),
+        hh,
+        mm,
+        ss,
+        frac
+    )
+
+    parsed <- suppressWarnings(as.POSIXct(iso, tz = "UTC", format = "%Y-%m-%d %H:%M:%OS"))
+    if (is.na(parsed) || !is.finite(parsed)) {
+        as.POSIXct(NA, tz = "UTC")
+    } else {
+        parsed
+    }
+}
+
+#' Rebuild `latest_lines_matchups.csv` from an existing snapshot JSON
+#'
+#' This enables quota-sparing runs when a snapshot JSON exists but the derived
+#' CSV tables were deleted or not written.
+#'
+#' @param bracket_year Tournament year.
+#' @param current_teams Current tournament teams table.
+#' @param paths Odds history paths returned by [build_odds_history_paths()].
+#'
+#' @return A list with `lines_matchups` and `snapshot_path`, or `NULL` when no snapshot exists.
+#' @keywords internal
+rebuild_latest_lines_from_snapshot_json <- function(bracket_year, current_teams, paths) {
+    snapshot_path <- find_latest_snapshot_json(paths$snapshots_dir)
+    if (is.null(snapshot_path)) {
+        return(NULL)
+    }
+
+    snapshot_time <- parse_snapshot_time_from_filename(snapshot_path)
+    if (is.na(snapshot_time) || !is.finite(snapshot_time)) {
+        snapshot_time <- as.POSIXct(file.info(snapshot_path)$mtime, tz = "UTC")
+    }
+
+    parsed <- tryCatch(
+        jsonlite::fromJSON(snapshot_path, simplifyVector = FALSE),
+        error = function(e) list()
+    )
+    events <- parsed %||% list()
+    filtered <- filter_odds_events_to_tournament(events, current_teams = current_teams)
+    lines_long <- normalize_odds_events_long(
+        filtered,
+        bracket_year = bracket_year,
+        snapshot_time = snapshot_time,
+        allowed_team_names = current_teams$Team
+    )
+    lines_matchups <- summarize_snapshot_matchups(lines_long)
+    append_odds_history_files(lines_long, lines_matchups, paths = paths)
+
+    list(
+        snapshot_path = snapshot_path,
+        lines_matchups = lines_matchups
+    )
+}
+
+#' Drop the final N words from a team name candidate
+#'
+#' @param name Team name string.
+#' @param n_words Number of trailing words to drop.
+#'
+#' @return A trimmed string with up to `n_words` removed.
+#' @keywords internal
+drop_trailing_words <- function(name, n_words = 1L) {
+    name <- stringr::str_squish(as.character(name %||% ""))
+    n_words <- as.integer(n_words)
+    if (!nzchar(name) || !is.finite(n_words) || is.na(n_words) || n_words <= 0) {
+        return(name)
+    }
+
+    parts <- unlist(strsplit(name, "\\s+"))
+    if (length(parts) <= n_words) {
+        return("")
+    }
+    stringr::str_squish(paste(parts[seq_len(length(parts) - n_words)], collapse = " "))
+}
+
+#' Match an Odds API team name to a known tournament team
+#'
+#' Odds API team names sometimes include mascot suffixes (e.g., "Wichita St
+#' Shockers"). This helper tries progressively-stripped candidates to map the
+#' name back to the canonical team list derived from `current_teams`.
+#'
+#' @param odds_team_name Team name from Odds API (`home_team`, `away_team`, or outcome `name`).
+#' @param allowed_team_names Canonical team names allowed for the tournament year.
+#'
+#' @return A canonical team name when matched, otherwise `NA_character_`.
+#' @keywords internal
+match_odds_team_to_tournament <- function(odds_team_name, allowed_team_names) {
+    allowed_team_names <- unique(canonicalize_team_name(allowed_team_names))
+    allowed_keys <- raw_team_name_key(allowed_team_names)
+    odds_team_name <- as.character(odds_team_name %||% "")
+
+    candidates <- unique(c(
+        odds_team_name,
+        drop_trailing_words(odds_team_name, 1),
+        drop_trailing_words(odds_team_name, 2),
+        drop_trailing_words(odds_team_name, 3)
+    ))
+
+    for (candidate in candidates) {
+        if (!nzchar(candidate)) next
+        canonical <- canonicalize_team_name(candidate)
+        key <- raw_team_name_key(canonical)
+        idx <- match(key, allowed_keys)
+        if (!is.na(idx)) {
+            return(allowed_team_names[[idx]])
+        }
+    }
+
+    NA_character_
+}
+
 #' Return the Odds API host used for requests
 #'
 #' @return The Odds API base URL.
@@ -192,9 +387,9 @@ filter_odds_events_to_tournament <- function(events, current_teams) {
 
     allowed <- unique(canonicalize_team_name(current_teams$Team))
     Filter(function(event) {
-        home <- canonicalize_team_name(event$home_team %||% "")
-        away <- canonicalize_team_name(event$away_team %||% "")
-        nzchar(home) && nzchar(away) && home %in% allowed && away %in% allowed
+        home <- match_odds_team_to_tournament(event$home_team %||% "", allowed_team_names = allowed)
+        away <- match_odds_team_to_tournament(event$away_team %||% "", allowed_team_names = allowed)
+        nzchar(home %||% "") && nzchar(away %||% "") && home %in% allowed && away %in% allowed
     }, events)
 }
 
@@ -206,18 +401,27 @@ filter_odds_events_to_tournament <- function(events, current_teams) {
 #'
 #' @return A tibble with one row per event × bookmaker × market × outcome.
 #' @export
-normalize_odds_events_long <- function(events, bracket_year, snapshot_time = Sys.time()) {
+normalize_odds_events_long <- function(events, bracket_year, snapshot_time = Sys.time(), allowed_team_names = NULL) {
     if (length(events) == 0) {
         return(tibble::tibble())
     }
 
     snapshot_time_utc <- as.POSIXct(snapshot_time, tz = "UTC")
+    allowed_team_names <- if (!is.null(allowed_team_names)) unique(canonicalize_team_name(allowed_team_names)) else NULL
 
     rows <- purrr::map_dfr(events, function(event) {
         event_id <- as.character(event$id %||% "")
         commence_time <- as.character(event$commence_time %||% NA_character_)
-        home_team <- canonicalize_team_name(event$home_team %||% "")
-        away_team <- canonicalize_team_name(event$away_team %||% "")
+        home_team <- if (!is.null(allowed_team_names)) {
+            match_odds_team_to_tournament(event$home_team %||% "", allowed_team_names = allowed_team_names)
+        } else {
+            canonicalize_team_name(event$home_team %||% "")
+        }
+        away_team <- if (!is.null(allowed_team_names)) {
+            match_odds_team_to_tournament(event$away_team %||% "", allowed_team_names = allowed_team_names)
+        } else {
+            canonicalize_team_name(event$away_team %||% "")
+        }
         bookmakers <- event$bookmakers %||% list()
 
         purrr::map_dfr(bookmakers, function(book) {
@@ -232,6 +436,11 @@ normalize_odds_events_long <- function(events, bracket_year, snapshot_time = Sys
                 outcomes <- market$outcomes %||% list()
 
                 purrr::map_dfr(outcomes, function(outcome) {
+                    outcome_name <- if (!is.null(allowed_team_names)) {
+                        match_odds_team_to_tournament(outcome$name %||% NA_character_, allowed_team_names = allowed_team_names)
+                    } else {
+                        canonicalize_team_name(outcome$name %||% NA_character_)
+                    }
                     tibble::tibble(
                         bracket_year = as.integer(bracket_year),
                         snapshot_time_utc = snapshot_time_utc,
@@ -244,7 +453,7 @@ normalize_odds_events_long <- function(events, bracket_year, snapshot_time = Sys
                         bookmaker_last_update = book_last_update,
                         market_key = market_key,
                         market_last_update = market_last_update,
-                        outcome_name = canonicalize_team_name(outcome$name %||% NA_character_),
+                        outcome_name = outcome_name,
                         outcome_price = suppressWarnings(as.numeric(outcome$price %||% NA_real_)),
                         outcome_point = suppressWarnings(as.numeric(outcome$point %||% NA_real_))
                     )
@@ -293,13 +502,13 @@ summarize_snapshot_matchups <- function(lines_long) {
         dplyr::filter(n_outcomes == 2L) %>%
         dplyr::rowwise() %>%
         dplyr::mutate(
-            team_1 = canonicalize_team_name(teams[[1]][[1]]),
-            team_2 = canonicalize_team_name(teams[[1]][[2]]),
-            implied_1 = american_to_implied_prob(prices[[1]][[1]]),
-            implied_2 = american_to_implied_prob(prices[[1]][[2]]),
+            team_1 = canonicalize_team_name(teams[[1]]),
+            team_2 = canonicalize_team_name(teams[[2]]),
+            implied_1 = american_to_implied_prob(prices[[1]]),
+            implied_2 = american_to_implied_prob(prices[[2]]),
             vig_free = list(remove_vig_two_way(implied_1, implied_2)),
-            vig_free_1 = vig_free[[1]][[1]],
-            vig_free_2 = vig_free[[1]][[2]],
+            vig_free_1 = vig_free[[1]],
+            vig_free_2 = vig_free[[2]],
             key = build_matchup_key(team_1, team_2),
             team_a = sort(c(team_1, team_2))[[1]],
             team_b = sort(c(team_1, team_2))[[2]],
@@ -321,10 +530,10 @@ summarize_snapshot_matchups <- function(lines_long) {
         dplyr::filter(n_outcomes == 2L) %>%
         dplyr::rowwise() %>%
         dplyr::mutate(
-            team_1 = canonicalize_team_name(teams[[1]][[1]]),
-            team_2 = canonicalize_team_name(teams[[1]][[2]]),
-            point_1 = suppressWarnings(as.numeric(points[[1]][[1]])),
-            point_2 = suppressWarnings(as.numeric(points[[1]][[2]])),
+            team_1 = canonicalize_team_name(teams[[1]]),
+            team_2 = canonicalize_team_name(teams[[2]]),
+            point_1 = suppressWarnings(as.numeric(points[[1]])),
+            point_2 = suppressWarnings(as.numeric(points[[2]])),
             team_a = sort(c(team_1, team_2))[[1]],
             team_b = sort(c(team_1, team_2))[[2]],
             key = build_matchup_key(team_1, team_2),
@@ -383,6 +592,25 @@ append_odds_history_files <- function(lines_long, lines_matchups, paths) {
             utils::write.table(lines_matchups, paths$lines_matchups, sep = ",", row.names = FALSE, col.names = FALSE, append = TRUE)
         }
         utils::write.csv(lines_matchups, paths$latest_lines_matchups, row.names = FALSE)
+    } else if (!file.exists(paths$latest_lines_matchups)) {
+        empty_tbl <- tibble::tibble(
+            snapshot_time_utc = as.POSIXct(character(), tz = "UTC"),
+            bracket_year = integer(),
+            event_id = character(),
+            commence_time = character(),
+            home_team = character(),
+            away_team = character(),
+            key = character(),
+            team_a = character(),
+            team_b = character(),
+            n_bookmakers = integer(),
+            bookmakers = character(),
+            consensus_prob_a = numeric(),
+            consensus_prob_b = numeric(),
+            consensus_spread_a = numeric(),
+            consensus_spread_b = numeric()
+        )
+        utils::write.csv(empty_tbl, paths$latest_lines_matchups, row.names = FALSE)
     }
 
     invisible(TRUE)
@@ -393,10 +621,11 @@ append_odds_history_files <- function(lines_long, lines_matchups, paths) {
 #' @param config Project config list.
 #' @param bracket_year Active tournament year.
 #' @param current_teams Current tournament teams table (from [load_tournament_data()]).
+#' @param force Whether to bypass the snapshot cooldown guard.
 #'
 #' @return A list containing paths and in-memory tables for the snapshot.
 #' @export
-capture_tournament_odds_snapshot <- function(config, bracket_year, current_teams) {
+capture_tournament_odds_snapshot <- function(config, bracket_year, current_teams, force = FALSE) {
     betting <- config$betting %||% list()
     provider <- betting$provider %||% "odds_api"
     if (!identical(provider, "odds_api")) {
@@ -405,6 +634,37 @@ capture_tournament_odds_snapshot <- function(config, bracket_year, current_teams
 
     paths <- build_odds_history_paths(bracket_year, history_dir = betting$history_dir %||% "data/odds_history")
     ensure_odds_history_dirs(paths)
+
+    force <- isTRUE(force)
+    cooldown_minutes <- suppressWarnings(as.numeric(betting$snapshot_cooldown_minutes %||% 10))
+    cooldown_minutes <- if (is.finite(cooldown_minutes)) max(0, cooldown_minutes) else 0
+    last_snapshot_time <- read_latest_snapshot_time_utc(paths$latest_lines_matchups)
+    if (!is.finite(last_snapshot_time) || is.na(last_snapshot_time)) {
+        last_snapshot_time <- read_latest_snapshot_time_utc(paths$lines_matchups)
+    }
+    if (!isTRUE(force) && cooldown_minutes > 0 && is.finite(last_snapshot_time) && !is.na(last_snapshot_time)) {
+        age_minutes <- as.numeric(difftime(Sys.time(), last_snapshot_time, units = "mins"))
+        if (is.finite(age_minutes) && age_minutes < cooldown_minutes) {
+            latest_lines <- if (file.exists(paths$latest_lines_matchups)) {
+                dplyr::as_tibble(utils::read.csv(paths$latest_lines_matchups, stringsAsFactors = FALSE))
+            } else {
+                tibble::tibble()
+            }
+            snapshot_path <- find_latest_snapshot_json(paths$snapshots_dir)
+            age_minutes_rounded <- round(age_minutes, 1)
+            logger::log_info("Skipping odds snapshot: most recent snapshot is {age_minutes_rounded} minutes old (cooldown={cooldown_minutes} minutes)")
+            return(list(
+                snapshot_path = snapshot_path,
+                lines_long = tibble::tibble(),
+                lines_matchups = latest_lines,
+                latest_lines_matchups_path = paths$latest_lines_matchups,
+                headers = list(),
+                retrieved_at = last_snapshot_time,
+                skipped = TRUE,
+                skip_reason = "cooldown"
+            ))
+        }
+    }
 
     api_key <- Sys.getenv(betting$api_key_env %||% "ODDS_API_KEY")
     fetched <- fetch_odds_api_odds(
@@ -419,7 +679,12 @@ capture_tournament_odds_snapshot <- function(config, bracket_year, current_teams
 
     events <- fetched$parsed %||% list()
     filtered <- filter_odds_events_to_tournament(events, current_teams = current_teams)
-    lines_long <- normalize_odds_events_long(filtered, bracket_year = bracket_year, snapshot_time = fetched$retrieved_at)
+    lines_long <- normalize_odds_events_long(
+        filtered,
+        bracket_year = bracket_year,
+        snapshot_time = fetched$retrieved_at,
+        allowed_team_names = current_teams$Team
+    )
     lines_matchups <- summarize_snapshot_matchups(lines_long)
 
     stamp <- gsub("\\.", "", format(as.POSIXct(fetched$retrieved_at, tz = "UTC"), "%Y%m%d_%H%M%OS6"))
@@ -461,6 +726,18 @@ resolve_latest_matchup_lines <- function(config, bracket_year, current_teams) {
             source_label = "Local odds snapshot (latest)",
             used_api_call = FALSE,
             latest_lines_matchups_path = paths$latest_lines_matchups
+        ))
+    }
+
+    rebuilt <- rebuild_latest_lines_from_snapshot_json(bracket_year, current_teams = current_teams, paths = paths)
+    if (!is.null(rebuilt) && file.exists(paths$latest_lines_matchups)) {
+        tbl <- utils::read.csv(paths$latest_lines_matchups, stringsAsFactors = FALSE)
+        return(list(
+            lines_matchups = dplyr::as_tibble(tbl),
+            source_label = "Local odds snapshot (rebuilt)",
+            used_api_call = FALSE,
+            latest_lines_matchups_path = paths$latest_lines_matchups,
+            snapshot_path = rebuilt$snapshot_path
         ))
     }
 

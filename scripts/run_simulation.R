@@ -19,6 +19,8 @@ setwd(project_root)
 
 pkgload::load_all(project_root, export_all = TRUE, helpers = FALSE, quiet = TRUE)
 
+load_dotenv_file(".env", override = FALSE)
+
 config <- load_project_config("config.yml")
 results <- run_tournament_simulation(config)
 
