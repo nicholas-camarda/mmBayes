@@ -75,8 +75,8 @@ if (!is.null(results$output$model_quality_archive)) {
 if (!is.null(results$output$model_quality_source_label)) {
     cat(sprintf("- Model quality source: %s\n", results$output$model_quality_source_label))
 }
-if (isTRUE(results$output$model_quality_used_fallback)) {
-    cat("- Model quality: used latest saved snapshot fallback\n")
+if (isTRUE(results$output$model_quality_used_cached_quality)) {
+    cat("- Model quality: used cached identical validation snapshot\n")
 }
 if (!is.null(results$output$decision_sheet)) {
     cat(sprintf("- Decision sheet: %s\n", results$output$decision_sheet))

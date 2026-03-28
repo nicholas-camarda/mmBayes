@@ -583,6 +583,8 @@ fit_tournament_model_bart <- function(historical_matchups,
         engine = "bart",
         model = model,
         predictor_columns = predictor_columns,
+        interaction_terms = character(0),
+        prior_type = "normal",
         scaling_reference = prepared$scaling_reference,
         bart_config = bart_config,
         matrix_formula = matrix_formula,
@@ -622,14 +624,7 @@ default_total_points_predictors <- function() {
         "3P%_sum",
         "3P%D_sum",
         "Adj T._mean",
-        "Adj T._gap",
-        "betting_abs_prob_edge",
-        "betting_abs_spread",
-        "betting_bookmakers",
-        "betting_line_available",
-        "betting_minutes_before_commence",
-        "betting_prob_dispersion",
-        "betting_spread_dispersion"
+        "Adj T._gap"
     )
 }
 
@@ -954,6 +949,8 @@ fit_total_points_model_bart <- function(historical_total_points,
         outcome = "total_points",
         model = model,
         predictor_columns = predictor_columns,
+        interaction_terms = character(0),
+        prior_type = "normal",
         scaling_reference = prepared$scaling_reference,
         bart_config = bart_config,
         matrix_formula = matrix_formula,
@@ -1374,6 +1371,7 @@ run_rolling_backtest <- function(historical_teams,
     calibration <- summarize_calibration(all_predictions)
     yearly_metrics_tbl <- dplyr::bind_rows(yearly_metrics)
     bracket_scores_tbl <- dplyr::bind_rows(bracket_scores)
+    round_summary <- summarize_prediction_round_performance(all_predictions)
 
     summary_tbl <- yearly_metrics_tbl %>%
         dplyr::summarise(
@@ -1390,6 +1388,7 @@ run_rolling_backtest <- function(historical_teams,
         yearly_metrics = yearly_metrics_tbl,
         predictions = all_predictions,
         calibration = calibration,
+        round_summary = round_summary,
         bracket_scores = bracket_scores_tbl,
         summary = summary_tbl
     )

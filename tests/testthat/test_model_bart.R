@@ -60,6 +60,13 @@ test_that("BART engine fits matchup and total-points models and returns draw mat
     expect_equal(ncol(total_draws), 6)
     expect_true(all(is.finite(total_draws)))
     expect_true(all(total_draws >= 0))
+
+    model_overview <- summarize_model_overview(model_results, draws = 40L)
+    overview_html <- render_model_overview_html(model_overview)
+    expect_match(overview_html, "Model Overview")
+    expect_match(overview_html, "BART settings")
+    expect_match(overview_html, "n_trees")
+    expect_match(overview_html, "n_post")
 })
 
 test_that("run_rolling_backtest supports both stan_glm and bart engines", {

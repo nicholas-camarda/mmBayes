@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ncamarda.mmBayes.odds_collector</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/Rscript</string>
+        <string>/Users/ncamarda/Projects/mmBayes/scripts/run_odds_collector.R</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/ncamarda/Projects/mmBayes</string>
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Month</key>
+            <integer>3</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Month</key>
+            <integer>3</integer>
+            <key>Minute</key>
+            <integer>30</integer>
+        </dict>
+        <dict>
+            <key>Month</key>
+            <integer>4</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Month</key>
+            <integer>4</integer>
+            <key>Minute</key>
+            <integer>30</integer>
+        </dict>
+    </array>
+    <key>StandardOutPath</key>
+    <string>/Users/ncamarda/ProjectsRuntime/mmBayes/output/logs/odds_collector.launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/ncamarda/ProjectsRuntime/mmBayes/output/logs/odds_collector.launchd.err.log</string>
+</dict>
+</plist>

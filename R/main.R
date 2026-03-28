@@ -1,5 +1,218 @@
 library(logger)
 
+#' Return a human-readable label for a model engine
+#'
+#' @param engine Engine identifier.
+#'
+#' @return A display label for the engine.
+#' @keywords internal
+engine_display_label <- function(engine) {
+    if (identical(engine, "bart")) {
+        "BART"
+    } else {
+        "Stan GLM"
+    }
+}
+
+#' Build an opt-in comparison bundle for Stan GLM and BART
+#'
+#' @param data Loaded tournament data bundle.
+#' @param current_engine Engine used for the primary run.
+#' @param current_model_results Fitted matchup model for the primary run.
+#' @param current_total_points_model Fitted total-points model for the primary run.
+#' @param current_backtest Backtest bundle for the primary run.
+#' @param current_live_performance Live performance bundle for the primary run.
+#' @param current_model_overview Model overview for the matchup model.
+#' @param current_total_points_overview Model overview for the total-points model.
+#' @param draws_budget Posterior draw budget used for scoring.
+#' @param bart_config BART hyperparameter configuration.
+#' @param random_seed Seed forwarded to alternate fits.
+#' @param model_cache_dir Cache directory for fitted models.
+#' @param use_model_cache Whether model caching is enabled.
+#' @param interaction_terms Interaction terms forwarded to Stan fits.
+#' @param prior_type Prior type forwarded to Stan fits.
+#' @param matchup_predictors Predictor columns used for the matchup model.
+#' @param run_backtest Whether the comparison should include a backtest.
+#'
+#' @return A comparison bundle or `NULL` when the alternate engine could not be fit.
+#' @keywords internal
+build_model_comparison_bundle <- function(data,
+                                          current_engine,
+                                          current_model_results,
+                                          current_total_points_model,
+                                          current_backtest,
+                                          current_live_performance,
+                                          current_model_overview,
+                                          current_total_points_overview,
+                                          draws_budget,
+                                          bart_config,
+                                          random_seed,
+                                          model_cache_dir,
+                                          use_model_cache,
+                                          interaction_terms,
+                                          prior_type,
+                                          matchup_predictors,
+                                          run_backtest = TRUE) {
+    alternate_engine <- if (identical(current_engine, "bart")) "stan_glm" else "bart"
+    current_label <- engine_display_label(current_engine)
+    alternate_label <- engine_display_label(alternate_engine)
+    alternate_prior_type <- if (identical(alternate_engine, "bart")) "normal" else prior_type
+
+    logger::log_info("Comparison mode enabled; fitting alternate {alternate_label} run")
+
+    alternate_model_results <- tryCatch(
+        fit_tournament_model(
+            historical_matchups = data$historical_matchups,
+            predictor_columns = matchup_predictors,
+            engine = alternate_engine,
+            bart_config = bart_config,
+            random_seed = random_seed,
+            cache_dir = model_cache_dir,
+            use_cache = use_model_cache,
+            interaction_terms = interaction_terms,
+            prior_type = alternate_prior_type
+        ),
+        error = function(e) {
+            logger::log_warn("Alternate matchup model fit failed: {e$message}")
+            NULL
+        }
+    )
+
+    if (is.null(alternate_model_results)) {
+        return(list(
+            available = FALSE,
+            attempted = TRUE,
+            status = sprintf("%s could not be fit in this environment.", alternate_label),
+            current_label = current_label,
+            alternate_label = alternate_label,
+            current = list(
+                model_overview = current_model_overview,
+                backtest = current_backtest,
+                live_performance = current_live_performance
+            ),
+            alternate = NULL,
+            backtest_comparison = tibble::tibble(),
+            live_comparison = tibble::tibble(),
+            summary = list(
+                current_wins = 0L,
+                alternate_wins = 0L,
+                ties = 0L,
+                text = sprintf("%s could not be fit, so no comparison is available.", alternate_label)
+            ),
+            notes = c(sprintf("%s comparison could not be completed.", alternate_label))
+        ))
+    }
+
+    alternate_total_points_model <- tryCatch(
+        fit_total_points_model(
+            historical_total_points = build_total_points_training_rows(data$historical_actual_results),
+            engine = alternate_engine,
+            bart_config = bart_config,
+            random_seed = random_seed,
+            cache_dir = model_cache_dir,
+            use_cache = use_model_cache
+        ),
+        error = function(e) {
+            logger::log_warn("Alternate total-points model fit failed: {e$message}")
+            NULL
+        }
+    )
+
+    alternate_backtest <- if (isTRUE(run_backtest)) {
+        tryCatch(
+            run_rolling_backtest(
+                historical_teams = data$historical_teams,
+                historical_actual_results = data$historical_actual_results,
+                predictor_columns = matchup_predictors,
+                engine = alternate_engine,
+                bart_config = bart_config,
+                random_seed = random_seed,
+                draws = draws_budget,
+                cache_dir = model_cache_dir,
+                use_cache = use_model_cache,
+                interaction_terms = interaction_terms,
+                prior_type = alternate_prior_type
+            ),
+            error = function(e) {
+                logger::log_warn("Alternate backtest failed: {e$message}")
+                NULL
+            }
+        )
+    } else {
+        NULL
+    }
+
+    alternate_live_performance <- tryCatch(
+        summarize_live_tournament_performance(
+            data = data,
+            model_results = alternate_model_results,
+            draws = draws_budget
+        ),
+        error = function(e) {
+            logger::log_warn("Alternate live-performance summary failed: {e$message}")
+            NULL
+        }
+    )
+
+    alternate_model_overview <- list(
+        matchup = summarize_model_overview(alternate_model_results, draws = draws_budget),
+        totals = summarize_model_overview(alternate_total_points_model, draws = draws_budget)
+    )
+
+    backtest_comparison <- build_model_metric_comparison_table(
+        current_summary = current_backtest$summary %||% tibble::tibble(),
+        alternate_summary = alternate_backtest$summary %||% tibble::tibble(),
+        current_label = current_label,
+        alternate_label = alternate_label,
+        kind = "backtest"
+    )
+    live_comparison <- build_model_metric_comparison_table(
+        current_summary = current_live_performance$summary %||% tibble::tibble(),
+        alternate_summary = alternate_live_performance$summary %||% tibble::tibble(),
+        current_label = current_label,
+        alternate_label = alternate_label,
+        kind = "live"
+    )
+
+    list(
+        available = TRUE,
+        attempted = TRUE,
+        status = sprintf("Comparison completed for %s and %s.", current_label, alternate_label),
+        current_label = current_label,
+        alternate_label = alternate_label,
+        current = list(
+            model_overview = current_model_overview,
+            totals_overview = current_total_points_overview,
+            backtest = current_backtest,
+            live_performance = current_live_performance
+        ),
+        alternate = list(
+            model_overview = alternate_model_overview,
+            totals_overview = alternate_model_overview$totals,
+            backtest = alternate_backtest,
+            live_performance = alternate_live_performance
+        ),
+        backtest_comparison = backtest_comparison,
+        live_comparison = live_comparison,
+        summary = if (nrow(backtest_comparison) > 0) {
+            summarize_model_metric_comparison(
+                comparison_table = backtest_comparison,
+                current_label = current_label,
+                alternate_label = alternate_label
+            )
+        } else {
+            summarize_model_metric_comparison(
+                comparison_table = live_comparison,
+                current_label = current_label,
+                alternate_label = alternate_label
+            )
+        },
+        notes = c(
+            if (identical(alternate_engine, "bart")) "BART uses tree-based posterior draws, so calibration and sharpness often matter more than raw accuracy." else NULL
+        )
+    )
+}
+
 #' Run the tournament simulation end-to-end
 #'
 #' @param config Optional project configuration list. Defaults to the loaded
@@ -12,6 +225,7 @@ run_tournament_simulation <- function(config = NULL) {
     config <- config %||% load_project_config()
     output_dir <- config$output$path %||% default_runtime_output_root()
     engine <- config$model$engine %||% "stan_glm"
+    compare_engines <- isTRUE(config$model$compare_engines %||% TRUE)
     bart_config <- config$model$bart %||% list()
     draws_budget <- if (identical(engine, "bart")) {
         as.integer(bart_config$n_post %||% 1000L)
@@ -27,24 +241,15 @@ run_tournament_simulation <- function(config = NULL) {
 
     logger::log_info("Pipeline started")
     logger::log_info("Loading tournament data")
-    data <- load_tournament_data(config)
-    betting_context <- resolve_latest_matchup_lines(
-        config = config,
-        bracket_year = data$bracket_year,
-        current_teams = data$current_teams
-    )
-    current_betting_features <- build_current_betting_feature_table(betting_context$lines_matchups %||% tibble::tibble())
-    if (isTRUE(config$betting$require_for_production %||% FALSE) &&
-        !isTRUE(config$betting$allow_missing_fallback %||% TRUE) &&
-        nrow(current_betting_features) == 0) {
-        stop_with_message("Betting data is required for production runs, but no usable current matchup lines were available.")
-    }
+    data <- load_tournament_data(config, include_betting_history = FALSE)
+    data$historical_betting_features <- tibble::tibble()
     logger::log_info("Fitting tournament model")
     interaction_terms <- as.character(unlist(config$model$interaction_terms %||% character(0)))
     if (length(interaction_terms) == 0L) interaction_terms <- NULL
+    matchup_predictors <- core_matchup_predictor_columns(config$model$required_predictors)
     model_results <- fit_tournament_model(
         historical_matchups = data$historical_matchups,
-        predictor_columns = config$model$required_predictors,
+        predictor_columns = matchup_predictors,
         engine = engine,
         bart_config = bart_config,
         random_seed = config$model$random_seed,
@@ -54,20 +259,17 @@ run_tournament_simulation <- function(config = NULL) {
         prior_type = config$model$prior_type %||% "normal"
     )
     model_results$betting_feature_context <- list(
-        current_lines_matchups = betting_context$lines_matchups %||% tibble::tibble(),
-        current_betting_features = current_betting_features,
-        historical_betting_features = data$historical_betting_features %||% tibble::tibble(),
-        source_label = betting_context$source_label %||% NULL,
-        used_api_call = isTRUE(betting_context$used_api_call %||% FALSE),
-        latest_lines_matchups_path = betting_context$latest_lines_matchups_path %||% NULL,
-        snapshot_path = betting_context$snapshot_path %||% NULL
+        current_lines_matchups = tibble::tibble(),
+        current_betting_features = tibble::tibble(),
+        historical_betting_features = tibble::tibble(),
+        source_label = NULL,
+        used_api_call = FALSE,
+        latest_lines_matchups_path = NULL,
+        snapshot_path = NULL
     )
     logger::log_info("Fitting total-points model")
     total_points_model <- fit_total_points_model(
-        historical_total_points = build_total_points_training_rows(
-            data$historical_actual_results,
-            historical_betting_features = data$historical_betting_features
-        ),
+        historical_total_points = build_total_points_training_rows(data$historical_actual_results),
         engine = engine,
         bart_config = bart_config,
         random_seed = config$model$random_seed,
@@ -80,7 +282,7 @@ run_tournament_simulation <- function(config = NULL) {
         run_rolling_backtest(
             historical_teams = data$historical_teams,
             historical_actual_results = data$historical_actual_results,
-            predictor_columns = config$model$required_predictors,
+            predictor_columns = matchup_predictors,
             engine = engine,
             bart_config = bart_config,
             random_seed = config$model$random_seed,
@@ -88,8 +290,7 @@ run_tournament_simulation <- function(config = NULL) {
             cache_dir = model_cache_dir,
             use_cache = use_model_cache,
             interaction_terms = interaction_terms,
-            prior_type = config$model$prior_type %||% "normal",
-            historical_betting_features = data$historical_betting_features
+            prior_type = config$model$prior_type %||% "normal"
         )
     } else {
         NULL
@@ -126,11 +327,41 @@ run_tournament_simulation <- function(config = NULL) {
         draws = draws_budget
     )
 
+    model_overview <- summarize_model_overview(model_results, draws = draws_budget)
+    total_points_model_overview <- summarize_model_overview(total_points_model, draws = draws_budget)
+    model_comparison <- if (compare_engines) {
+        build_model_comparison_bundle(
+            data = data,
+            current_engine = engine,
+            current_model_results = model_results,
+            current_total_points_model = total_points_model,
+            current_backtest = backtest_results,
+            current_live_performance = live_performance,
+            current_model_overview = model_overview,
+            current_total_points_overview = total_points_model_overview,
+            draws_budget = draws_budget,
+            bart_config = bart_config,
+            random_seed = config$model$random_seed,
+            model_cache_dir = model_cache_dir,
+            use_model_cache = use_model_cache,
+            interaction_terms = interaction_terms,
+            prior_type = config$model$prior_type %||% "normal",
+            matchup_predictors = matchup_predictors,
+            run_backtest = isTRUE(config$model$backtest)
+        )
+    } else {
+        NULL
+    }
+
     result_bundle <- list(
         bracket_year = data$bracket_year,
         data = data,
         model = model_results,
         total_points_model = total_points_model,
+        model_overview = model_overview,
+        total_points_model_overview = total_points_model_overview,
+        model_comparison = model_comparison,
+        draws_budget = draws_budget,
         backtest = backtest_results,
         simulations = simulation_results,
         candidates = candidate_results,

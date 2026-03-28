@@ -100,10 +100,13 @@ test_that("betting ablation produces holdout metrics with betting predictors pre
     )
     on.exit(options(old_options), add = TRUE)
 
+    core_predictors <- core_matchup_predictor_columns(config$model$required_predictors)
+    betting_predictors <- unique(c(core_predictors, betting_matchup_feature_columns()))
+
     baseline <- run_rolling_backtest(
         historical_teams = loaded$historical_teams,
         historical_actual_results = loaded$historical_actual_results,
-        predictor_columns = setdiff(config$model$required_predictors, betting_matchup_feature_columns()),
+        predictor_columns = core_predictors,
         random_seed = 123,
         draws = 20L,
         use_cache = FALSE,
@@ -112,7 +115,7 @@ test_that("betting ablation produces holdout metrics with betting predictors pre
     enhanced <- run_rolling_backtest(
         historical_teams = loaded$historical_teams,
         historical_actual_results = loaded$historical_actual_results,
-        predictor_columns = config$model$required_predictors,
+        predictor_columns = betting_predictors,
         random_seed = 123,
         draws = 20L,
         use_cache = FALSE,

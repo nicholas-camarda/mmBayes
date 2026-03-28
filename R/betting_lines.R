@@ -33,7 +33,10 @@ build_odds_history_paths <- function(year, history_dir = default_runtime_history
         lines_long = file.path(year_dir, "lines_long.csv"),
         lines_matchups = file.path(year_dir, "lines_matchups.csv"),
         latest_lines_matchups = file.path(year_dir, "latest_lines_matchups.csv"),
-        closing_lines = file.path(year_dir, "closing_lines.csv")
+        closing_lines = file.path(year_dir, "closing_lines.csv"),
+        schedule_events = file.path(year_dir, "schedule_events.csv"),
+        schedule_windows = file.path(year_dir, "schedule_windows.csv"),
+        collector_state = file.path(year_dir, "collector_state.json")
     )
 }
 
@@ -68,7 +71,10 @@ read_latest_snapshot_time_utc <- function(path) {
         return(as.POSIXct(NA, tz = "UTC"))
     }
 
-    times <- suppressWarnings(as.POSIXct(tbl$snapshot_time_utc, tz = "UTC"))
+    times <- vapply(tbl$snapshot_time_utc, function(value) {
+        as.numeric(parse_utc_timestamp(value))
+    }, numeric(1))
+    times <- as.POSIXct(times, origin = "1970-01-01", tz = "UTC")
     times <- times[is.finite(times) & !is.na(times)]
     if (length(times) == 0) {
         return(as.POSIXct(NA, tz = "UTC"))
@@ -278,7 +284,7 @@ drop_trailing_words <- function(name, n_words = 1L) {
 match_odds_team_to_tournament <- function(odds_team_name, allowed_team_names) {
     allowed_team_names <- unique(canonicalize_team_name(allowed_team_names))
     allowed_keys <- raw_team_name_key(allowed_team_names)
-    odds_team_name <- as.character(odds_team_name %||% "")
+    odds_team_name <- safe_character_scalar(odds_team_name, default = "")
 
     candidates <- unique(c(
         odds_team_name,
@@ -462,7 +468,7 @@ normalize_odds_events_long <- function(events, bracket_year, snapshot_time = Sys
         return(tibble::tibble())
     }
 
-    snapshot_time_utc <- as.POSIXct(snapshot_time, tz = "UTC")
+    snapshot_time_utc <- parse_utc_timestamp(snapshot_time)
     allowed_team_names <- if (!is.null(allowed_team_names)) unique(canonicalize_team_name(allowed_team_names)) else NULL
 
     rows <- purrr::map_dfr(events, function(event) {
@@ -887,7 +893,7 @@ build_historical_betting_feature_table <- function(closing_lines) {
             line_available = as.integer(is.finite(implied_prob_teamA)),
             minutes_before_commence = dplyr::if_else(
                 !is.na(closing_snapshot_time_utc) & !is.na(commence_time_utc),
-                as.numeric(difftime(as.POSIXct(commence_time_utc, tz = "UTC"), as.POSIXct(closing_snapshot_time_utc, tz = "UTC"), units = "mins")),
+                as.numeric(difftime(parse_utc_timestamp(commence_time_utc), parse_utc_timestamp(closing_snapshot_time_utc), units = "mins")),
                 0
             ),
             prob_dispersion = safe_numeric(prob_dispersion_a, default = 0),
@@ -928,7 +934,7 @@ build_current_betting_feature_table <- function(lines_matchups) {
             line_available = as.integer(n_bookmakers > 0),
             minutes_before_commence = dplyr::if_else(
                 !is.na(snapshot_time_utc) & !is.na(commence_time),
-                as.numeric(difftime(as.POSIXct(commence_time, tz = "UTC"), as.POSIXct(snapshot_time_utc, tz = "UTC"), units = "mins")),
+                as.numeric(difftime(parse_utc_timestamp(commence_time), parse_utc_timestamp(snapshot_time_utc), units = "mins")),
                 0
             ),
             prob_dispersion = safe_numeric(prob_dispersion_a, default = 0),

@@ -35,8 +35,8 @@ if (length(interaction_terms) == 0L) {
 
 engine <- config$model$engine %||% "stan_glm"
 bart_config <- config$model$bart %||% list()
-baseline_predictors <- setdiff(config$model$required_predictors, betting_matchup_feature_columns())
-enhanced_predictors <- config$model$required_predictors
+baseline_predictors <- core_matchup_predictor_columns(config$model$required_predictors)
+enhanced_predictors <- unique(c(baseline_predictors, betting_matchup_feature_columns()))
 draws_budget <- if (identical(engine, "bart")) {
     as.integer(bart_config$n_post %||% 1000L)
 } else {

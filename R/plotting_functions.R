@@ -543,7 +543,7 @@ build_championship_distribution_scale <- function(distribution) {
 #' @keywords internal
 render_championship_distribution_svg <- function(summary_row, distribution, scale_settings) {
     if (nrow(summary_row) == 0 || nrow(distribution) == 0) {
-        return("<p class='empty-state'>Championship tiebreaker unavailable.</p>")
+        return("<p class='empty-state'>Championship tiebreaker not included for this run.</p>")
     }
 
     width <- 460
@@ -672,7 +672,7 @@ render_championship_distribution_svg <- function(summary_row, distribution, scal
 #' @keywords internal
 render_championship_distribution_panel <- function(summary_row, distribution, scale_settings = NULL) {
     if (nrow(summary_row) == 0) {
-        return("<p class='empty-state'>Championship tiebreaker unavailable.</p>")
+        return("<p class='empty-state'>Championship tiebreaker not included for this run.</p>")
     }
 
     scale_settings <- scale_settings %||% build_championship_distribution_scale(distribution)
@@ -879,6 +879,417 @@ render_leverage_scatter_svg <- function(decision_sheet) {
     )
 }
 
+#' Render a model-overview panel or strip
+#'
+#' @param model_overview A model-overview bundle returned by
+#'   [summarize_model_overview()].
+#' @param compact Whether to render a compact strip instead of a full panel.
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_model_overview_html <- function(model_overview, compact = FALSE) {
+    if (is.null(model_overview) || length(model_overview) == 0) {
+        empty_html <- "<p class='empty-state'>Model overview was not supplied for this run.</p>"
+        return(if (compact) empty_html else paste0("<div class='panel'><h2>Model Overview</h2>", empty_html, "</div>"))
+    }
+
+    if (!is.null(model_overview$matchup) || !is.null(model_overview$totals)) {
+        render_model_card <- function(title, overview) {
+            if (is.null(overview) || length(overview) == 0) {
+                return("")
+            }
+
+            bart_config <- overview$bart_config %||% list()
+            bart_rows <- if (identical(overview$engine, "bart")) {
+                tibble::tibble(
+                    Setting = c("n_trees", "n_burn", "n_post", "k", "power"),
+                    Value = c(
+                        bart_config$n_trees %||% NA_integer_,
+                        bart_config$n_burn %||% NA_integer_,
+                        bart_config$n_post %||% NA_integer_,
+                        bart_config$k %||% NA_real_,
+                        bart_config$power %||% NA_real_
+                    )
+                )
+            } else {
+                tibble::tibble(
+                    Setting = c("Engine", "Prior type"),
+                    Value = c(overview$engine_label %||% overview$engine %||% "Unknown", overview$prior_type %||% "default")
+                )
+            }
+
+            paste0(
+                "<div class='quality-card'>",
+                "<h3>", html_escape(title), "</h3>",
+                "<div class='overview-grid'>",
+                "<div class='summary-card'><div class='summary-label'>Engine</div><div class='summary-value'>", html_escape(overview$engine_label %||% overview$engine %||% "Unknown"), "</div><p class='summary-note'>", html_escape(if (identical(overview$engine, "bart")) "Nonlinear posterior tree model" else "Bayesian logistic regression"), "</p></div>",
+                "<div class='summary-card'><div class='summary-label'>Draw budget</div><div class='summary-value'>", html_escape(if (is.finite(safe_numeric(overview$draw_budget, default = NA_real_))) format(safe_numeric(overview$draw_budget, default = NA_real_), scientific = FALSE) else "n/a"), "</div><p class='summary-note'>Posterior draws used for scoring and simulation.</p></div>",
+                "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(as.character(overview$predictor_count %||% 0L)), "</div><p class='summary-note'>", html_escape(overview$predictor_summary %||% "No predictors were recorded."), "</p></div>",
+                "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(overview$interaction_terms %||% character(0)) > 0) "Interactions on" else "No interactions"), "</div><p class='summary-note'>", html_escape(if (length(overview$interaction_terms %||% character(0)) > 0) paste("Interaction terms:", paste(overview$interaction_terms, collapse = ", ")) else "No explicit interaction terms were supplied."), "</p></div>",
+                "</div>",
+                if (nrow(bart_rows) > 0) paste0(
+                    "<h4>", html_escape(if (identical(overview$engine, "bart")) "BART settings" else "Model settings"), "</h4>",
+                    render_html_table(bart_rows)
+                ) else "",
+                "</div>"
+            )
+        }
+
+        panels <- c(
+            if (!is.null(model_overview$matchup)) render_model_card("Matchup Model", model_overview$matchup) else "",
+            if (!is.null(model_overview$totals)) render_model_card("Total Points Model", model_overview$totals) else ""
+        )
+        panels <- panels[nzchar(panels)]
+        if (length(panels) == 0) {
+            return("")
+        }
+
+        return(
+            paste0(
+                "<div class='panel'><h2>Model Overview</h2>",
+                if (compact) paste0("<p class='panel-caption'>Model metadata for the current run.</p>") else "",
+                "<div class='quality-grid'>",
+                paste(panels, collapse = "\n"),
+                "</div>",
+                "</div>"
+            )
+        )
+    }
+
+    engine_label <- model_overview$engine_label %||% model_overview$engine %||% "Unknown"
+    draw_budget <- model_overview$draw_budget %||% NA_real_
+    predictor_summary <- model_overview$predictor_summary %||% "No predictors were recorded."
+    bart_config <- model_overview$bart_config %||% list()
+    prior_type <- model_overview$prior_type %||% NULL
+    interaction_terms <- model_overview$interaction_terms %||% character(0)
+
+    bart_rows <- if (identical(model_overview$engine, "bart")) {
+        tibble::tibble(
+            Setting = c("n_trees", "n_burn", "n_post", "k", "power"),
+            Value = c(
+                bart_config$n_trees %||% NA_integer_,
+                bart_config$n_burn %||% NA_integer_,
+                bart_config$n_post %||% NA_integer_,
+                bart_config$k %||% NA_real_,
+                bart_config$power %||% NA_real_
+            )
+        )
+    } else {
+        tibble::tibble(
+            Setting = c("Engine", "Prior type"),
+            Value = c(engine_label, prior_type %||% "default")
+        )
+    }
+
+    summary_cards <- paste0(
+        "<div class='overview-grid'>",
+        "<div class='summary-card'><div class='summary-label'>Engine</div><div class='summary-value'>", html_escape(engine_label), "</div><p class='summary-note'>", html_escape(if (identical(model_overview$engine, "bart")) "Nonlinear posterior tree model" else "Bayesian logistic regression"), "</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Draw budget</div><div class='summary-value'>", html_escape(if (is.finite(draw_budget)) format(draw_budget, scientific = FALSE) else "n/a"), "</div><p class='summary-note'>Posterior draws used for scoring and simulation.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(as.character(model_overview$predictor_count %||% 0L)), "</div><p class='summary-note'>", html_escape(predictor_summary), "</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(interaction_terms) > 0) "Interactions on" else "No interactions"), "</div><p class='summary-note'>", html_escape(if (length(interaction_terms) > 0) paste("Interaction terms:", paste(interaction_terms, collapse = ", ")) else "No explicit interaction terms were supplied."), "</p></div>",
+        "</div>"
+    )
+
+    bart_table <- if (nrow(bart_rows) > 0) {
+        paste0(
+            "<div class='quality-card'><h3>", html_escape(if (identical(model_overview$engine, "bart")) "BART settings" else "Model settings"), "</h3>",
+            render_html_table(bart_rows),
+            "</div>"
+        )
+    } else {
+        ""
+    }
+
+    if (compact) {
+        paste0(
+            "<div class='model-overview-strip'>",
+            "<strong>Engine:</strong> ", html_escape(engine_label),
+            " | <strong>Draw budget:</strong> ", html_escape(if (is.finite(draw_budget)) format(draw_budget, scientific = FALSE) else "n/a"),
+            " | <strong>Predictors:</strong> ", html_escape(as.character(model_overview$predictor_count %||% 0L)),
+            if (identical(model_overview$engine, "bart")) paste0(" | <strong>BART:</strong> ", html_escape(paste0("trees=", bart_config$n_trees %||% "?", ", post=", bart_config$n_post %||% "?"))) else "",
+            "</div>"
+        )
+    } else {
+        paste0(
+            "<div class='panel'><h2>Model Overview</h2>",
+            summary_cards,
+            "<div class='quality-grid'>",
+            bart_table,
+            "<div class='quality-card'><h3>Feature summary</h3><p>", html_escape(predictor_summary), "</p>",
+            if (length(interaction_terms) > 0) paste0("<p><strong>Interactions:</strong> ", html_escape(paste(interaction_terms, collapse = ", ")), "</p>") else "",
+            "</div>",
+            "</div>",
+            "</div>"
+        )
+    }
+}
+
+#' Render a model diagnostics panel
+#'
+#' @param quality_backtest A backtest result bundle.
+#' @param quality_source_label Optional label describing the source of the metrics.
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_model_diagnostics_html <- function(quality_backtest, quality_source_label = NULL) {
+    if (!model_quality_has_backtest(quality_backtest)) {
+        return(
+            paste0(
+                if (!is.null(quality_source_label)) paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>") else "",
+                "<div class='quality-grid'>",
+                "<div class='quality-card'><h3>Current summary</h3><p class='empty-state'>Backtest not computed in this run.</p></div>",
+                "<div class='quality-card'><h3>What this means</h3>",
+                "<div class='diagnostic-callout'><strong>Doing well</strong><ul><li>No backtest snapshot was supplied for this run.</li></ul></div>",
+                "<div class='diagnostic-callout'><strong>Needs attention</strong><ul><li>Run the full simulation pipeline if you want calibration and round-level diagnostics here.</li></ul></div>",
+                "</div>",
+                "</div>",
+                "<div class='quality-grid'>",
+                "<div class='quality-card'><h3>Calibration curve</h3><p class='empty-state'>Backtest calibration was not available for this run.</p></div>",
+                "<div class='quality-card'><h3>By round</h3><p class='empty-state'>Round-level diagnostics were not available for this run.</p></div>",
+                "</div>"
+            )
+        )
+    }
+
+    diagnostics <- summarize_backtest_diagnostics(quality_backtest)
+    summary_tbl <- quality_backtest$summary %>% dplyr::slice_head(n = 1)
+    calibration_summary <- summary_tbl %>%
+        dplyr::transmute(
+            `Log loss` = sprintf("%.3f", mean_log_loss),
+            `Brier score` = sprintf("%.3f", mean_brier),
+            Accuracy = format_probability(mean_accuracy),
+            `Bracket score` = sprintf("%.1f", mean_bracket_score),
+            `Correct picks` = sprintf("%.1f", mean_correct_picks)
+        )
+
+    round_tbl <- diagnostics$round_summary %||% tibble::tibble()
+    round_rows <- if (nrow(round_tbl) > 0) {
+        paste(
+            purrr::map_chr(seq_len(nrow(round_tbl)), function(index) {
+                row <- round_tbl[index, , drop = FALSE]
+                paste0(
+                    "<tr>",
+                    "<td>", html_escape(as.character(row$round[[1]])), "</td>",
+                    "<td>", html_escape(as.character(row$games[[1]])), "</td>",
+                    "<td>", html_escape(format_probability(row$accuracy[[1]])), "</td>",
+                    "<td>", html_escape(sprintf("%.3f", row$log_loss[[1]])), "</td>",
+                    "<td>", html_escape(sprintf("%.3f", row$brier[[1]])), "</td>",
+                    "<td>", html_escape(format_probability(row$empirical_rate[[1]])), "</td>",
+                    "</tr>"
+                )
+            }),
+            collapse = "\n"
+        )
+    } else {
+        ""
+    }
+
+    strength_lines <- paste(
+        purrr::map_chr(diagnostics$strengths, function(item) paste0("<li>", html_escape(item), "</li>")),
+        collapse = "\n"
+    )
+    weakness_lines <- paste(
+        purrr::map_chr(diagnostics$weaknesses, function(item) paste0("<li>", html_escape(item), "</li>")),
+        collapse = "\n"
+    )
+
+    paste0(
+        if (!is.null(quality_source_label)) paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>") else "",
+        "<div class='quality-grid'>",
+        "<div class='quality-card'><h3>Current summary</h3>", render_html_table(calibration_summary), "</div>",
+        "<div class='quality-card'><h3>What this means</h3>",
+        "<div class='diagnostic-callout'><strong>Doing well</strong><ul>", if (nzchar(strength_lines)) strength_lines else "<li>No strengths identified.</li>", "</ul></div>",
+        "<div class='diagnostic-callout'><strong>Needs attention</strong><ul>", if (nzchar(weakness_lines)) weakness_lines else "<li>No weaknesses identified.</li>", "</ul></div>",
+        "</div>",
+        "</div>",
+        "<div class='quality-grid'>",
+        "<div class='quality-card'><h3>Calibration curve</h3>", render_calibration_svg(quality_backtest$calibration %||% tibble::tibble()), "</div>",
+        "<div class='quality-card'><h3>By round</h3>",
+        "<table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Log loss</th><th>Brier</th><th>Empirical rate</th></tr></thead><tbody>", round_rows, "</tbody></table>",
+        "</div>",
+        "</div>",
+        "</div>"
+    )
+}
+
+#' Render a compact link panel for the model comparison dashboard
+#'
+#' @param model_comparison A comparison bundle returned by the main pipeline.
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_model_comparison_link_html <- function(model_comparison) {
+    if (is.null(model_comparison) || length(model_comparison) == 0) {
+        return("")
+    }
+
+    if (!isTRUE(model_comparison$available %||% FALSE)) {
+        note <- model_comparison$status %||% "Model comparison was requested, but the alternate engine could not be fit."
+        return(
+            paste0(
+                "<div class='panel comparison-link-panel'>",
+                "<h2>Model Comparison</h2>",
+                "<p class='panel-caption'>", html_escape(note), "</p>",
+                "</div>"
+            )
+        )
+    }
+
+    current_label <- model_comparison$current_label %||% "Current model"
+    alternate_label <- model_comparison$alternate_label %||% "Alternate model"
+    summary_text <- model_comparison$summary$text %||% "A comparison summary is available."
+
+    paste0(
+        "<div class='panel comparison-link-panel'>",
+        "<h2>Model Comparison</h2>",
+        "<p class='panel-caption'>Compare ", html_escape(current_label), " against ", html_escape(alternate_label), " on the same data. The dedicated comparison page keeps the scorecards together so the main dashboard stays readable.</p>",
+        "<div class='overview-grid'>",
+        "<div class='summary-card'><div class='summary-label'>Current engine</div><div class='summary-value'>", html_escape(current_label), "</div><p class='summary-note'>Primary run used for the bracket and live dashboard.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Alternate engine</div><div class='summary-value'>", html_escape(alternate_label), "</div><p class='summary-note'>The compare page shows the alternate fit alongside the current run.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value'>", html_escape(if (is.character(summary_text)) truncate_dashboard_label(summary_text, width = 22L) else "See comparison"), "</div><p class='summary-note'>Backtest winner summary from the comparison bundle.</p></div>",
+        "</div>",
+        "<p class='comparison-link-copy'><a href='model_comparison_dashboard.html'>Open the full model comparison dashboard</a></p>",
+        "</div>"
+    )
+}
+
+#' Build a compact summary for a model-comparison dashboard
+#'
+#' @param model_comparison A comparison bundle returned by the main pipeline.
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_model_comparison_summary_html <- function(model_comparison) {
+    if (is.null(model_comparison) || length(model_comparison) == 0) {
+        return("<p class='empty-state'>Model comparison was not supplied for this run.</p>")
+    }
+
+    if (!isTRUE(model_comparison$available %||% FALSE)) {
+        return(
+            paste0(
+                "<div class='quality-card'>",
+                "<h3>Comparison unavailable</h3>",
+                "<p class='empty-state'>", html_escape(model_comparison$status %||% "The alternate engine could not be fit."), "</p>",
+                "</div>"
+            )
+        )
+    }
+
+    current_label <- model_comparison$current_label %||% "Current model"
+    alternate_label <- model_comparison$alternate_label %||% "Alternate model"
+    backtest_table <- model_comparison$backtest_comparison %||% tibble::tibble()
+    live_table <- model_comparison$live_comparison %||% tibble::tibble()
+    backtest_summary <- summarize_model_metric_comparison(backtest_table, current_label, alternate_label)
+    live_summary <- summarize_model_metric_comparison(live_table, current_label, alternate_label)
+
+    paste0(
+        "<div class='panel'>",
+        "<h2>Model Comparison</h2>",
+        "<p class='panel-caption'>This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " on the same tournament data. Start in Compare, then move into an engine tab only if you want the full diagnostics behind a winner.</p>",
+        "<div class='overview-grid'>",
+        "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value'>", html_escape(backtest_summary$text), "</div><p class='summary-note'>Cross-validation style metrics from completed historical games.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Live takeaway</div><div class='summary-value'>", html_escape(live_summary$text), "</div><p class='summary-note'>Current-year games already completed in the live dashboard.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Engine tabs</div><div class='summary-value'>3</div><p class='summary-note'>Compare, current engine, and alternate engine.</p></div>",
+        "</div>",
+        "<div class='comparison-tab-bar' role='group' aria-label='Model comparison view'>",
+        "<button type='button' class='toggle-button is-active' data-model-view-target='compare' aria-pressed='true'>Compare</button>",
+        "<button type='button' class='toggle-button' data-model-view-target='current' aria-pressed='false'>", html_escape(current_label), "</button>",
+        "<button type='button' class='toggle-button' data-model-view-target='alternate' aria-pressed='false'>", html_escape(alternate_label), "</button>",
+        "</div>",
+        "<div class='toggle-panel is-active' data-model-view-panel='compare'>",
+        "<div class='quality-grid'>",
+        "<div class='quality-card'><h3>Backtest metrics</h3>", render_html_table(backtest_table), "</div>",
+        "<div class='quality-card'><h3>Current-year live metrics</h3>", render_html_table(live_table), "</div>",
+        "</div>",
+        "</div>",
+        "<div class='toggle-panel' data-model-view-panel='current'>",
+        render_model_overview_html(model_comparison$current$model_overview %||% list()),
+        render_model_diagnostics_html(model_comparison$current$backtest %||% NULL, quality_source_label = paste(current_label, "backtest")),
+        render_live_performance_html(model_comparison$current$live_performance %||% NULL),
+        "</div>",
+        "<div class='toggle-panel' data-model-view-panel='alternate'>",
+        render_model_overview_html(model_comparison$alternate$model_overview %||% list()),
+        render_model_diagnostics_html(model_comparison$alternate$backtest %||% NULL, quality_source_label = paste(alternate_label, "backtest")),
+        render_live_performance_html(model_comparison$alternate$live_performance %||% NULL),
+        "</div>",
+        "<script>",
+        "(function(){",
+        "var buttons=document.querySelectorAll('[data-model-view-target]');",
+        "var panels=document.querySelectorAll('[data-model-view-panel]');",
+        "function setView(view){",
+        "panels.forEach(function(panel){panel.classList.toggle('is-active', panel.getAttribute('data-model-view-panel')===view);});",
+        "buttons.forEach(function(button){var active=button.getAttribute('data-model-view-target')===view;button.classList.toggle('is-active', active);button.setAttribute('aria-pressed', active ? 'true' : 'false');});",
+        "}",
+        "buttons.forEach(function(button){button.addEventListener('click', function(){setView(button.getAttribute('data-model-view-target'));});});",
+        "setView('compare');",
+        "})();",
+        "</script>",
+        "</div>"
+    )
+}
+
+#' Create the model comparison dashboard HTML
+#'
+#' @param bracket_year The active bracket year.
+#' @param model_comparison A comparison bundle returned by the main pipeline.
+#'
+#' @return A complete HTML document as a scalar character string.
+#' @export
+create_model_comparison_dashboard_html <- function(bracket_year, model_comparison) {
+    if (is.null(model_comparison) || length(model_comparison) == 0) {
+        return(paste0(
+            "<!DOCTYPE html><html><head><meta charset='utf-8'><title>mmBayes Model Comparison</title></head><body>",
+            "<h1>mmBayes Model Comparison</h1>",
+            "<p class='empty-state'>Model comparison was not supplied for this run.</p>",
+            "</body></html>"
+        ))
+    }
+
+    current_label <- model_comparison$current_label %||% "Current model"
+    alternate_label <- model_comparison$alternate_label %||% "Alternate model"
+    comparison_status <- if (isTRUE(model_comparison$available %||% FALSE)) {
+        model_comparison$status %||% "Model comparison completed."
+    } else {
+        model_comparison$status %||% "Model comparison could not be completed."
+    }
+
+    paste0(
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        "<title>mmBayes Model Comparison</title>",
+        "<style>",
+        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f1e8;color:#111827;margin:0;padding:24px;line-height:1.5;}",
+        "h1,h2,h3{margin:0 0 8px 0;} h1{font-size:32px;} h2{margin-top:26px;font-size:21px;} h3{font-size:17px;}",
+        ".lede{max-width:980px;color:#374151;margin:8px 0 18px 0;}",
+        ".panel{background:white;border:1px solid #d6d3d1;border-radius:16px;padding:18px;box-shadow:0 2px 10px rgba(15,23,42,0.04);margin-bottom:18px;}",
+        ".quality-card{background:#fff;border:1px solid #e7e5e4;border-radius:14px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,0.03);}",
+        ".quality-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;}",
+        ".summary-card{background:white;border:1px solid #d6d3d1;border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(15,23,42,0.04);}",
+        ".summary-label{text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#6b7280;margin-bottom:8px;}",
+        ".summary-value{font-size:24px;font-weight:700;line-height:1.1;color:#111827;}",
+        ".summary-note{font-size:13px;color:#4b5563;margin:8px 0 0 0;}",
+        ".overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:18px 0;}",
+        ".toggle-button{appearance:none;border:1px solid #cbd5e1;background:white;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:600;color:#334155;cursor:pointer;}",
+        ".toggle-button.is-active{background:#0f172a;color:white;border-color:#0f172a;}",
+        ".toggle-panel{display:none;}",
+        ".toggle-panel.is-active{display:block;}",
+        ".comparison-tab-bar{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 16px 0;}",
+        ".comparison-link-copy{margin:14px 0 0 0;font-size:14px;}",
+        ".dashboard-table{width:100%;border-collapse:collapse;font-size:13px;background:white;}",
+        ".dashboard-table th,.dashboard-table td{border:1px solid #e7e5e4;padding:8px 10px;vertical-align:top;text-align:left;}",
+        ".dashboard-table th{background:#f8fafc;}",
+        ".empty-state{color:#6b7280;font-style:italic;}",
+        ".panel-caption{color:#6b7280;margin:0 0 12px 0;}",
+        "@media (max-width: 900px){.quality-grid{grid-template-columns:1fr;}}",
+        "</style></head><body>",
+        "<h1>mmBayes Model Comparison</h1>",
+        "<p class='lede'>Bracket year ", html_escape(bracket_year), ". This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " so you can judge calibration, accuracy, and live behavior without mixing the comparison into the main bracket workflow.</p>",
+        "<div class='panel'><strong>Status:</strong> ", html_escape(comparison_status), "</div>",
+        "<p class='comparison-link-copy'><a href='technical_dashboard.html'>Back to the technical dashboard</a></p>",
+        render_model_comparison_summary_html(model_comparison),
+        "</body></html>"
+    )
+}
+
 #' Create the bracket dashboard HTML
 #'
 #' @param bracket_year The active bracket year.
@@ -895,7 +1306,7 @@ render_leverage_scatter_svg <- function(decision_sheet) {
 #'
 #' @return A complete HTML document as a scalar character string.
 #' @export
-create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL, play_in_resolution = NULL, total_points_predictions = NULL, model_quality_context = NULL) {
+create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL, play_in_resolution = NULL, total_points_predictions = NULL, model_quality_context = NULL, model_overview = NULL, model_comparison = NULL) {
     primary <- candidates[[1]]
     alternate <- if (length(candidates) >= 2) candidates[[2]] else candidates[[1]]
 
@@ -975,13 +1386,16 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
 
     quality_context <- model_quality_context
     if (is.null(quality_context)) {
-        quality_context <- list(
-            backtest = backtest,
-            source_label = if (model_quality_has_backtest(backtest)) "Current run backtest" else "Backtest unavailable"
-        )
+        quality_context <- list(backtest = backtest, source_label = "Current run backtest")
     }
-    quality_backtest <- quality_context$backtest %||% backtest
-    quality_source_label <- quality_context$source_label %||% if (model_quality_has_backtest(quality_backtest)) "Current run backtest" else "Backtest unavailable"
+    quality_backtest <- NULL
+    if (!is.null(quality_context) && is.list(quality_context) && model_quality_has_backtest(quality_context$backtest %||% NULL)) {
+        quality_backtest <- quality_context$backtest
+    }
+    if (!model_quality_has_backtest(quality_backtest) && model_quality_has_backtest(backtest)) {
+        quality_backtest <- backtest
+    }
+    quality_source_label <- quality_context$source_label %||% "Current run backtest"
 
     calibration_summary <- if (model_quality_has_backtest(quality_backtest)) {
         quality_backtest$summary %>%
@@ -993,7 +1407,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                 mean_correct_picks = sprintf("%.1f", mean_correct_picks)
             )
     } else {
-        tibble::tibble(status = "Backtest skipped in this run.")
+        tibble::tibble()
     }
 
     tiebreaker_summary <- total_points_predictions$candidate_summaries %||% tibble::tibble()
@@ -1034,7 +1448,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                     "</div>"
                 )
             } else {
-                "<div class='tiebreaker-block'><div class='tiebreaker-label'>Championship Tiebreaker</div><p class='empty-state'>Prediction unavailable.</p></div>"
+                "<div class='tiebreaker-block'><div class='tiebreaker-label'>Championship Tiebreaker</div><p class='empty-state'>Prediction not included for this run.</p></div>"
             }
             paste0(
                 "<div class='candidate-card'>",
@@ -1090,7 +1504,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     } else {
         status_panel <- paste0(
-            "<div class='panel status-panel status-unknown'><strong>Status unavailable.</strong>",
+            "<div class='panel status-panel status-unknown'><strong>Status not supplied.</strong>",
             " No play-in summary was supplied, so the review panel cannot tell whether these slots are simulated or final.",
             "</div>"
         )
@@ -1134,11 +1548,18 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".legend-primary{background:#fbbf24;}",
         ".legend-secondary{background:#fb923c;}",
         ".empty-state{color:#6b7280;font-style:italic;}",
+        ".model-overview-strip{margin:10px 0 18px 0;padding:10px 12px;border-radius:999px;background:#eef2ff;color:#1e293b;font-size:13px;border:1px solid #c7d2fe;}",
+        ".comparison-link-panel{border-left:5px solid #0f172a;}",
+        ".comparison-link-copy{margin:14px 0 0 0;font-size:14px;}",
+        ".diagnostic-callout{margin:10px 0 0 0;padding:12px 14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;}",
+        ".diagnostic-callout strong{display:block;margin-bottom:8px;}",
         ".scatter-svg{width:100%;height:auto;background:white;border:1px solid #d6d3d1;border-radius:14px;padding:8px;}",
         "</style></head><body>",
         "<h1>mmBayes Bracket Decision Console</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year),
         ". Use Candidate 1 as the safest expected-value bracket and Candidate 2 as the bounded-risk alternate. The tables below surface the hardest calls first, make the championship tiebreaker explicit for each bracket, and highlight the rows that deserve closer inspection.</p>",
+        render_model_overview_html(model_overview, compact = TRUE),
+        render_model_comparison_link_html(model_comparison),
         status_panel,
         "<div class='legend-row'>",
         "<div class='legend-chip'><span class='legend-swatch legend-primary'></span><strong>Inspect now</strong> Toss-up rows worth a closer user review.</div>",
@@ -1164,16 +1585,16 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<div class='panel'><h3>Bracket #2 Sequence</h3>",
         render_html_table(alternate_bracket_view, row_classes = alternate_bracket_classes),
         "</div>",
-        "<h2>Calibration Snapshot</h2><div class='panel'>",
         if (model_quality_has_backtest(quality_backtest)) {
             paste0(
+                "<h2>Calibration Snapshot</h2><div class='panel'>",
                 "<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>",
-                render_html_table(calibration_summary)
+                render_html_table(calibration_summary),
+                "</div>"
             )
         } else {
-            render_html_table(calibration_summary)
+            ""
         },
-        "</div>",
         "<h2>How To Use This</h2><div class='panel'>",
         "<p><strong>Pick rule:</strong> start with Candidate 1, then only override with Candidate 2 on games that appear in the diff table and still feel plausible to you.</p>",
         "<p><strong>Confidence tiers:</strong> Locks are stable favorite spots. Leans still favor one side. Toss-ups are real decisions. Volatile games carry wide uncertainty even if one team is favored.</p>",
@@ -1571,7 +1992,7 @@ render_candidate_divergence_svg <- function(decision_sheet) {
 render_live_performance_html <- function(live_performance) {
     if (is.null(live_performance)) {
         return(
-            "<div class='panel'><h2>Live Tournament Performance</h2><p class='empty-state'>Live tournament performance was not available for this run.</p></div>"
+            "<div class='panel'><h2>Live Tournament Performance</h2><p class='empty-state'>No completed current-year games have been recorded yet.</p></div>"
         )
     }
 
@@ -1646,6 +2067,207 @@ render_live_performance_html <- function(live_performance) {
         "<div class='two-column'>",
         "<div class='quality-card'><h3>By Round</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Mean predicted</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
         "<div class='quality-card'><h3>Recent Games</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Matchup</th><th>Winner</th><th>Model pick</th><th>Model P(win)</th><th>Status</th></tr></thead><tbody>", recent_rows, "</tbody></table></div>",
+        "</div>",
+        "</div>"
+    )
+}
+
+#' Render a model overview panel
+#'
+#' @param model_overview A list of model summary structures.
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_model_overview_html_legacy <- function(model_overview) {
+    if (is.null(model_overview) || length(model_overview) == 0) {
+        return("")
+    }
+
+    render_model_card <- function(title, overview) {
+        if (is.null(overview) || length(overview) == 0) {
+            return("")
+        }
+
+        bart_config <- overview$bart_config %||% list()
+        bart_rows <- if (identical(overview$engine, "bart")) {
+            paste0(
+                "<tr><th>n_trees</th><td>", html_escape(as.character(bart_config$n_trees %||% NA_integer_)), "</td></tr>",
+                "<tr><th>n_burn</th><td>", html_escape(as.character(bart_config$n_burn %||% NA_integer_)), "</td></tr>",
+                "<tr><th>n_post</th><td>", html_escape(as.character(bart_config$n_post %||% NA_integer_)), "</td></tr>",
+                "<tr><th>k</th><td>", html_escape(as.character(bart_config$k %||% NA_real_)), "</td></tr>",
+                "<tr><th>power</th><td>", html_escape(as.character(bart_config$power %||% NA_real_)), "</td></tr>"
+            )
+        } else {
+            paste0(
+                "<tr><th>Prior</th><td>", html_escape(overview$prior_type %||% "normal"), "</td></tr>",
+                "<tr><th>Interactions</th><td>", html_escape(if (length(overview$interaction_terms %||% character(0)) == 0) "None" else paste(overview$interaction_terms, collapse = ", ")), "</td></tr>"
+            )
+        }
+
+        paste0(
+            "<div class='quality-card'>",
+            "<h3>", html_escape(title), "</h3>",
+            "<div class='overview-grid'>",
+            "<div class='summary-card'><div class='summary-label'>Engine</div><div class='summary-value'>", html_escape(overview$engine_label %||% overview$engine %||% "Unknown"), "</div><p class='summary-note'>", html_escape(overview$predictor_summary %||% "Model summary not recorded."), "</p></div>",
+            "<div class='summary-card'><div class='summary-label'>Posterior draw budget</div><div class='summary-value'>", html_escape(formatC(safe_numeric(overview$draw_budget, default = NA_real_), format = "f", digits = 0)), "</div><p class='summary-note'>Used for bracket simulation and live scoring.</p></div>",
+            "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(formatC(safe_numeric(overview$predictor_count, default = 0), format = "f", digits = 0)), "</div><p class='summary-note'>Feature count after constant predictors are dropped.</p></div>",
+            "</div>",
+            "<table class='dashboard-table'><tbody>", bart_rows, "</tbody></table>",
+            "</div>"
+        )
+    }
+
+    panels <- c(
+        if (!is.null(model_overview$matchup)) render_model_card("Matchup Model", model_overview$matchup) else "",
+        if (!is.null(model_overview$totals)) render_model_card("Total Points Model", model_overview$totals) else ""
+    )
+    panels <- panels[nzchar(panels)]
+    if (length(panels) == 0) {
+        return("")
+    }
+
+    paste0(
+        "<div class='panel'>",
+        "<h2>Model Overview</h2>",
+        "<div class='diagnostic-grid'>",
+        paste(panels, collapse = "\n"),
+        "</div>",
+        "</div>"
+    )
+}
+
+#' Render a simple round-performance bar chart
+#'
+#' @param round_summary Round-level backtest summary.
+#'
+#' @return A scalar character string containing inline SVG markup.
+#' @keywords internal
+render_round_performance_svg <- function(round_summary) {
+    if (is.null(round_summary) || !inherits(round_summary, "data.frame") || nrow(round_summary) == 0) {
+        return("<p class='empty-state'>Round-level diagnostics were not available for this snapshot.</p>")
+    }
+
+    plot_data <- round_summary %>%
+        dplyr::mutate(round = factor(as.character(round), levels = round_levels())) %>%
+        dplyr::arrange(round)
+    n_rows <- nrow(plot_data)
+    width <- 760
+    left <- 150
+    top <- 26
+    row_h <- 36
+    bar_w <- 470
+    height <- top + (n_rows * row_h) + 34
+
+    bars <- paste(
+        purrr::map_chr(seq_len(n_rows), function(index) {
+            row <- plot_data[index, , drop = FALSE]
+            accuracy <- safe_numeric(row$accuracy[[1]], default = 0)
+            acc_width <- round(bar_w * max(min(accuracy, 1), 0))
+            y <- top + ((index - 1L) * row_h)
+            paste0(
+                "<text x='18' y='", y + 17, "' font-size='12' fill='#111827'>", html_escape(as.character(row$round[[1]])), "</text>",
+                "<rect x='", left, "' y='", y, "' width='", bar_w, "' height='16' rx='8' fill='#e7e5e4'/>",
+                "<rect x='", left, "' y='", y, "' width='", acc_width, "' height='16' rx='8' fill='#0f766e'/>",
+                "<text x='", left + bar_w + 12, "' y='", y + 13, "' font-size='12' fill='#111827'>", sprintf("%.1f%%", 100 * accuracy), " | ", row$games[[1]], " games</text>"
+            )
+        }),
+        collapse = "\n"
+    )
+
+    paste0(
+        "<svg viewBox='0 0 ", width, " ", height, "' class='tech-svg tech-svg-compact' role='img' aria-label='Round performance by accuracy'>",
+        "<text x='18' y='16' font-size='12' fill='#6b7280'>Round</text>",
+        "<text x='", left, "' y='16' font-size='12' fill='#6b7280'>Accuracy</text>",
+        bars,
+        "</svg>"
+    )
+}
+
+#' Render a model diagnostics panel
+#'
+#' @param quality_backtest A backtest bundle used for diagnostics.
+#' @param quality_source_label Human-readable source label for the metrics.
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_model_diagnostics_html_legacy <- function(quality_backtest, quality_source_label = NULL) {
+    diagnostics <- summarize_backtest_diagnostics(quality_backtest)
+    if (is.null(quality_backtest) || !model_quality_has_backtest(quality_backtest)) {
+        return("")
+    }
+
+    summary_tbl <- quality_backtest$summary %||% tibble::tibble()
+    if (nrow(summary_tbl) == 0) {
+        return("")
+    }
+
+    metric_cards <- paste0(
+        "<div class='overview-grid'>",
+        "<div class='summary-card'><div class='summary-label'>Log loss</div><div class='summary-value'>", sprintf("%.3f", summary_tbl$mean_log_loss[[1]]), "</div><p class='summary-note'>Lower means the probabilities are more honest.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Brier score</div><div class='summary-value'>", sprintf("%.3f", summary_tbl$mean_brier[[1]]), "</div><p class='summary-note'>Lower means tighter probability estimates.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Accuracy</div><div class='summary-value'>", format_probability(summary_tbl$mean_accuracy[[1]]), "</div><p class='summary-note'>How often the model picked the right winner.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Bracket score</div><div class='summary-value'>", sprintf("%.1f", summary_tbl$mean_bracket_score[[1]]), "</div><p class='summary-note'>Pool-style points earned under the scoring rules.</p></div>",
+        "</div>"
+    )
+
+    round_summary <- diagnostics$round_summary %||% tibble::tibble()
+    strengths <- diagnostics$strengths %||% character()
+    weaknesses <- diagnostics$weaknesses %||% character()
+    calibration_notes <- diagnostics$calibration_notes %||% character()
+    notes_html <- paste(
+        c(
+            if (length(strengths) > 0) sprintf("<li>%s</li>", html_escape(strengths)) else NULL,
+            if (length(weaknesses) > 0) sprintf("<li>%s</li>", html_escape(weaknesses)) else NULL,
+            if (length(calibration_notes) > 0) sprintf("<li>%s</li>", html_escape(calibration_notes)) else NULL
+        ),
+        collapse = "\n"
+    )
+    if (!nzchar(notes_html)) {
+        notes_html <- "<li>No additional diagnostic notes were available.</li>"
+    }
+
+    round_rows <- if (nrow(round_summary) > 0) {
+        paste(
+            purrr::map_chr(seq_len(nrow(round_summary)), function(index) {
+                row <- round_summary[index, , drop = FALSE]
+                paste0(
+                    "<tr>",
+                    "<td>", html_escape(as.character(row$round[[1]])), "</td>",
+                    "<td>", html_escape(as.character(row$games[[1]])), "</td>",
+                    "<td>", html_escape(format_probability(row$accuracy[[1]])), "</td>",
+                    "<td>", html_escape(sprintf("%.3f", row$log_loss[[1]])), "</td>",
+                    "<td>", html_escape(sprintf("%.3f", row$brier[[1]])), "</td>",
+                    "<td>", html_escape(format_probability(row$mean_predicted[[1]])), "</td>",
+                    "<td>", html_escape(format_probability(row$empirical_rate[[1]])), "</td>",
+                    "</tr>"
+                )
+            }),
+            collapse = "\n"
+        )
+    } else {
+        ""
+    }
+
+    calibration_svg <- render_calibration_svg(quality_backtest$calibration %||% tibble::tibble())
+    round_svg <- render_round_performance_svg(round_summary)
+    source_text <- if (!is.null(quality_source_label) && nzchar(quality_source_label)) {
+        paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>")
+    } else {
+        ""
+    }
+
+    paste0(
+        "<div class='panel'>",
+        "<h2>Model Diagnostics</h2>",
+        source_text,
+        metric_cards,
+        "<div class='quality-grid'>",
+        "<div class='quality-card'><h3>Why it looks good or bad</h3><ul class='diagnostic-bullets'>", notes_html, "</ul></div>",
+        "<div class='quality-card'><h3>Round Performance</h3>", round_svg, "</div>",
+        "</div>",
+        "<div class='quality-grid'>",
+        "<div class='quality-card'><h3>Calibration Curve</h3>", calibration_svg, "</div>",
+        "<div class='quality-card'><h3>Round Breakdown</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Log loss</th><th>Brier</th><th>Mean predicted</th><th>Empirical rate</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
         "</div>",
         "</div>"
     )
@@ -1889,6 +2511,72 @@ render_calibration_svg <- function(calibration_tbl) {
     )
 }
 
+#' Render a compact model-overview panel
+#'
+#' @param model_overview A model overview list from [summarize_model_overview()].
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_model_overview_html_legacy <- function(model_overview) {
+    if (is.null(model_overview) || length(model_overview) == 0) {
+        return(
+            "<div class='panel'><h2>Model Overview</h2><p class='empty-state'>Model metadata was not recorded for this run.</p></div>"
+        )
+    }
+
+    bart_config <- model_overview$bart_config %||% list()
+    engine_label <- model_overview$engine_label %||% as.character(model_overview$engine %||% "unknown")
+    draws_text <- if (is.finite(safe_numeric(model_overview$draw_budget, default = NA_real_))) {
+        sprintf("%.0f posterior draws", safe_numeric(model_overview$draw_budget, default = NA_real_))
+    } else {
+        "Draw budget not recorded"
+    }
+    predictor_text <- if (safe_numeric(model_overview$predictor_count, default = 0) > 0) {
+        model_overview$predictor_summary %||% sprintf("%s predictors were recorded.", safe_numeric(model_overview$predictor_count, default = 0))
+    } else {
+        "No predictors were recorded."
+    }
+    interaction_text <- if (length(model_overview$interaction_terms %||% character(0)) > 0) {
+        paste(model_overview$interaction_terms, collapse = ", ")
+    } else {
+        "None"
+    }
+    betting_text <- if (safe_numeric(model_overview$betting_predictor_count, default = 0) > 0) {
+        sprintf("%s betting-derived predictors", safe_numeric(model_overview$betting_predictor_count, default = 0))
+    } else {
+        "No betting-derived predictors"
+    }
+    engine_detail <- if (identical(model_overview$engine, "bart")) {
+        paste0(
+            "Trees ", safe_numeric(bart_config$n_trees, default = NA_real_),
+            " | Burn ", safe_numeric(bart_config$n_burn, default = NA_real_),
+            " | Post ", safe_numeric(bart_config$n_post, default = NA_real_),
+            " | k ", safe_numeric(bart_config$k, default = NA_real_),
+            " | power ", safe_numeric(bart_config$power, default = NA_real_)
+        )
+    } else {
+        paste0("Prior type: ", model_overview$prior_type %||% "normal")
+    }
+
+    paste0(
+        "<div class='panel'>",
+        "<h2>Model Overview</h2>",
+        "<p class='panel-caption'>This block shows the model that produced the current dashboard and how it was configured.</p>",
+        "<div class='overview-grid'>",
+        "<div class='summary-card'><div class='summary-label'>Engine</div><div class='summary-value'>", html_escape(engine_label), "</div><p class='summary-note'>", html_escape(model_overview$engine %||% "unknown"), "</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Draw budget</div><div class='summary-value'>", html_escape(draws_text), "</div><p class='summary-note'>Posterior samples used for scoring and simulation.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(as.character(safe_numeric(model_overview$predictor_count, default = 0))), "</div><p class='summary-note'>", html_escape(predictor_text), "</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Betting features</div><div class='summary-value'>", html_escape(betting_text), "</div><p class='summary-note'>Whether market-derived predictors are in play.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Extra structure</div><div class='summary-value'>", html_escape(interaction_text), "</div><p class='summary-note'>Interactions or other model terms beyond the base predictors.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Engine settings</div><div class='summary-value'>", html_escape(engine_label), "</div><p class='summary-note'>", html_escape(engine_detail), "</p></div>",
+        "</div>",
+        "</div>"
+    )
+}
+
+#' Render a model-diagnostics panel
+#'
+#' @param backtest A backtest result bundle.
 #' Create the technical bracket dashboard HTML
 #'
 #' @param bracket_year The active bracket year.
@@ -1905,7 +2593,7 @@ render_calibration_svg <- function(calibration_tbl) {
 #'
 #' @return A complete HTML document as a scalar character string.
 #' @export
-create_technical_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL, total_points_predictions = NULL, play_in_resolution = NULL, model_quality_context = NULL, live_performance = NULL) {
+create_technical_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL, total_points_predictions = NULL, play_in_resolution = NULL, model_quality_context = NULL, live_performance = NULL, model_overview = NULL, model_comparison = NULL) {
     top_decisions <- decision_sheet %>%
         dplyr::arrange(dplyr::desc(decision_score), round, region, matchup_number) %>%
         dplyr::mutate(
@@ -1965,11 +2653,14 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
     if (is.null(quality_context)) {
         quality_context <- list(
             backtest = backtest,
-            source_label = if (model_quality_has_backtest(backtest)) "Current run backtest" else "Backtest unavailable"
+            source_label = "Current run backtest"
         )
     }
     quality_backtest <- quality_context$backtest %||% backtest
-    quality_source_label <- quality_context$source_label %||% if (model_quality_has_backtest(quality_backtest)) "Current run backtest" else "Backtest unavailable"
+    quality_source_label <- quality_context$source_label %||% "Current run backtest"
+    overview_panel <- render_model_overview_html(model_overview)
+    comparison_panel <- render_model_comparison_link_html(model_comparison)
+    diagnostics_panel <- render_model_diagnostics_html(quality_backtest, quality_source_label = quality_source_label)
 
     tier_counts <- decision_sheet %>%
         dplyr::mutate(confidence_tier = as.character(confidence_tier)) %>%
@@ -2048,7 +2739,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
     } else if (!is.null(play_in_resolution) && nrow(play_in_resolution) > 0) {
         "<div class='panel status-panel status-final'><strong>Status: Final result.</strong> First Four slots are resolved, so the path is stable.</div>"
     } else {
-        "<div class='panel status-panel status-unknown'><strong>Status unavailable.</strong> Play-in resolution was not supplied for this run.</div>"
+        "<div class='panel status-panel status-unknown'><strong>Status not supplied.</strong> Play-in resolution was not supplied for this run.</div>"
     }
 
     calibration_summary <- if (model_quality_has_backtest(quality_backtest)) {
@@ -2061,7 +2752,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
                 `Correct picks` = sprintf("%.1f", mean_correct_picks)
             )
     } else {
-        tibble::tibble(status = "Backtest skipped in this run.")
+        tibble::tibble(status = "Backtest not computed in this run.")
     }
 
     totals_section <- if (nrow(tiebreaker_summary) > 0) {
@@ -2105,7 +2796,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
                 "<p class='muted'>Use the recommended tiebreaker as the default entry because it is the rounded median championship total for this bracket path.</p>"
             )
         } else {
-            "<p class='empty-state'>Championship tiebreaker unavailable.</p>"
+            "<p class='empty-state'>Championship tiebreaker not included for this run.</p>"
         }
 
         paste0(
@@ -2149,6 +2840,8 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".quality-note{margin:10px 0 0 0;font-size:13px;color:#6b7280;}",
         ".panel{background:white;border:1px solid #d6d3d1;border-radius:16px;padding:18px;box-shadow:0 2px 10px rgba(15,23,42,0.04);margin-bottom:18px;}",
         ".panel-caption{color:#6b7280;margin:0 0 12px 0;}",
+        ".comparison-link-panel{border-left:5px solid #0f172a;}",
+        ".comparison-link-copy{margin:14px 0 0 0;font-size:14px;}",
         ".overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:18px 0;}",
         ".summary-card{background:white;border:1px solid #d6d3d1;border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(15,23,42,0.04);}",
         ".summary-label{text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#6b7280;margin-bottom:8px;}",
@@ -2211,6 +2904,10 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".legend-copy{font-size:12px;color:#6b7280;}",
         ".quality-metric-list p{margin:0 0 10px 0;color:#334155;}",
         ".quality-metric-list strong{color:#111827;}",
+        ".diagnostic-callout{margin:10px 0 0 0;padding:12px 14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;}",
+        ".diagnostic-callout strong{display:block;margin-bottom:8px;}",
+        ".diagnostic-bullets{margin:0;padding-left:18px;}",
+        ".diagnostic-bullets li{margin-bottom:6px;}",
         "@media (max-width: 1240px){.comparison-board__header{display:none;}.board-row--ranked,.board-row--divergence,.board-row--upset{grid-template-columns:1fr;}.board-cell::before{display:block;}}",
         "@media (max-width: 900px){.quality-grid{grid-template-columns:1fr;}.tech-svg-compact{max-width:none;}}",
         "</style></head><body>",
@@ -2218,6 +2915,9 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         "<p class='lede'>Bracket year ", html_escape(bracket_year),
         ". Start in Compare to decide which games actually deserve your attention, then switch to Candidate 1 or Candidate 2 only after you want the full path for one bracket. This view is built to explain not just the recommendation, but also the math driving it.</p>",
         status_panel,
+        overview_panel,
+        comparison_panel,
+        diagnostics_panel,
         render_live_performance_html(live_performance),
         "<div class='panel'>",
         "<h2>How To Use This Dashboard</h2>",
@@ -2269,31 +2969,6 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         render_candidate_divergence_svg(decision_sheet),
         "</div>",
         totals_section,
-        "<div class='panel'><h2>Model Quality</h2>",
-        render_board_explainer_html(
-            what_this_shows = "Backtest metrics for probability quality and pool-scoring quality, plus the calibration curve.",
-            how_to_use = "Use this as a trust check. If calibration is poor or score metrics are weak, treat close dashboard recommendations with more skepticism.",
-            why_it_matters = "Better probability calibration helps every downstream board. Bracket score matters most for pool decisions because it respects round weighting, not just raw pick count.",
-            math_text = "Log loss and Brier score reward accurate probabilities. Bracket score is the average pool points earned under standard round scoring, while correct picks is the average number of games chosen correctly."
-        ),
-        "<p class='quality-intro'>The chart on the right is the calibration curve. The blue points are the observed win rates inside each predicted-probability bin. If that blue path stays near the dotted diagonal, the model's probabilities are lining up well with reality.</p>",
-        if (model_quality_has_backtest(quality_backtest)) {
-            paste0(
-                "<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>",
-                "<div class='quality-grid'><div class='quality-card'>",
-                render_html_table(calibration_summary),
-                "<div class='quality-metric-list'>",
-                "<p><strong>Bracket score</strong> means expected pool points under standard round scoring. It matters more than raw pick count because late-round misses cost much more.</p>",
-                "<p><strong>Correct picks</strong> means the average number of games chosen correctly. It is intuitive, but it treats every game equally and is therefore less useful than bracket score for pool strategy.</p>",
-                "<p><strong>Log loss</strong> and <strong>Brier score</strong> both measure probability quality. Lower is better because the model is assigning more honest probabilities.</p>",
-                "</div></div><div class='quality-card'>",
-                render_calibration_svg(quality_backtest$calibration %||% tibble::tibble()),
-                "<p class='quality-note'>Empirical rate means the observed win rate within each probability bin. Points above the diagonal indicate the model was under-confident in that region; points below it indicate over-confidence.</p>",
-                "</div></div>"
-            )
-        } else {
-            "<p class='empty-state'>Backtest skipped in this run.</p>"
-        },
         "</div>",
         "</div>",
         candidate_view_panel(candidates[[1]], "candidate-1", candidate_one_path, candidate_one_classes),

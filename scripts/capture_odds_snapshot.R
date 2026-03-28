@@ -37,7 +37,7 @@ force_snapshot <- parse_force_flag(args)
 config <- load_project_config("config.yml")
 config$betting$enabled <- TRUE
 
-loaded <- load_tournament_data(config)
+loaded <- load_tournament_data(config, include_betting_history = FALSE)
 bracket_year <- as.integer(loaded$bracket_year)
 
 log_path <- file.path(config$output$path %||% default_runtime_output_root(), "logs", sprintf("odds_snapshot_%s.log", bracket_year))

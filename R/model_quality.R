@@ -1,6 +1,19 @@
 library(dplyr)
 library(tibble)
 
+#' Hash an R object into a stable fingerprint
+#'
+#' @param object Any serializable R object.
+#'
+#' @return A single MD5 hash string.
+#' @keywords internal
+hash_serialized_object <- function(object) {
+    tmp <- tempfile(fileext = ".rds")
+    on.exit(unlink(tmp), add = TRUE)
+    saveRDS(object, tmp)
+    tools::md5sum(tmp)[[1]]
+}
+
 #' Check whether a backtest bundle contains usable quality metrics
 #'
 #' @param backtest A backtest result bundle or `NULL`.
@@ -25,23 +38,407 @@ build_model_quality_directory <- function(output_dir = default_runtime_output_ro
     file.path(output_dir %||% default_runtime_output_root(), "model_quality")
 }
 
+#' Build a quality signature for a run bundle
+#'
+#' @param results A run bundle returned by [run_tournament_simulation()].
+#'
+#' @return A stable fingerprint used to match cached quality artifacts.
+#' @keywords internal
+build_model_quality_signature <- function(results) {
+    if (is.null(results) || !is.list(results)) {
+        return(NULL)
+    }
+
+    model_results <- results$model %||% list()
+    data_results <- results$data %||% list()
+
+    signature <- list(
+        bracket_year = results$bracket_year %||% NULL,
+        draws_budget = results$draws_budget %||% NULL,
+        model = list(
+            engine = model_results$engine %||% NULL,
+            predictor_columns = model_results$predictor_columns %||% character(0),
+            interaction_terms = model_results$interaction_terms %||% character(0),
+            prior_type = model_results$prior_type %||% NULL,
+            bart_config = model_results$bart_config %||% NULL,
+            scaling_reference = model_results$scaling_reference %||% NULL,
+            model_matrix_columns = model_results$model_matrix_columns %||% character(0),
+            round_levels = model_results$round_levels %||% character(0)
+        ),
+        data = list(
+            historical_teams = data_results$historical_teams %||% tibble::tibble(),
+            historical_actual_results = data_results$historical_actual_results %||% tibble::tibble()
+        )
+    )
+
+    hash_serialized_object(signature)
+}
+
+#' Summarize the model configuration for dashboard display
+#'
+#' @param model_results A fitted model bundle from [fit_tournament_model()].
+#' @param draws Posterior draw budget used for simulation and scoring.
+#'
+#' @return A named list of display-friendly model details.
+#' @keywords internal
+summarize_model_overview <- function(model_results, draws = NULL) {
+    if (is.null(model_results)) {
+        return(list())
+    }
+
+    engine <- model_results$engine %||% "unknown"
+    predictor_columns <- model_results$predictor_columns %||% character(0)
+    feature_columns <- setdiff(predictor_columns, "round")
+    betting_predictor_count <- sum(startsWith(feature_columns, "betting_"), na.rm = TRUE)
+    bart_config <- model_results$bart_config %||% list()
+    draw_budget <- draws %||% (if (identical(engine, "bart")) safe_numeric(bart_config$n_post, default = NA_real_) else NA_real_)
+
+    list(
+        engine = engine,
+        engine_label = if (identical(engine, "bart")) "BART" else "Stan GLM",
+        prior_type = model_results$prior_type %||% NULL,
+        draw_budget = draw_budget,
+        predictor_count = length(feature_columns),
+        betting_predictor_count = betting_predictor_count,
+        predictor_summary = if (length(feature_columns) == 0) {
+            "No predictors were recorded."
+        } else {
+            head_labels <- head(feature_columns, n = 6L)
+            suffix <- if (length(feature_columns) > length(head_labels)) " ..." else ""
+            sprintf("%s predictors: %s%s", length(feature_columns), paste(head_labels, collapse = ", "), suffix)
+        },
+        bart_config = bart_config,
+        interaction_terms = model_results$interaction_terms %||% character(0),
+        cache_path = model_results$cache_path %||% NULL
+    )
+}
+
+#' Build a display table comparing two model summaries
+#'
+#' @param current_summary A one-row summary tibble for the current model.
+#' @param alternate_summary A one-row summary tibble for the alternate model.
+#' @param current_label Human-readable label for the current model.
+#' @param alternate_label Human-readable label for the alternate model.
+#' @param kind Comparison kind, either `"backtest"` or `"live"`.
+#'
+#' @return A tibble with formatted values, deltas, and a winner column.
+#' @keywords internal
+build_model_metric_comparison_table <- function(current_summary,
+                                                alternate_summary,
+                                                current_label,
+                                                alternate_label,
+                                                kind = c("backtest", "live")) {
+    kind <- match.arg(kind)
+    current_summary <- current_summary %||% tibble::tibble()
+    alternate_summary <- alternate_summary %||% tibble::tibble()
+    if (!inherits(current_summary, "data.frame") || !inherits(alternate_summary, "data.frame")) {
+        return(tibble::tibble())
+    }
+    if (nrow(current_summary) == 0 || nrow(alternate_summary) == 0) {
+        return(tibble::tibble())
+    }
+
+    metric_specs <- switch(
+        kind,
+        backtest = tibble::tibble(
+            metric = c("Log loss", "Brier score", "Accuracy", "Bracket score", "Correct picks"),
+            field = c("mean_log_loss", "mean_brier", "mean_accuracy", "mean_bracket_score", "mean_correct_picks"),
+            direction = c("lower", "lower", "higher", "higher", "higher"),
+            digits = c(3L, 3L, 1L, 1L, 1L),
+            percent = c(FALSE, FALSE, TRUE, FALSE, FALSE)
+        ),
+        live = tibble::tibble(
+            metric = c("Games played", "Log loss", "Brier score", "Accuracy"),
+            field = c("games_played", "log_loss", "brier", "accuracy"),
+            direction = c("higher", "lower", "lower", "higher"),
+            digits = c(0L, 3L, 3L, 1L),
+            percent = c(FALSE, FALSE, FALSE, TRUE)
+        )
+    )
+
+    current_row <- current_summary[1, , drop = FALSE]
+    alternate_row <- alternate_summary[1, , drop = FALSE]
+
+    extract_metric <- function(row, field) {
+        if (!field %in% names(row)) {
+            return(NA_real_)
+        }
+        row[[field]][[1]]
+    }
+
+    format_metric_value <- function(value, digits, percent = FALSE) {
+        value <- safe_numeric(value, default = NA_real_)
+        if (!is.finite(value)) {
+            return("n/a")
+        }
+        if (isTRUE(percent)) {
+            return(format_probability(value))
+        }
+        if (digits <= 0L) {
+            return(as.character(as.integer(round(value))))
+        }
+        sprintf(paste0("%.", digits, "f"), value)
+    }
+
+    format_metric_delta <- function(delta, digits, percent = FALSE) {
+        delta <- safe_numeric(delta, default = NA_real_)
+        if (!is.finite(delta)) {
+            return("n/a")
+        }
+        if (isTRUE(percent)) {
+            return(sprintf("%+.1f pp", 100 * delta))
+        }
+        if (digits <= 0L) {
+            return(sprintf("%+d", as.integer(round(delta))))
+        }
+        sprintf(paste0("%+.", digits, "f"), delta)
+    }
+
+    purrr::pmap_dfr(metric_specs, function(metric, field, direction, digits, percent) {
+        current_value <- safe_numeric(extract_metric(current_row, field), default = NA_real_)
+        alternate_value <- safe_numeric(extract_metric(alternate_row, field), default = NA_real_)
+        delta <- alternate_value - current_value
+        winner <- if (!is.finite(current_value) || !is.finite(alternate_value)) {
+            "Unavailable"
+        } else if (abs(delta) < 1e-12) {
+            "Tie"
+        } else if ((identical(direction, "lower") && alternate_value < current_value) ||
+            (identical(direction, "higher") && alternate_value > current_value)) {
+            alternate_label
+        } else {
+            current_label
+        }
+
+        tibble::tibble(
+            Metric = metric,
+            `Current` = format_metric_value(current_value, digits, percent),
+            `Alternate` = format_metric_value(alternate_value, digits, percent),
+            Delta = format_metric_delta(delta, digits, percent),
+            Winner = winner
+        )
+    })
+}
+
+#' Summarize which model wins more metrics in a comparison table
+#'
+#' @param comparison_table A tibble returned by [build_model_metric_comparison_table()].
+#' @param current_label Human-readable label for the current model.
+#' @param alternate_label Human-readable label for the alternate model.
+#'
+#' @return A named list with counts and a short explanation.
+#' @keywords internal
+summarize_model_metric_comparison <- function(comparison_table, current_label, alternate_label) {
+    if (!inherits(comparison_table, "data.frame") || nrow(comparison_table) == 0) {
+        return(list(
+            current_wins = 0L,
+            alternate_wins = 0L,
+            ties = 0L,
+            text = "No comparable metrics were available."
+        ))
+    }
+
+    counts <- table(comparison_table$Winner %||% character())
+    current_wins <- if (current_label %in% names(counts)) as.integer(counts[[current_label]]) else 0L
+    alternate_wins <- if (alternate_label %in% names(counts)) as.integer(counts[[alternate_label]]) else 0L
+    ties <- if ("Tie" %in% names(counts)) as.integer(counts[["Tie"]]) else 0L
+    unavailable <- if ("Unavailable" %in% names(counts)) as.integer(counts[["Unavailable"]]) else 0L
+
+    text <- if (unavailable == nrow(comparison_table)) {
+        "No comparable metrics were available."
+    } else {
+        parts <- c()
+        if (current_wins > 0L) {
+            parts <- c(parts, sprintf("%s wins %s metric%s", current_label, current_wins, if (current_wins == 1L) "" else "s"))
+        }
+        if (alternate_wins > 0L) {
+            parts <- c(parts, sprintf("%s wins %s metric%s", alternate_label, alternate_wins, if (alternate_wins == 1L) "" else "s"))
+        }
+        if (ties > 0L) {
+            parts <- c(parts, sprintf("%s tie%s", ties, if (ties == 1L) "" else "s"))
+        }
+        if (length(parts) == 0L) {
+            "No clear winner emerged."
+        } else {
+            paste(parts, collapse = "; ")
+        }
+    }
+
+    list(
+        current_wins = current_wins,
+        alternate_wins = alternate_wins,
+        ties = ties,
+        text = text
+    )
+}
+
+#' Summarize prediction performance by round
+#'
+#' @param predictions A prediction table containing `round`, `predicted_prob`,
+#'   and `actual_outcome`.
+#'
+#' @return A tibble with one row per round and key metrics.
+#' @keywords internal
+summarize_prediction_round_performance <- function(predictions) {
+    if (!inherits(predictions, "data.frame") || nrow(predictions) == 0 || !all(c("round", "predicted_prob", "actual_outcome") %in% names(predictions))) {
+        return(tibble::tibble())
+    }
+
+    predictions %>%
+        dplyr::mutate(round = factor(as.character(round), levels = round_levels())) %>%
+        dplyr::group_by(round) %>%
+        dplyr::group_modify(function(.x, .y) {
+            metrics <- compute_binary_metrics(.x$predicted_prob, .x$actual_outcome)
+            dplyr::mutate(
+                metrics,
+                games = nrow(.x),
+                mean_predicted = mean(.x$predicted_prob),
+                empirical_rate = mean(.x$actual_outcome)
+            )
+        }) %>%
+        dplyr::ungroup() %>%
+        dplyr::mutate(round = as.character(round))
+}
+
+#' Summarize backtest performance for diagnostics
+#'
+#' @param backtest A backtest bundle returned by [run_rolling_backtest()].
+#'
+#' @return A list of display-friendly diagnostics tables and notes.
+#' @keywords internal
+summarize_backtest_diagnostics <- function(backtest) {
+    if (!model_quality_has_backtest(backtest)) {
+        return(list(
+            round_summary = tibble::tibble(),
+            calibration = tibble::tibble(),
+            strengths = character(),
+            weaknesses = character(),
+            calibration_notes = character(),
+            best_round = NULL,
+            worst_round = NULL,
+            best_bin = NULL,
+            worst_bin = NULL
+        ))
+    }
+
+    predictions <- backtest$predictions %||% tibble::tibble()
+    round_summary <- summarize_prediction_round_performance(predictions)
+
+    calibration <- backtest$calibration %||% tibble::tibble()
+    calibration <- if (nrow(calibration) > 0 && all(c("mean_predicted", "empirical_rate") %in% names(calibration))) {
+        calibration %>%
+            dplyr::mutate(calibration_gap = abs(safe_numeric(empirical_rate, default = NA_real_) - safe_numeric(mean_predicted, default = NA_real_)))
+    } else {
+        tibble::tibble()
+    }
+
+    strengths <- character()
+    weaknesses <- character()
+    calibration_notes <- character()
+    best_round <- NULL
+    worst_round <- NULL
+    best_bin <- NULL
+    worst_bin <- NULL
+
+    if (nrow(round_summary) > 0) {
+        best_round <- round_summary %>%
+            dplyr::arrange(dplyr::desc(accuracy), brier) %>%
+            dplyr::slice_head(n = 1)
+        worst_round <- round_summary %>%
+            dplyr::arrange(accuracy, dplyr::desc(brier)) %>%
+            dplyr::slice_head(n = 1)
+
+        if (nrow(best_round) == 1) {
+            strengths <- c(
+                strengths,
+                sprintf(
+                    "Strongest round: %s with %.1f%% accuracy and %.3f Brier.",
+                    best_round$round[[1]],
+                    100 * safe_numeric(best_round$accuracy[[1]], default = NA_real_),
+                    safe_numeric(best_round$brier[[1]], default = NA_real_)
+                )
+            )
+        }
+        if (nrow(worst_round) == 1) {
+            weaknesses <- c(
+                weaknesses,
+                sprintf(
+                    "Weakest round: %s with %.1f%% accuracy and %.3f Brier.",
+                    worst_round$round[[1]],
+                    100 * safe_numeric(worst_round$accuracy[[1]], default = NA_real_),
+                    safe_numeric(worst_round$brier[[1]], default = NA_real_)
+                )
+            )
+        }
+    }
+
+    if (nrow(calibration) > 0) {
+        best_bin <- calibration %>%
+            dplyr::arrange(calibration_gap, dplyr::desc(n_games)) %>%
+            dplyr::slice_head(n = 1)
+        worst_bin <- calibration %>%
+            dplyr::arrange(dplyr::desc(calibration_gap), dplyr::desc(n_games)) %>%
+            dplyr::slice_head(n = 1)
+
+        if (nrow(best_bin) == 1) {
+            strengths <- c(
+                strengths,
+                sprintf(
+                    "Most calibrated bin: predicted %.0f%% to %.0f%% with gap %.3f.",
+                    100 * safe_numeric(best_bin$mean_predicted[[1]], default = NA_real_),
+                    100 * safe_numeric(best_bin$empirical_rate[[1]], default = NA_real_),
+                    safe_numeric(best_bin$calibration_gap[[1]], default = NA_real_)
+                )
+            )
+        }
+        if (nrow(worst_bin) == 1) {
+            weaknesses <- c(
+                weaknesses,
+                sprintf(
+                    "Least calibrated bin: predicted %.0f%% to %.0f%% with gap %.3f.",
+                    100 * safe_numeric(worst_bin$mean_predicted[[1]], default = NA_real_),
+                    100 * safe_numeric(worst_bin$empirical_rate[[1]], default = NA_real_),
+                    safe_numeric(worst_bin$calibration_gap[[1]], default = NA_real_)
+                )
+            )
+        }
+    }
+
+    if (nrow(round_summary) > 0) {
+        calibration_notes <- c(
+            calibration_notes,
+            sprintf("Round table covers %s completed games.", sum(round_summary$games, na.rm = TRUE))
+        )
+    }
+
+    list(
+        round_summary = round_summary,
+        calibration = calibration,
+        strengths = strengths,
+        weaknesses = weaknesses,
+        calibration_notes = calibration_notes,
+        best_round = best_round,
+        worst_round = worst_round,
+        best_bin = best_bin,
+        worst_bin = worst_bin
+    )
+}
+
 #' Build canonical model-quality artifact paths
 #'
 #' @param output_dir Base output directory.
-#' @param timestamp Timestamp used to name the archived snapshot.
+#' @param timestamp Timestamp used when the current artifact is written.
 #' @param process_id Process identifier used to reduce collisions.
 #'
-#' @return A named list with quality directory and file paths.
+#' @return A named list with quality directory and latest-file paths.
 #' @keywords internal
 build_model_quality_paths <- function(output_dir = default_runtime_output_root(), timestamp = Sys.time(), process_id = Sys.getpid()) {
     quality_dir <- build_model_quality_directory(output_dir)
-    stamp <- gsub("\\.", "", format(timestamp, "%Y%m%d_%H%M%OS6"))
-    archive_path <- file.path(quality_dir, sprintf("model_quality_%s_pid%s.rds", stamp, process_id))
     latest_path <- file.path(quality_dir, "latest_model_quality.rds")
 
     list(
         quality_dir = quality_dir,
-        archive_path = archive_path,
+        artifact_path = latest_path,
+        archive_path = latest_path,
         latest_path = latest_path
     )
 }
@@ -52,11 +449,12 @@ build_model_quality_paths <- function(output_dir = default_runtime_output_root()
 #' @param output_dir Base output directory.
 #' @param timestamp Timestamp used to name the archived snapshot.
 #' @param process_id Process identifier used to reduce collisions.
+#' @param quality_signature A stable fingerprint for the current model/data snapshot.
 #'
 #' @return A list containing the saved paths and the stored artifact, or `NULL`
 #'   when no usable backtest summary was supplied.
 #' @keywords internal
-save_model_quality_artifact <- function(backtest, output_dir = default_runtime_output_root(), timestamp = Sys.time(), process_id = Sys.getpid()) {
+save_model_quality_artifact <- function(backtest, output_dir = default_runtime_output_root(), timestamp = Sys.time(), process_id = Sys.getpid(), quality_signature = NULL) {
     if (!model_quality_has_backtest(backtest)) {
         return(NULL)
     }
@@ -65,17 +463,28 @@ save_model_quality_artifact <- function(backtest, output_dir = default_runtime_o
     dir.create(paths$quality_dir, recursive = TRUE, showWarnings = FALSE)
 
     artifact <- list(
-        version = 1L,
+        version = 2L,
         generated_at = as.POSIXct(timestamp, tz = "UTC"),
         source = "current run backtest",
+        quality_signature = quality_signature %||% NULL,
         backtest = backtest,
-        archive_path = paths$archive_path,
+        artifact_path = paths$latest_path,
+        archive_path = paths$latest_path,
         latest_path = paths$latest_path
     )
 
-    saveRDS(artifact, paths$archive_path)
-    saveRDS(artifact, paths$latest_path)
+    tmp_path <- tempfile(tmpdir = paths$quality_dir, fileext = ".rds")
+    saveRDS(artifact, tmp_path)
+    if (file.exists(paths$latest_path)) {
+        unlink(paths$latest_path)
+    }
+    if (!file.rename(tmp_path, paths$latest_path)) {
+        unlink(tmp_path)
+        stop_with_message(sprintf("Failed to write model-quality artifact to %s", paths$latest_path))
+    }
 
+    paths$archive_path <- paths$latest_path
+    paths$artifact_path <- paths$latest_path
     c(paths, list(artifact = artifact))
 }
 
@@ -92,6 +501,9 @@ load_latest_model_quality_artifact <- function(output_dir = default_runtime_outp
     }
 
     artifact <- readRDS(paths$latest_path)
+    if (is.null(artifact$artifact_path)) {
+        artifact$artifact_path <- paths$latest_path
+    }
     if (is.null(artifact$latest_path)) {
         artifact$latest_path <- paths$latest_path
     }
@@ -106,37 +518,48 @@ load_latest_model_quality_artifact <- function(output_dir = default_runtime_outp
 #'
 #' @param backtest An optional backtest bundle from the current run.
 #' @param output_dir Base output directory.
-#' @param allow_fallback Whether to fall back to the latest saved snapshot.
+#' @param quality_signature A stable fingerprint for the current model/data snapshot.
+#' @param allow_fallback Whether a matching cached snapshot may be used.
+#' @param require_exact_match Whether cached reuse must match the fingerprint exactly.
 #'
 #' @return A list containing the effective backtest bundle and source labels.
 #' @keywords internal
-resolve_model_quality_context <- function(backtest = NULL, output_dir = default_runtime_output_root(), allow_fallback = TRUE) {
+resolve_model_quality_context <- function(backtest = NULL, output_dir = default_runtime_output_root(), quality_signature = NULL, allow_fallback = TRUE, require_exact_match = TRUE) {
     if (model_quality_has_backtest(backtest)) {
         return(list(
             backtest = backtest,
             source_label = "Current run backtest",
             source_path = NULL,
-            used_fallback = FALSE
+            used_fallback = FALSE,
+            used_cached_quality = FALSE,
+            quality_signature = quality_signature %||% NULL
         ))
     }
 
     if (isFALSE(allow_fallback)) {
-        return(list(
-            backtest = NULL,
-            source_label = "Backtest unavailable",
-            source_path = NULL,
-            used_fallback = FALSE
-        ))
+        stop_with_message("Model-quality fallback is disabled and no current-run backtest was supplied.")
+    }
+
+    if (is.null(quality_signature) && isTRUE(require_exact_match)) {
+        stop_with_message("A model-quality fingerprint is required to reuse cached statistics.")
     }
 
     artifact <- load_latest_model_quality_artifact(output_dir)
     if (!is.null(artifact) && model_quality_has_backtest(artifact$backtest)) {
+        matches_signature <- identical(artifact$quality_signature %||% NULL, quality_signature)
+        if (!isTRUE(matches_signature) && isTRUE(require_exact_match)) {
+            stop_with_message("The latest saved model-quality snapshot does not match the current model/data fingerprint.")
+        }
+        if (!isTRUE(matches_signature)) {
+            stop_with_message("A matching model-quality snapshot was not found for this run.")
+        }
+
         generated_at <- artifact$generated_at
         if (is.null(generated_at)) {
-            source_label <- "Latest saved model-quality snapshot"
+            source_label <- "Cached identical validation snapshot"
         } else {
             source_label <- sprintf(
-                "Latest saved model-quality snapshot from %s",
+                "Cached identical validation snapshot from %s",
                 format(as.POSIXct(generated_at, tz = "UTC"), "%Y-%m-%d %H:%M UTC")
             )
         }
@@ -144,17 +567,25 @@ resolve_model_quality_context <- function(backtest = NULL, output_dir = default_
         return(list(
             backtest = artifact$backtest,
             source_label = source_label,
-            source_path = artifact$archive_path %||% artifact$latest_path,
-            used_fallback = TRUE
+            source_path = artifact$artifact_path %||% artifact$latest_path,
+            used_fallback = TRUE,
+            used_cached_quality = TRUE,
+            quality_signature = artifact$quality_signature %||% NULL
         ))
     }
 
-    list(
-        backtest = NULL,
-        source_label = "Backtest unavailable",
-        source_path = NULL,
-        used_fallback = FALSE
-    )
+    if (!is.null(quality_signature) || isTRUE(require_exact_match) || isTRUE(allow_fallback)) {
+        return(list(
+            backtest = list(),
+            source_label = "Backtest not available for this run.",
+            source_path = NULL,
+            used_fallback = FALSE,
+            used_cached_quality = FALSE,
+            quality_signature = quality_signature %||% NULL
+        ))
+    }
+
+    stop_with_message("No usable model-quality snapshot was available.")
 }
 
 #' Format the confidence-tier mix for a summary sentence

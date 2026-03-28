@@ -37,16 +37,12 @@ initialize_logging(log_path)
 
 logger::log_info("Running fast bracket-candidate pipeline")
 
-data <- load_tournament_data(config)
-betting_context <- resolve_latest_matchup_lines(
-    config = config,
-    bracket_year = data$bracket_year,
-    current_teams = data$current_teams
-)
-current_betting_features <- build_current_betting_feature_table(betting_context$lines_matchups %||% tibble::tibble())
+data <- load_tournament_data(config, include_betting_history = FALSE)
+data$historical_betting_features <- tibble::tibble()
+matchup_predictors <- core_matchup_predictor_columns(config$model$required_predictors)
 model_results <- fit_tournament_model(
     historical_matchups = data$historical_matchups,
-    predictor_columns = config$model$required_predictors,
+    predictor_columns = matchup_predictors,
     engine = engine,
     bart_config = bart_config,
     random_seed = config$model$random_seed,
@@ -54,19 +50,16 @@ model_results <- fit_tournament_model(
     use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
 )
 model_results$betting_feature_context <- list(
-    current_lines_matchups = betting_context$lines_matchups %||% tibble::tibble(),
-    current_betting_features = current_betting_features,
-    historical_betting_features = data$historical_betting_features %||% tibble::tibble(),
-    source_label = betting_context$source_label %||% NULL,
-    used_api_call = isTRUE(betting_context$used_api_call %||% FALSE),
-    latest_lines_matchups_path = betting_context$latest_lines_matchups_path %||% NULL,
-    snapshot_path = betting_context$snapshot_path %||% NULL
+    current_lines_matchups = tibble::tibble(),
+    current_betting_features = tibble::tibble(),
+    historical_betting_features = tibble::tibble(),
+    source_label = NULL,
+    used_api_call = FALSE,
+    latest_lines_matchups_path = NULL,
+    snapshot_path = NULL
 )
 total_points_model <- fit_total_points_model(
-    historical_total_points = build_total_points_training_rows(
-        data$historical_actual_results,
-        historical_betting_features = data$historical_betting_features
-    ),
+    historical_total_points = build_total_points_training_rows(data$historical_actual_results),
     engine = engine,
     bart_config = bart_config,
     random_seed = config$model$random_seed,
@@ -74,6 +67,16 @@ total_points_model <- fit_total_points_model(
     use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
 )
 total_points_model$betting_feature_context <- model_results$betting_feature_context
+model_overview <- list(
+    matchup = summarize_model_overview(model_results, draws = draws_budget),
+    totals = summarize_model_overview(total_points_model, draws = draws_budget)
+)
+quality_signature <- build_model_quality_signature(list(
+    bracket_year = data$bracket_year,
+    draws_budget = draws_budget,
+    model = model_results,
+    data = data
+))
 
 candidates <- generate_bracket_candidates(
     all_teams = data$current_teams,
@@ -106,6 +109,8 @@ decision_outputs <- save_decision_outputs(
     candidates = candidates,
     output_dir = output_dir,
     backtest = NULL,
+    model_overview = model_overview,
+    quality_signature = quality_signature,
     play_in_resolution = play_in_resolution,
     total_points_predictions = total_points_predictions,
     live_performance = live_performance
@@ -145,8 +150,8 @@ if (!is.null(decision_outputs$model_quality_source_label)) {
 if (!is.null(decision_outputs$model_quality_source_path)) {
     cat(sprintf("Model quality path: %s\n", decision_outputs$model_quality_source_path))
 }
-if (isTRUE(decision_outputs$model_quality_used_fallback)) {
-    cat("Model quality: used latest saved snapshot fallback\n")
+if (isTRUE(decision_outputs$model_quality_used_cached_quality)) {
+    cat("Model quality: used cached identical validation snapshot\n")
 }
 for (index in seq_along(decision_outputs$candidate_csvs)) {
     cat(sprintf("Candidate %s CSV: %s\n", index, decision_outputs$candidate_csvs[[index]]))

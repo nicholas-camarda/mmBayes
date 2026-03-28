@@ -154,11 +154,36 @@ normalize_project_paths <- function(config) {
     config$data$team_features_path <- path.expand(config$data$team_features_path)
     config$data$game_results_path <- path.expand(config$data$game_results_path)
 
+    default_model_cache_path <- file.path(default_runtime_output_root(), "model_cache")
+    default_log_path <- file.path(default_runtime_output_root(), "logs", "tournament_simulation.log")
+    default_refresh_log_path <- file.path(default_runtime_output_root(), "logs", "data_refresh.log")
+
     config$betting$history_dir <- path.expand(config$betting$history_dir %||% runtime_history_root)
     config$output$path <- path.expand(config$output$path %||% runtime_output_root)
-    config$output$model_cache_path <- path.expand(config$output$model_cache_path %||% file.path(config$output$path, "model_cache"))
-    config$output$log_path <- path.expand(config$output$log_path %||% file.path(config$output$path, "logs", "tournament_simulation.log"))
-    config$output$refresh_log_path <- path.expand(config$output$refresh_log_path %||% file.path(config$output$path, "logs", "data_refresh.log"))
+    config$output$model_cache_path <- path.expand(
+        if (is.null(config$output$model_cache_path) ||
+            identical(path.expand(config$output$model_cache_path), path.expand(default_model_cache_path))) {
+            file.path(config$output$path, "model_cache")
+        } else {
+            config$output$model_cache_path
+        }
+    )
+    config$output$log_path <- path.expand(
+        if (is.null(config$output$log_path) ||
+            identical(path.expand(config$output$log_path), path.expand(default_log_path))) {
+            file.path(config$output$path, "logs", "tournament_simulation.log")
+        } else {
+            config$output$log_path
+        }
+    )
+    config$output$refresh_log_path <- path.expand(
+        if (is.null(config$output$refresh_log_path) ||
+            identical(path.expand(config$output$refresh_log_path), path.expand(default_refresh_log_path))) {
+            file.path(config$output$path, "logs", "data_refresh.log")
+        } else {
+            config$output$refresh_log_path
+        }
+    )
 
     config
 }
@@ -185,6 +210,7 @@ default_project_config <- function() {
             history_window = 8L,
             backtest = TRUE,
             engine = "stan_glm",
+            compare_engines = TRUE,
             bart = list(
                 n_trees = 200L,
                 n_burn = 500L,
@@ -206,14 +232,7 @@ default_project_config <- function() {
                 "DRB_diff",
                 "3P%_diff",
                 "3P%D_diff",
-                "Adj T._diff",
-                "betting_prob_centered",
-                "betting_spread_teamA",
-                "betting_bookmakers",
-                "betting_line_available",
-                "betting_minutes_before_commence",
-                "betting_prob_dispersion",
-                "betting_spread_dispersion"
+                "Adj T._diff"
             ),
             interaction_terms = character(0),
             prior_type = "normal",
@@ -221,7 +240,7 @@ default_project_config <- function() {
             n_draws = 1000
         ),
         betting = list(
-            enabled = TRUE,
+            enabled = FALSE,
             provider = "odds_api",
             api_key_env = "ODDS_API_KEY",
             sport_key = "basketball_ncaab",
@@ -235,7 +254,14 @@ default_project_config <- function() {
             snapshot_cooldown_minutes = 10L,
             require_for_production = FALSE,
             allow_missing_fallback = TRUE,
-            evaluation_mode = "ablation"
+            evaluation_mode = "ablation",
+            quota_cap = 500L,
+            reserve_floor = 100L,
+            schedule_refresh_minutes = 30L,
+            poll_interval_minutes = 30L,
+            lead_minutes = 90L,
+            tail_minutes = 45L,
+            slate_gap_minutes = 180L
         ),
         output = list(
             path = runtime_output_root,

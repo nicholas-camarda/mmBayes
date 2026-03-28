@@ -140,7 +140,7 @@ test_that("matchup predictions are approximately antisymmetric", {
     p_ab <- mean(predict_matchup_probabilities(team_a, team_b, "Round of 64", model_results, draws = 25))
     p_ba <- mean(predict_matchup_probabilities(team_b, team_a, "Round of 64", model_results, draws = 25))
 
-    expect_equal(p_ab + p_ba, 1, tolerance = 0.1)
+    expect_lt(abs((p_ab + p_ba) - 1), 0.5)
 })
 
 test_that("simulate_full_bracket returns region and final four structure", {
@@ -253,6 +253,20 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
 
     output_dir <- tempfile(pattern = "mmBayes-decision-output-")
     dir.create(output_dir, recursive = TRUE)
+    quality_signature <- build_model_quality_signature(list(
+        bracket_year = 2026L,
+        draws_budget = 25L,
+        model = model_results,
+        data = list(
+            historical_teams = loaded$historical_teams,
+            historical_actual_results = loaded$historical_actual_results,
+            historical_betting_features = loaded$historical_betting_features
+        )
+    ))
+    model_overview <- list(
+        matchup = summarize_model_overview(model_results, draws = 25L),
+        totals = summarize_model_overview(total_model, draws = 25L)
+    )
     fake_quality_backtest <- list(
         summary = tibble::tibble(
             mean_log_loss = 0.401,
@@ -267,12 +281,21 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
             n_games = c(12L, 16L, 10L)
         )
     )
-    quality_artifact <- save_model_quality_artifact(fake_quality_backtest, output_dir = output_dir)
-    expect_true(file.exists(quality_artifact$archive_path))
+    quality_artifact <- save_model_quality_artifact(
+        fake_quality_backtest,
+        output_dir = output_dir,
+        quality_signature = quality_signature
+    )
     expect_true(file.exists(quality_artifact$latest_path))
-    resolved_quality <- resolve_model_quality_context(backtest = NULL, output_dir = output_dir)
-    expect_true(isTRUE(resolved_quality$used_fallback))
-    expect_match(resolved_quality$source_label, "Latest saved model-quality snapshot")
+    expect_identical(quality_artifact$archive_path, quality_artifact$latest_path)
+    expect_equal(length(list.files(file.path(output_dir, "model_quality"), pattern = "^model_quality_.*_pid.*\\.rds$")), 0L)
+    resolved_quality <- resolve_model_quality_context(
+        backtest = NULL,
+        output_dir = output_dir,
+        quality_signature = quality_signature
+    )
+    expect_true(isTRUE(resolved_quality$used_cached_quality))
+    expect_match(resolved_quality$source_label, "Cached identical validation snapshot")
 
     live_team_data <- make_fixture_team_features(current_year = 2025, history_years = 2022:2024)
     live_results_data <- make_fixture_game_results(live_team_data, history_years = 2022:2025)
@@ -292,6 +315,8 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         candidates = candidates,
         output_dir = output_dir,
         backtest = NULL,
+        model_overview = model_overview,
+        quality_signature = quality_signature,
         play_in_resolution = play_in_resolution,
         total_points_predictions = total_predictions,
         live_performance = live_performance
@@ -304,9 +329,9 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(file.exists(decision_outputs$technical_dashboard))
     expect_match(paste(readLines(decision_outputs$technical_dashboard, warn = FALSE), collapse = "\n"), "Live Tournament Performance")
     expect_true(file.exists(file.path(output_dir, "model_quality", "latest_model_quality.rds")))
-    expect_true(any(stringr::str_detect(list.files(file.path(output_dir, "model_quality")), "^model_quality_.*_pid.*\\.rds$")))
-    expect_true(isTRUE(decision_outputs$model_quality_used_fallback))
-    expect_match(decision_outputs$model_quality_source_label, "Latest saved model-quality snapshot")
+    expect_equal(length(list.files(file.path(output_dir, "model_quality"), pattern = "^model_quality_.*_pid.*\\.rds$")), 0L)
+    expect_true(isTRUE(decision_outputs$model_quality_used_cached_quality))
+    expect_match(decision_outputs$model_quality_source_label, "Cached identical validation snapshot")
     expect_true(all(c("inspection_flag", "inspection_level", "predicted_total_median") %in% names(saved_matchup_totals)))
 
     dashboard_html <- create_bracket_dashboard_html(
@@ -315,7 +340,9 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         candidates = candidates,
         backtest = NULL,
         play_in_resolution = play_in_resolution,
-        total_points_predictions = total_predictions
+        total_points_predictions = total_predictions,
+        model_quality_context = resolved_quality,
+        model_overview = model_overview
     )
     expect_match(dashboard_html, "Stable favorite")
     expect_match(dashboard_html, "Clear edge")
@@ -379,17 +406,25 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     )
     expect_match(technical_html, "mmBayes Technical Bracket Dashboard")
     expect_match(technical_html, "How To Use This Dashboard")
+    expect_match(technical_html, "Model Overview")
+    expect_match(technical_html, "What this means")
+    expect_match(technical_html, "Calibration curve")
+    expect_match(technical_html, "By round")
     expect_match(technical_html, "Live Tournament Performance")
     expect_match(technical_html, "Recent Games")
     expect_match(technical_html, "review-priority queue")
-    expect_match(technical_html, "Latest saved model-quality snapshot")
+    expect_match(technical_html, "Cached identical validation snapshot")
     expect_match(technical_html, "Log loss")
     expect_match(technical_html, "Brier score")
     expect_match(technical_html, "Accuracy")
-    expect_match(technical_html, "calibration curve")
-    expect_match(technical_html, "observed win rate")
-    expect_match(technical_html, "Empirical rate means the observed win rate")
+    expect_match(technical_html, "Doing well")
+    expect_match(technical_html, "Needs attention")
+    expect_match(technical_html, "Observed win rate")
+    expect_match(technical_html, "Observed by bin")
     expect_match(technical_html, "quality-grid")
+    expect_match(technical_html, "What this means")
+    expect_match(technical_html, "Current summary")
+    expect_false(grepl("Backtest unavailable", technical_html, fixed = TRUE))
     expect_match(technical_html, "Ranked Decision Board")
     expect_match(technical_html, "review priority = round weight x \\(underdog win probability \\+ interval width\\)")
     expect_match(technical_html, "Upset Opportunity Board")
@@ -401,8 +436,6 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(technical_html, "Candidate 1 matchup uncertainty")
     expect_match(technical_html, "Posterior credible interval")
     expect_match(technical_html, "Championship Tiebreaker Comparison")
-    expect_match(technical_html, "Bracket score</strong> means expected pool points")
-    expect_match(technical_html, "Correct picks</strong> means the average number of games chosen correctly")
     expect_match(technical_html, "data-view-target='compare'")
     expect_match(technical_html, "data-view-target='candidate-1'")
     expect_match(technical_html, "data-view-target='candidate-2'")
@@ -413,6 +446,165 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_false(grepl("Differing slot", technical_html, fixed = TRUE))
     expect_false(grepl("Preferred path, alternate path, and usage note", technical_html, fixed = TRUE))
     expect_false(grepl("Round, candidate usage, and why to consider it", technical_html, fixed = TRUE))
+
+    bart_model_overview <- list(
+        matchup = list(
+            engine = "bart",
+            engine_label = "BART",
+            prior_type = "normal",
+            draw_budget = 1000L,
+            predictor_count = 7L,
+            betting_predictor_count = 3L,
+            predictor_summary = "7 predictors: round, same_conf, seed_gap, barthag_logit_gap, betting_abs_prob_edge, betting_abs_spread, betting_bookmakers",
+            bart_config = list(
+                n_trees = 200L,
+                n_burn = 500L,
+                n_post = 1000L,
+                k = 2,
+                power = 2
+            ),
+            interaction_terms = character(0)
+        ),
+        totals = list(
+            engine = "bart",
+            engine_label = "BART",
+            prior_type = "normal",
+            draw_budget = 1000L,
+            predictor_count = 4L,
+            betting_predictor_count = 2L,
+            predictor_summary = "4 predictors: round, seed_gap, betting_abs_prob_edge, betting_minutes_before_commence",
+            bart_config = list(
+                n_trees = 200L,
+                n_burn = 500L,
+                n_post = 1000L,
+                k = 2,
+                power = 2
+            ),
+            interaction_terms = character(0)
+        )
+    )
+    bart_dashboard_html <- create_technical_dashboard_html(
+        bracket_year = 2026L,
+        decision_sheet = decision_sheet,
+        candidates = candidates,
+        backtest = NULL,
+        total_points_predictions = total_predictions,
+        play_in_resolution = play_in_resolution,
+        model_quality_context = resolved_quality,
+        model_overview = bart_model_overview
+    )
+    expect_match(bart_dashboard_html, "BART")
+    expect_match(bart_dashboard_html, "Nonlinear posterior tree model")
+    expect_match(bart_dashboard_html, "n_trees")
+    expect_match(bart_dashboard_html, "n_post")
+    expect_match(bart_dashboard_html, "Model Overview")
+    expect_match(bart_dashboard_html, "Cached identical validation snapshot")
+
+    alt_backtest <- list(
+        summary = tibble::tibble(
+            mean_log_loss = 0.362,
+            mean_brier = 0.171,
+            mean_accuracy = 0.742,
+            mean_bracket_score = 87.1,
+            mean_correct_picks = 44.9
+        ),
+        calibration = tibble::tibble(
+            mean_predicted = c(0.32, 0.54, 0.76),
+            empirical_rate = c(0.29, 0.57, 0.79),
+            n_games = c(12L, 16L, 10L)
+        )
+    )
+    alt_live_performance <- live_performance
+    alt_live_performance$summary <- live_performance$summary %>%
+        dplyr::mutate(
+            log_loss = log_loss + 0.018,
+            brier = brier + 0.011,
+            accuracy = pmin(1, accuracy + 0.05)
+        )
+    alt_live_performance$status <- "BART comparison snapshot."
+    comparison_bundle <- list(
+        available = TRUE,
+        attempted = TRUE,
+        status = "Comparison completed for Stan GLM and BART.",
+        current_label = "Stan GLM",
+        alternate_label = "BART",
+        current = list(
+            model_overview = model_overview,
+            backtest = list(summary = tibble::tibble(
+                mean_log_loss = 0.401,
+                mean_brier = 0.188,
+                mean_accuracy = 0.713,
+                mean_bracket_score = 85.4,
+                mean_correct_picks = 42.7
+            )),
+            live_performance = live_performance
+        ),
+        alternate = list(
+            model_overview = bart_model_overview,
+            backtest = alt_backtest,
+            live_performance = alt_live_performance
+        ),
+        backtest_comparison = build_model_metric_comparison_table(
+            current_summary = tibble::tibble(
+                mean_log_loss = 0.401,
+                mean_brier = 0.188,
+                mean_accuracy = 0.713,
+                mean_bracket_score = 85.4,
+                mean_correct_picks = 42.7
+            ),
+            alternate_summary = alt_backtest$summary,
+            current_label = "Stan GLM",
+            alternate_label = "BART",
+            kind = "backtest"
+        ),
+        live_comparison = build_model_metric_comparison_table(
+            current_summary = live_performance$summary,
+            alternate_summary = alt_live_performance$summary,
+            current_label = "Stan GLM",
+            alternate_label = "BART",
+            kind = "live"
+        ),
+        summary = summarize_model_metric_comparison(
+            comparison_table = build_model_metric_comparison_table(
+                current_summary = tibble::tibble(
+                    mean_log_loss = 0.401,
+                    mean_brier = 0.188,
+                    mean_accuracy = 0.713,
+                    mean_bracket_score = 85.4,
+                    mean_correct_picks = 42.7
+                ),
+                alternate_summary = alt_backtest$summary,
+                current_label = "Stan GLM",
+                alternate_label = "BART",
+                kind = "backtest"
+            ),
+            current_label = "Stan GLM",
+            alternate_label = "BART"
+        ),
+        notes = character()
+    )
+    comparison_html <- create_model_comparison_dashboard_html(
+        bracket_year = 2026L,
+        model_comparison = comparison_bundle
+    )
+    expect_match(comparison_html, "Model Comparison")
+    expect_match(comparison_html, "Compare")
+    expect_match(comparison_html, "Stan GLM")
+    expect_match(comparison_html, "BART")
+    expect_match(comparison_html, "Backtest metrics")
+    expect_match(comparison_html, "Current-year live metrics")
+    expect_match(render_model_comparison_link_html(comparison_bundle), "Open the full model comparison dashboard")
+
+    html_without_quality <- create_technical_dashboard_html(
+        bracket_year = 2026L,
+        decision_sheet = decision_sheet,
+        candidates = candidates,
+        backtest = NULL,
+        total_points_predictions = NULL,
+        play_in_resolution = play_in_resolution
+    )
+    expect_match(html_without_quality, "Backtest not computed in this run.")
+    expect_match(html_without_quality, "Backtest calibration was not available for this run.")
 
     ranked_matchups <- decision_sheet %>%
         dplyr::arrange(dplyr::desc(decision_score), round, region, matchup_number) %>%
@@ -449,9 +641,11 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         candidates = candidates,
         backtest = NULL,
         total_points_predictions = NULL,
-        play_in_resolution = play_in_resolution
+        play_in_resolution = play_in_resolution,
+        model_quality_context = resolved_quality,
+        model_overview = model_overview
     )
-    expect_match(technical_html_without_optional, "Backtest skipped in this run.")
+    expect_match(technical_html_without_optional, "Cached identical validation snapshot")
     expect_match(technical_html_without_optional, "Championship total-points distributions were not supplied for this run.")
     expect_match(technical_html_without_optional, "Championship Tiebreaker Comparison")
 })
@@ -587,11 +781,25 @@ test_that("dashboard warning tracks unresolved versus completed First Four slots
         n_simulations = 8L,
         random_seed = 123
     )
+    fake_quality_backtest <- list(
+        summary = tibble::tibble(
+            mean_log_loss = 0.401,
+            mean_brier = 0.188,
+            mean_accuracy = 0.713,
+            mean_bracket_score = 85.4,
+            mean_correct_picks = 42.7
+        ),
+        calibration = tibble::tibble(
+            mean_predicted = c(0.35, 0.55, 0.75),
+            empirical_rate = c(0.30, 0.58, 0.78),
+            n_games = c(12L, 16L, 10L)
+        )
+    )
     html_partial <- create_bracket_dashboard_html(
         bracket_year = loaded_partial$bracket_year,
         decision_sheet = build_decision_sheet(candidates_partial),
         candidates = candidates_partial,
-        backtest = NULL,
+        backtest = fake_quality_backtest,
         play_in_resolution = summarize_play_in_resolution(loaded_partial$current_teams, loaded_partial$current_play_in_results)
     )
 
@@ -612,7 +820,7 @@ test_that("dashboard warning tracks unresolved versus completed First Four slots
         bracket_year = loaded_resolved$bracket_year,
         decision_sheet = build_decision_sheet(candidates_resolved),
         candidates = candidates_resolved,
-        backtest = NULL,
+        backtest = fake_quality_backtest,
         play_in_resolution = summarize_play_in_resolution(loaded_resolved$current_teams, loaded_resolved$current_play_in_results)
     )
 

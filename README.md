@@ -1,6 +1,6 @@
 # mmBayes
 
-An R-based NCAA tournament bracket lab. Turns pre-tournament team data, historical results, and sportsbook market data into Bayesian win probabilities, ranked bracket candidates, and review artifacts for manual entry.
+An R-based NCAA tournament bracket lab. Turns pre-tournament team data, historical results, and a separate sportsbook odds archive into Bayesian win probabilities, ranked bracket candidates, and review artifacts for manual entry.
 
 ## Table of Contents
 
@@ -10,7 +10,7 @@ An R-based NCAA tournament bracket lab. Turns pre-tournament team data, historic
 - [Commands](#commands)
 - [How It Works](#how-it-works)
 - [Model Details](#model-details)
-- [Betting Data](#betting-data-default-input)
+- [Betting Data](#betting-data-sidecar)
 - [Repository Layout](#repository-layout)
 - [Documentation](#documentation)
 
@@ -109,6 +109,7 @@ After a pipeline run the following files are generated in the cloud output direc
 | `Rscript scripts/update_data.R` | Refresh canonical data files from source |
 | `Rscript scripts/run_bracket_candidates.R` | Fast bracket export without full backtest |
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
+| `Rscript scripts/run_odds_collector.R` | Seasonal Odds API collector for the tournament odds archive |
 | `Rscript scripts/capture_odds_snapshot.R` | Capture a private Odds API snapshot |
 | `Rscript scripts/build_closing_lines.R --year=2026` | Derive closing-line estimates from saved snapshots |
 | `Rscript scripts/publish_release.R` | Copy approved deliverables and the odds-history snapshot into the dated OneDrive release folder |
@@ -118,7 +119,7 @@ Notes:
 
 - `scripts/run_simulation.R`, `scripts/run_bracket_candidates.R`, and odds scripts load `.env` when present via `load_dotenv_file()`.
 - Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
-- Odds workflows keep local history under `data/odds_history/` (gitignored).
+- Odds workflows keep local history under `data/odds_history/` (gitignored), and the seasonal collector only runs during tournament months.
 
 ---
 
@@ -129,9 +130,9 @@ The pipeline runs in seven steps:
 1. Load `config.yml` and read team features plus historical results from `data/`
 2. Build one training row per historical tournament game at the matchup level
 3. Fit a Bayesian logistic regression for game-winner probability
-4. Resolve local betting lines (and optionally capture a new Odds API snapshot when enabled and missing)
+4. Run the seasonal odds collector as a sidecar when you want to archive tournament market data
 5. Run a rolling held-out-tournament backtest to validate calibration
-6. Simulate the current bracket forward round by round using posterior draws (optionally blending model and market probabilities by round)
+6. Simulate the current bracket forward round by round using posterior draws
 7. Export dashboards, the decision sheet, and candidate bracket files
 
 The model estimates game-by-game win probabilities rather than predicting the whole bracket at once. Posterior draws surface those probabilities as ranked picks, uncertainty intervals, and alternate bracket paths, so the dashboard shows where the bracket is settled and where it is still sensitive to unresolved play-in games.
@@ -142,6 +143,25 @@ Data sources:
 - `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` - historical tournament game results
 
 The default configuration uses the eight most recent completed tournaments, skips 2020, and backtests on rolling held-out years.
+The core winner model and championship total-points model do not require betting inputs; betting is handled separately as an archive/evaluation sidecar.
+
+To install and start the seasonal collector on this Mac:
+
+```sh
+Rscript scripts/install_odds_collector_launchd.R
+```
+
+To inspect the loaded agent:
+
+```sh
+launchctl print gui/$(id -u)/com.ncamarda.mmBayes.odds_collector
+```
+
+To remove it later:
+
+```sh
+Rscript scripts/uninstall_odds_collector_launchd.R
+```
 
 ---
 
@@ -178,24 +198,27 @@ Matchup predictors (differences between the two teams):
 | `3P%_diff` / `3P%D_diff` | Three-point shooting / defense difference |
 | `Adj T._diff` | Adjusted tempo difference |
 
-The seed and efficiency terms (`seed_diff`, `barthag_logit_diff`, `AdjOE_diff`, `AdjDE_diff`, `WAB_diff`) tend to carry the most posterior weight, and the default model now also includes betting-derived features such as line-implied probability, spread, bookmaker coverage, freshness, and market disagreement.
+The seed and efficiency terms (`seed_diff`, `barthag_logit_diff`, `AdjOE_diff`, `AdjDE_diff`, `WAB_diff`) tend to carry the most posterior weight in the core model.
 
 ### Tiebreaker Model
 
-A separate total-points model estimates championship points, powering the tiebreaker outputs in the dashboard. It uses the same engine family selected for the winner model and can also consume betting-derived features.
+A separate total-points model estimates championship points, powering the tiebreaker outputs in the dashboard. It uses the same engine family selected for the winner model and stays betting-free in the core pipeline.
 
 ---
 
-## Betting Data (Default Input)
+## Betting Data (Sidecar)
 
-Betting data is a default model input because it captures latent information the repo cannot access directly from season stats alone, including injuries, coaching adjustments, and market consensus.
+Betting data is now a separate archive and evaluation workflow rather than a default model input. The core prediction pipeline stays betting-free, and the odds collector is only meant to run during the tournament window so you can build a season-by-season closing-line history.
 
 - The Odds API key is read from `ODDS_API_KEY` and is never written to disk.
 - Bookmakers default to `draftkings`, `fanduel`, `betmgm`, and `betrivers`.
 - Markets default to `h2h` moneyline and `spreads`.
 - Runtime odds history lives under `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/odds_history`.
+- `Rscript scripts/install_odds_collector_launchd.R` installs the seasonal collector into `~/Library/LaunchAgents` on a Mac.
+- `scripts/run_odds_collector.R` is the LaunchAgent entrypoint that performs each seasonal collection pass.
+- `Rscript scripts/uninstall_odds_collector_launchd.R` removes the LaunchAgent when you want to stop seasonal capture.
 - Historical training rows use time-appropriate closing or last-pre-commence lines when available.
-- Current prediction rows use the latest reusable snapshot for the active tournament year.
+- Current prediction rows use the latest reusable snapshot only in the sidecar/evaluation workflow.
 - `Rscript scripts/evaluate_odds_blend.R` now runs a betting-feature ablation that compares a no-betting baseline, the betting-enhanced model, and a market-only benchmark.
 
 ---

@@ -29,8 +29,8 @@ At a high level, the workflow is:
 2. normalize team names and validate the tournament field
 3. build historical matchup-level training rows
 4. fit a Bayesian logistic regression for game winners
-5. optionally resolve latest matchup betting lines from local odds history (or capture a new snapshot, based on `fetch_policy`)
-6. optionally fit a Bayesian Gaussian model for total points
+5. optionally refresh the odds-history sidecar and resolve latest matchup betting lines for the separate betting workflow
+6. fit a Bayesian Gaussian model for total points
 7. draw posterior predictions for each matchup in the current bracket
 8. optionally blend model probabilities with line-implied probabilities for configured rounds
 9. simulate the bracket forward round by round
@@ -38,13 +38,15 @@ At a high level, the workflow is:
 
 The project is matchup-based. It does not fit a team-level "who wins the title?" target directly. Instead, it estimates game-level probabilities and then propagates them through the bracket.
 
+The core winner model and championship total-points model do not require betting inputs. Betting is handled as a separate archive/evaluation sidecar so the production bracket path stays betting-free.
+
 ## Betting-Line Integration (Optional)
 
-Betting-line integration is handled by `resolve_latest_matchup_lines()` in `R/betting_lines.R` and consumed during simulation in `simulate_matchup()` from `R/simulation_functions.R`.
+Betting-line integration is a sidecar workflow. The core tournament simulation does not depend on betting lines, but `resolve_latest_matchup_lines()` in `R/betting_lines.R` and `simulate_matchup()` in `R/simulation_functions.R` still support the optional blending path when you explicitly enable it.
 
 ### Data flow
 
-1. `run_tournament_simulation()` resolves context in `main.R`:
+1. `scripts/evaluate_odds_blend.R` or a custom sidecar pipeline resolves context in `R/betting_lines.R`:
    - if betting is disabled, the model runs pure model-based probabilities
    - if betting is enabled, it loads `data/odds_history/<year>/latest_lines_matchups.csv` when present
    - with `fetch_policy: if_missing`, it captures a new Odds API snapshot only when the local matchup file is missing
@@ -75,6 +77,18 @@ Interpretation:
 - Matchup rows include `betting_blend_weight` and `used_betting_line` flags.
 - Candidate scoring still uses the same bracket-probability framework; only matchup-level win probabilities change when blending is active.
 - Odds history remains local under `data/odds_history/` (gitignored), while outputs continue to be written under `output/`.
+
+## Odds Collector Sidecar
+
+`run_tournament_odds_collector()` is the seasonal archive builder. It refreshes the free Odds API `/events` schedule oracle, groups games into slates, and only spends Odds API credits inside narrow windows around the next slate. The collector writes its schedule cache and collector state under `data/odds_history/<year>/` and is intended to run on a tournament-season `launchd` heartbeat.
+
+To install the Mac LaunchAgent that runs it:
+
+```sh
+Rscript scripts/install_odds_collector_launchd.R
+```
+
+The installed agent lives at `~/Library/LaunchAgents/com.ncamarda.mmBayes.odds_collector.plist`, and you can remove it later with `Rscript scripts/uninstall_odds_collector_launchd.R`.
 
 ## Source Data
 

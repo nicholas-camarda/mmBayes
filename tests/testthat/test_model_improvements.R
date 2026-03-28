@@ -125,7 +125,9 @@ test_that("default_project_config includes interaction_terms and prior_type", {
     config <- default_project_config()
     expect_true("interaction_terms" %in% names(config$model))
     expect_true("prior_type" %in% names(config$model))
+    expect_true("compare_engines" %in% names(config$model))
     expect_equal(config$model$prior_type, "normal")
+    expect_true(isTRUE(config$model$compare_engines))
     expect_equal(length(config$model$interaction_terms), 0L)
 })
 
@@ -383,4 +385,3 @@ test_that("compare_model_configurations correctly compares horseshoe vs normal p
         delta_log_loss
     ))
 })
-

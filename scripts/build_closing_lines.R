@@ -64,8 +64,8 @@ initialize_logging(log_path)
 lines_matchups <- dplyr::as_tibble(utils::read.csv(paths$lines_matchups, stringsAsFactors = FALSE))
 lines_matchups <- lines_matchups %>%
     dplyr::mutate(
-        snapshot_time_utc = as.POSIXct(snapshot_time_utc, tz = "UTC"),
-        commence_time_utc = as.POSIXct(commence_time, tz = "UTC")
+        snapshot_time_utc = parse_utc_timestamp(snapshot_time_utc),
+        commence_time_utc = parse_utc_timestamp(commence_time)
     )
 
 if (!has_betting_dispersion_columns(lines_matchups)) {
@@ -79,8 +79,8 @@ if (!has_betting_dispersion_columns(lines_matchups)) {
 
     lines_long <- dplyr::as_tibble(utils::read.csv(paths$lines_long, stringsAsFactors = FALSE)) %>%
         dplyr::mutate(
-            snapshot_time_utc = as.POSIXct(snapshot_time_utc, tz = "UTC"),
-            commence_time_utc = as.POSIXct(commence_time, tz = "UTC")
+            snapshot_time_utc = parse_utc_timestamp(snapshot_time_utc),
+            commence_time_utc = parse_utc_timestamp(commence_time)
         )
     lines_matchups <- summarize_snapshot_matchups(lines_long)
 }

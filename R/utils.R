@@ -25,6 +25,37 @@ stop_with_message <- function(message) {
     if (is.null(x)) y else x
 }
 
+#' Normalize a model-overview payload for dashboard rendering
+#'
+#' @param model_overview A model overview object or wrapper bundle.
+#'
+#' @return A single model-overview list suitable for HTML rendering.
+#' @keywords internal
+normalize_model_overview <- function(model_overview) {
+    if (is.null(model_overview) || length(model_overview) == 0) {
+        return(list())
+    }
+
+    if (!is.null(model_overview$engine) || !is.null(model_overview$engine_label) || !is.null(model_overview$predictor_count)) {
+        return(model_overview)
+    }
+
+    if (!is.null(model_overview$matchup)) {
+        return(model_overview$matchup)
+    }
+
+    if (!is.null(model_overview$primary)) {
+        return(model_overview$primary)
+    }
+
+    list_candidates <- Filter(is.list, model_overview)
+    if (length(list_candidates) > 0) {
+        return(list_candidates[[1]])
+    }
+
+    list()
+}
+
 #' Safely coerce values to numeric
 #'
 #' @param x A vector to coerce.
@@ -35,6 +66,23 @@ stop_with_message <- function(message) {
 safe_numeric <- function(x, default = 0) {
     value <- suppressWarnings(as.numeric(x))
     ifelse(is.na(value) | !is.finite(value), default, value)
+}
+
+#' Safely coerce a value to a single character string
+#'
+#' @param x A value to coerce.
+#' @param default Fallback value for missing or empty entries.
+#'
+#' @return A single character string.
+#' @keywords internal
+safe_character_scalar <- function(x, default = "") {
+    value <- as.character(x)
+    if (length(value) == 0L) {
+        return(default)
+    }
+
+    value <- value[[1]]
+    if (is.na(value) || !nzchar(value)) default else value
 }
 
 #' Load environment variables from a `.env`-style file
@@ -269,6 +317,26 @@ betting_total_points_feature_columns <- function() {
         "betting_prob_dispersion",
         "betting_spread_dispersion"
     )
+}
+
+#' Return the core matchup predictor columns without betting terms
+#'
+#' @param predictor_columns Candidate matchup predictors.
+#'
+#' @return The input columns with betting-derived predictors removed.
+#' @keywords internal
+core_matchup_predictor_columns <- function(predictor_columns) {
+    setdiff(unique(as.character(predictor_columns %||% character(0))), betting_matchup_feature_columns())
+}
+
+#' Return the core total-points predictor columns without betting terms
+#'
+#' @param predictor_columns Candidate total-points predictors.
+#'
+#' @return The input columns with betting-derived predictors removed.
+#' @keywords internal
+core_total_points_predictor_columns <- function(predictor_columns = default_total_points_predictors()) {
+    setdiff(unique(as.character(predictor_columns %||% character(0))), betting_total_points_feature_columns())
 }
 
 #' Return neutral default betting features for a matchup
@@ -1431,25 +1499,36 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
 #' @param candidates A list of candidate bracket objects.
 #' @param output_dir Directory used for output artifacts.
 #' @param backtest Optional backtest result bundle.
+#' @param model_overview Optional model-overview bundle for the dashboard.
+#' @param quality_signature Optional fingerprint used to match a cached quality artifact.
 #' @param play_in_resolution Optional one-row tibble from
 #'   [summarize_play_in_resolution()] describing whether unresolved simulated
 #'   First Four slots remain in the active bracket.
 #' @param total_points_predictions Optional list returned by
 #'   [predict_candidate_total_points()].
+#' @param model_comparison Optional comparison bundle for Stan GLM vs BART.
 #'
 #' @return A list of decision-artifact file paths and the in-memory decision
 #'   sheet.
 #' @export
-save_decision_outputs <- function(bracket_year, candidates, output_dir = default_runtime_output_root(), backtest = NULL, play_in_resolution = NULL, total_points_predictions = NULL, live_performance = NULL) {
+save_decision_outputs <- function(bracket_year, candidates, output_dir = default_runtime_output_root(), backtest = NULL, model_overview = NULL, quality_signature = NULL, play_in_resolution = NULL, total_points_predictions = NULL, live_performance = NULL, model_comparison = NULL) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- build_decision_sheet(candidates)
-    model_quality_context <- resolve_model_quality_context(backtest = backtest, output_dir = output_dir)
+    model_overview <- normalize_model_overview(model_overview)
+    model_quality_context <- resolve_model_quality_context(
+        backtest = backtest,
+        output_dir = output_dir,
+        quality_signature = quality_signature,
+        allow_fallback = TRUE,
+        require_exact_match = TRUE
+    )
     summary_path <- file.path(output_dir, "bracket_candidates.txt")
     rds_path <- file.path(output_dir, "bracket_candidates.rds")
     decision_sheet_path <- file.path(output_dir, "bracket_decision_sheet.csv")
     dashboard_path <- file.path(output_dir, "bracket_dashboard.html")
     technical_dashboard_path <- file.path(output_dir, "technical_dashboard.html")
+    comparison_dashboard_path <- file.path(output_dir, "model_comparison_dashboard.html")
     tiebreaker_summary_path <- file.path(output_dir, "championship_tiebreaker_summary.csv")
     championship_distribution_path <- file.path(output_dir, "championship_tiebreaker_distribution.csv")
     matchup_totals_path <- file.path(output_dir, "candidate_matchup_total_points.csv")
@@ -1462,6 +1541,13 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         utils::write.csv(total_points_predictions$championship_distribution, championship_distribution_path, row.names = FALSE)
         utils::write.csv(total_points_predictions$matchup_summaries, matchup_totals_path, row.names = FALSE)
     }
+    writeLines(
+        create_model_comparison_dashboard_html(
+            bracket_year = bracket_year,
+            model_comparison = model_comparison
+        ),
+        comparison_dashboard_path
+    )
 
     candidate_csv_paths <- vapply(candidates, function(candidate) {
         path <- file.path(output_dir, sprintf("bracket_candidate_%s.csv", candidate$candidate_id))
@@ -1509,7 +1595,9 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
             backtest = backtest,
             play_in_resolution = play_in_resolution,
             total_points_predictions = total_points_predictions,
-            model_quality_context = model_quality_context
+            model_quality_context = model_quality_context,
+            model_overview = model_overview,
+            model_comparison = model_comparison
         ),
         dashboard_path
     )
@@ -1522,7 +1610,9 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
             total_points_predictions = total_points_predictions,
             play_in_resolution = play_in_resolution,
             model_quality_context = model_quality_context,
-            live_performance = live_performance
+            live_performance = live_performance,
+            model_overview = model_overview,
+            model_comparison = model_comparison
         ),
         technical_dashboard_path
     )
@@ -1532,6 +1622,7 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         decision_sheet_path = decision_sheet_path,
         dashboard = dashboard_path,
         technical_dashboard = technical_dashboard_path,
+        model_comparison_dashboard = comparison_dashboard_path,
         candidates_rds = rds_path,
         candidate_summary = summary_path,
         candidate_csvs = unname(candidate_csv_paths),
@@ -1540,7 +1631,8 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         matchup_total_points = if (!is.null(total_points_predictions)) matchup_totals_path else NULL,
         model_quality_source_label = model_quality_context$source_label %||% NULL,
         model_quality_source_path = model_quality_context$source_path %||% NULL,
-        model_quality_used_fallback = isTRUE(model_quality_context$used_fallback)
+        model_quality_used_cached_quality = isTRUE(model_quality_context$used_cached_quality %||% model_quality_context$used_fallback %||% FALSE),
+        model_quality_used_fallback = isTRUE(model_quality_context$used_cached_quality %||% model_quality_context$used_fallback %||% FALSE)
     )
 }
 
@@ -1555,6 +1647,11 @@ save_results <- function(results, output_config) {
     output_dir <- output_config$path %||% default_runtime_output_root()
     prefix <- output_config$prefix %||% "tournament_sim"
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+    model_overview <- results$model_overview %||% summarize_model_overview(results$model, draws = results$draws_budget %||% NULL)
+    if (length(model_overview) == 0) {
+        model_overview <- summarize_model_overview(results$total_points_model, draws = results$draws_budget %||% NULL)
+    }
+    quality_signature <- build_model_quality_signature(results)
 
     rds_path <- file.path(output_dir, paste0(prefix, ".rds"))
     model_summary_path <- file.path(output_dir, paste0(prefix, "_model_summary.txt"))
@@ -1575,7 +1672,8 @@ save_results <- function(results, output_config) {
 
     model_quality_artifact <- save_model_quality_artifact(
         backtest = results$backtest,
-        output_dir = output_dir
+        output_dir = output_dir,
+        quality_signature = quality_signature
     )
 
     decision_outputs <- if (!is.null(results$candidates) && length(results$candidates) > 0) {
@@ -1588,9 +1686,12 @@ save_results <- function(results, output_config) {
             candidates = results$candidates,
             output_dir = output_dir,
             backtest = results$backtest,
+            model_overview = model_overview,
+            quality_signature = quality_signature,
             play_in_resolution = play_in_resolution,
             total_points_predictions = results$total_points_predictions,
-            live_performance = results$live_performance
+            live_performance = results$live_performance,
+            model_comparison = results$model_comparison %||% NULL
         )
     } else {
         NULL
@@ -1600,8 +1701,14 @@ save_results <- function(results, output_config) {
         file.copy(decision_outputs$candidate_summary, candidate_summary_path, overwrite = TRUE)
     }
 
-    model_quality_archive_path <- if (!is.null(model_quality_artifact)) model_quality_artifact$archive_path else NULL
-    model_quality_latest_path <- if (!is.null(model_quality_artifact)) model_quality_artifact$latest_path else NULL
+    model_quality_latest_path <- if (!is.null(model_quality_artifact)) {
+        model_quality_artifact$latest_path
+    } else if (!is.null(decision_outputs)) {
+        decision_outputs$model_quality_source_path %||% NULL
+    } else {
+        NULL
+    }
+    model_quality_archive_path <- model_quality_latest_path
     model_quality_source_label <- if (!is.null(decision_outputs)) decision_outputs$model_quality_source_label %||% NULL else NULL
     model_quality_source_path <- if (!is.null(decision_outputs)) decision_outputs$model_quality_source_path %||% NULL else NULL
     model_quality_used_fallback <- if (!is.null(decision_outputs)) isTRUE(decision_outputs$model_quality_used_fallback) else FALSE
@@ -1618,6 +1725,7 @@ save_results <- function(results, output_config) {
         candidate_summary = if (!is.null(results$candidates) && length(results$candidates) > 0) candidate_summary_path else NULL,
         dashboard = decision_dashboard_path,
         technical_dashboard = decision_technical_dashboard_path,
+        model_comparison_dashboard = if (!is.null(decision_outputs)) decision_outputs$model_comparison_dashboard %||% NULL else NULL,
         decision_sheet = decision_sheet_path,
         candidate_csvs = decision_csv_paths,
         candidates_rds = decision_rds_path,
@@ -1625,6 +1733,7 @@ save_results <- function(results, output_config) {
         model_quality_latest = model_quality_latest_path,
         model_quality_source_label = model_quality_source_label,
         model_quality_source_path = model_quality_source_path,
+        model_quality_used_cached_quality = if (!is.null(decision_outputs)) isTRUE(decision_outputs$model_quality_used_cached_quality) else FALSE,
         model_quality_used_fallback = model_quality_used_fallback
     )
 }

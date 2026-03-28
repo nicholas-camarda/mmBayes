@@ -9,6 +9,7 @@ release_deliverable_manifest <- function() {
     c(
         "bracket_dashboard.html",
         "technical_dashboard.html",
+        "model_comparison_dashboard.html",
         "bracket_decision_sheet.csv",
         "bracket_candidate_1.csv",
         "bracket_candidate_2.csv",
