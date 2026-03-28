@@ -280,6 +280,144 @@ write_fixture_data_files <- function(team_path, results_path, team_data = NULL, 
     list(team_path = team_path, results_path = results_path)
 }
 
+make_fixture_closing_lines <- function(team_data, results_data) {
+    team_lookup <- team_data %>%
+        dplyr::mutate(team_key = normalize_team_key(Team)) %>%
+        dplyr::distinct(Year, team_key, .keep_all = TRUE)
+
+    results_data %>%
+        dplyr::mutate(
+            teamA = canonicalize_team_name(teamA),
+            teamB = canonicalize_team_name(teamB),
+            winner = canonicalize_team_name(winner),
+            teamA_key = normalize_team_key(teamA),
+            teamB_key = normalize_team_key(teamB)
+        ) %>%
+        dplyr::left_join(
+            team_lookup %>%
+                dplyr::select(Year, team_key, Team, Seed, barthag_logit, AdjOE, AdjDE, WAB) %>%
+                dplyr::rename_with(~ paste0(.x, "_teamA"), -c(Year, team_key)),
+            by = c("Year", "teamA_key" = "team_key")
+        ) %>%
+        dplyr::left_join(
+            team_lookup %>%
+                dplyr::select(Year, team_key, Team, Seed, barthag_logit, AdjOE, AdjDE, WAB) %>%
+                dplyr::rename_with(~ paste0(.x, "_teamB"), -c(Year, team_key)),
+            by = c("Year", "teamB_key" = "team_key")
+        ) %>%
+        dplyr::rowwise() %>%
+        dplyr::mutate(
+            strength_a = safe_numeric(barthag_logit_teamA) + (safe_numeric(AdjOE_teamA) / 20) - (safe_numeric(AdjDE_teamA) / 20) + (safe_numeric(WAB_teamA) / 10),
+            strength_b = safe_numeric(barthag_logit_teamB) + (safe_numeric(AdjOE_teamB) / 20) - (safe_numeric(AdjDE_teamB) / 20) + (safe_numeric(WAB_teamB) / 10),
+            winner_hint = ifelse(winner == teamA, 0.82, 0.18),
+            implied_prob_teamA = pmin(
+                pmax(winner_hint + ((strength_a - strength_b) * 0.02), 0.05),
+                0.95
+            ),
+            implied_prob_teamB = 1 - implied_prob_teamA,
+            spread_teamA = round((implied_prob_teamA - 0.5) * 20, 1),
+            spread_teamB = -spread_teamA,
+            closing_snapshot_time_utc = as.POSIXct(sprintf("%s-03-15 12:00:00", Year), tz = "UTC"),
+            commence_time_utc = as.POSIXct(sprintf("%s-03-15 18:00:00", Year), tz = "UTC") + (safe_numeric(game_index) * 3600),
+            n_bookmakers = 4L,
+            bookmakers = "draftkings,fanduel,betmgm,betrivers",
+            prob_dispersion_a = round(abs(implied_prob_teamA - 0.5) / 8, 4),
+            spread_dispersion_a = round(abs(spread_teamA) / 10, 4),
+            closing_before_commence = TRUE
+        ) %>%
+        dplyr::ungroup() %>%
+        dplyr::select(
+            Year,
+            region,
+            round,
+            game_index,
+            teamA,
+            teamB,
+            winner,
+            closing_snapshot_time_utc,
+            commence_time_utc,
+            implied_prob_teamA,
+            implied_prob_teamB,
+            spread_teamA,
+            spread_teamB,
+            n_bookmakers,
+            bookmakers,
+            prob_dispersion_a,
+            spread_dispersion_a,
+            closing_before_commence
+        )
+}
+
+write_fixture_betting_history <- function(history_dir, team_data, results_data, current_year = NULL) {
+    history_dir <- path.expand(history_dir)
+    current_year <- as.character(current_year %||% max(as.integer(team_data$Year), na.rm = TRUE))
+    closing_lines <- make_fixture_closing_lines(team_data, results_data)
+
+    historical_years <- sort(unique(closing_lines$Year[closing_lines$Year != current_year]))
+    for (year in historical_years) {
+        paths <- build_odds_history_paths(as.integer(year), history_dir = history_dir)
+        ensure_odds_history_dirs(paths)
+        utils::write.csv(
+            closing_lines %>% dplyr::filter(Year == year),
+            paths$closing_lines,
+            row.names = FALSE
+        )
+    }
+
+    current_teams <- team_data %>%
+        dplyr::filter(Year == current_year) %>%
+        dplyr::arrange(Region, match(Seed, standard_bracket_order()), Team)
+
+    current_latest <- purrr::map_dfr(split(current_teams, current_teams$Region), function(region_tbl) {
+        ordered <- region_tbl %>%
+            dplyr::arrange(Seed, Team) %>%
+            dplyr::group_by(Seed) %>%
+            dplyr::slice(1) %>%
+            dplyr::ungroup() %>%
+            dplyr::arrange(match(Seed, standard_bracket_order()), Team)
+        pair_indices <- seq(1, nrow(ordered), by = 2)
+        purrr::map_dfr(pair_indices, function(idx) {
+            team_a <- ordered[idx, , drop = FALSE]
+            team_b <- ordered[idx + 1, , drop = FALSE]
+            score_a <- fixture_team_score(team_a)
+            score_b <- fixture_team_score(team_b)
+            implied_prob_a_raw <- pmin(pmax(plogis((score_a - score_b) * 1.4), 0.05), 0.95)
+            spread_a_raw <- round((implied_prob_a_raw - 0.5) * 20, 1)
+            sorted_names <- sort(c(team_a$Team[[1]], team_b$Team[[1]]))
+            prob_sorted_a <- if (identical(team_a$Team[[1]], sorted_names[[1]])) implied_prob_a_raw else 1 - implied_prob_a_raw
+            spread_sorted_a <- if (identical(team_a$Team[[1]], sorted_names[[1]])) spread_a_raw else -spread_a_raw
+
+            tibble::tibble(
+                snapshot_time_utc = as.POSIXct(sprintf("%s-03-15 12:00:00", current_year), tz = "UTC"),
+                bracket_year = as.integer(current_year),
+                event_id = paste0(normalize_team_key(team_a$Team[[1]]), "_", normalize_team_key(team_b$Team[[1]])),
+                commence_time = sprintf("%s-03-15T18:00:00Z", current_year),
+                home_team = canonicalize_team_name(team_a$Team[[1]]),
+                away_team = canonicalize_team_name(team_b$Team[[1]]),
+                key = build_matchup_key(team_a$Team[[1]], team_b$Team[[1]]),
+                team_a = sorted_names[[1]],
+                team_b = sorted_names[[2]],
+                n_bookmakers = 4L,
+                bookmakers = "draftkings,fanduel,betmgm,betrivers",
+                consensus_prob_a = prob_sorted_a,
+                consensus_prob_b = 1 - prob_sorted_a,
+                prob_dispersion_a = round(abs(prob_sorted_a - 0.5) / 8, 4),
+                consensus_spread_a = spread_sorted_a,
+                consensus_spread_b = -spread_sorted_a,
+                spread_dispersion_a = round(abs(spread_sorted_a) / 10, 4)
+            )
+        })
+    })
+
+    current_paths <- build_odds_history_paths(as.integer(current_year), history_dir = history_dir)
+    ensure_odds_history_dirs(current_paths)
+    write_latest_lines_matchups(current_latest, current_paths)
+    invisible(list(
+        historical_closing_lines = closing_lines,
+        current_latest_lines = current_latest
+    ))
+}
+
 make_fixture_conf_assignments <- function(team_features) {
     team_features %>%
         dplyr::select(Year, Team, Seed, Region, Conf)

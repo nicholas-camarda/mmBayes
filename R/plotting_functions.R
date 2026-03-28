@@ -1271,10 +1271,14 @@ render_ranked_decision_svg <- function(decision_sheet, top_n = 12L) {
         dplyr::slice_head(n = top_n) %>%
         dplyr::mutate(
             preferred_pick = paste0("Preferred: ", candidate_1_pick),
-            alternate_pick = ifelse(
-                candidate_diff_flag,
-                paste0("Alternate: ", candidate_2_pick),
-                "Alternate: same pick in both candidates"
+            alternate_pick = dplyr::case_when(
+                candidate_diff_flag ~ as.character(candidate_2_pick),
+                TRUE ~ "Same pick in both candidates"
+            ),
+            alternate_note = dplyr::case_when(
+                candidate_diff_flag & candidate_1_pick == candidate_2_pick ~ "Same winner, different path",
+                candidate_diff_flag ~ "Different winner on the alternate path",
+                TRUE ~ "No alternate path divergence"
             ),
             detail_summary = purrr::pmap_chr(
                 list(candidate_diff_flag, confidence_tier, as.character(round)),
@@ -1290,7 +1294,7 @@ render_ranked_decision_svg <- function(decision_sheet, top_n = 12L) {
                 "<div class='board-row board-row--ranked'>",
                 "<div class='board-cell board-cell--game' data-label='Game to revisit'><div class='board-value'>", html_escape(row$matchup_label[[1]]), "</div><div class='board-note'>", html_escape(as.character(row$round[[1]])), " | ", html_escape(as.character(row$confidence_tier[[1]])), "</div></div>",
                 "<div class='board-cell' data-label='Preferred pick'><div class='board-value'>", html_escape(row$candidate_1_pick[[1]]), "</div><div class='board-note'>Posterior favorite: ", html_escape(row$posterior_favorite[[1]]), "</div></div>",
-                "<div class='board-cell' data-label='Alternate path'><div class='board-value'>", html_escape(if (isTRUE(row$candidate_diff_flag[[1]])) row$candidate_2_pick[[1]] else "Same as preferred"), "</div><div class='board-note'>", html_escape(row$alternate_pick[[1]]), "</div></div>",
+                "<div class='board-cell' data-label='Alternate path'><div class='board-value'>", html_escape(row$alternate_pick[[1]]), "</div><div class='board-note'>", html_escape(row$alternate_note[[1]]), "</div></div>",
                 "<div class='board-cell board-cell--plot' data-label='Posterior uncertainty'>",
                 render_probability_track_html(
                     mean_probability = row$win_prob_favorite[[1]],
@@ -1557,6 +1561,96 @@ render_candidate_divergence_svg <- function(decision_sheet) {
     )
 }
 
+#' Render a live tournament performance panel
+#'
+#' @param live_performance A live performance summary returned by
+#'   [summarize_live_tournament_performance()].
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_live_performance_html <- function(live_performance) {
+    if (is.null(live_performance)) {
+        return(
+            "<div class='panel'><h2>Live Tournament Performance</h2><p class='empty-state'>Live tournament performance was not available for this run.</p></div>"
+        )
+    }
+
+    summary_tbl <- live_performance$summary %||% tibble::tibble()
+    if (nrow(summary_tbl) == 0) {
+        return(
+            paste0(
+                "<div class='panel'><h2>Live Tournament Performance</h2>",
+                "<p class='empty-state'>", html_escape(live_performance$status %||% "No completed current-year games have been recorded yet."), "</p>",
+                "</div>"
+            )
+        )
+    }
+
+    round_tbl <- live_performance$round_summary %||% tibble::tibble()
+    recent_games <- live_performance$games %||% tibble::tibble()
+
+    metric_cards <- paste0(
+        "<div class='overview-grid'>",
+        "<div class='summary-card'><div class='summary-label'>Games played</div><div class='summary-value'>", summary_tbl$games_played[[1]], "</div><p class='summary-note'>Current-year games completed so far.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Accuracy</div><div class='summary-value'>", format_probability(summary_tbl$accuracy[[1]]), "</div><p class='summary-note'>Share of current-year games the model picked correctly.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Log loss</div><div class='summary-value'>", sprintf("%.3f", summary_tbl$log_loss[[1]]), "</div><p class='summary-note'>Lower means the probabilities are more honest.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Brier score</div><div class='summary-value'>", sprintf("%.3f", summary_tbl$brier[[1]]), "</div><p class='summary-note'>Lower means tighter probability estimates.</p></div>",
+        "</div>"
+    )
+
+    round_rows <- if (nrow(round_tbl) > 0) {
+        paste(
+            purrr::map_chr(seq_len(nrow(round_tbl)), function(index) {
+                row <- round_tbl[index, , drop = FALSE]
+                paste0(
+                    "<tr>",
+                    "<td>", html_escape(row$round[[1]]), "</td>",
+                    "<td>", html_escape(as.character(row$games[[1]])), "</td>",
+                    "<td>", html_escape(format_probability(row$accuracy[[1]])), "</td>",
+                    "<td>", html_escape(format_probability(row$mean_predicted_prob[[1]])), "</td>",
+                    "</tr>"
+                )
+            }),
+            collapse = "\n"
+        )
+    } else {
+        ""
+    }
+
+    recent_rows <- if (nrow(recent_games) > 0) {
+        paste(
+            purrr::map_chr(seq_len(nrow(recent_games)), function(index) {
+                row <- recent_games[index, , drop = FALSE]
+                paste0(
+                    "<tr>",
+                    "<td>", html_escape(as.character(row$round[[1]])), "</td>",
+                    "<td>", html_escape(row$teamA[[1]]), " vs ", html_escape(row$teamB[[1]]), "</td>",
+                    "<td>", html_escape(row$actual_winner[[1]]), "</td>",
+                    "<td>", html_escape(row$model_pick[[1]]), "</td>",
+                    "<td>", html_escape(format_probability(row$predicted_prob[[1]])), "</td>",
+                    "<td>", html_escape(row$model_pick_note[[1]]), "</td>",
+                    "</tr>"
+                )
+            }),
+            collapse = "\n"
+        )
+    } else {
+        ""
+    }
+
+    paste0(
+        "<div class='panel'>",
+        "<h2>Live Tournament Performance</h2>",
+        "<p class='panel-caption'>", html_escape(live_performance$status %||% "Current-year results update here when the refresh job runs again."), "</p>",
+        metric_cards,
+        "<div class='two-column'>",
+        "<div class='quality-card'><h3>By Round</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Mean predicted</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
+        "<div class='quality-card'><h3>Recent Games</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Matchup</th><th>Winner</th><th>Model pick</th><th>Model P(win)</th><th>Status</th></tr></thead><tbody>", recent_rows, "</tbody></table></div>",
+        "</div>",
+        "</div>"
+    )
+}
+
 #' Render the upset opportunity board as a wrapped HTML comparison board
 #'
 #' @param decision_sheet The decision-sheet data frame.
@@ -1811,7 +1905,7 @@ render_calibration_svg <- function(calibration_tbl) {
 #'
 #' @return A complete HTML document as a scalar character string.
 #' @export
-create_technical_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL, total_points_predictions = NULL, play_in_resolution = NULL, model_quality_context = NULL) {
+create_technical_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL, total_points_predictions = NULL, play_in_resolution = NULL, model_quality_context = NULL, live_performance = NULL) {
     top_decisions <- decision_sheet %>%
         dplyr::arrange(dplyr::desc(decision_score), round, region, matchup_number) %>%
         dplyr::mutate(
@@ -2124,6 +2218,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         "<p class='lede'>Bracket year ", html_escape(bracket_year),
         ". Start in Compare to decide which games actually deserve your attention, then switch to Candidate 1 or Candidate 2 only after you want the full path for one bracket. This view is built to explain not just the recommendation, but also the math driving it.</p>",
         status_panel,
+        render_live_performance_html(live_performance),
         "<div class='panel'>",
         "<h2>How To Use This Dashboard</h2>",
         "<div class='guide-grid'>",

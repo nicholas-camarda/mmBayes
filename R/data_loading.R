@@ -497,7 +497,13 @@ load_tournament_data <- function(config) {
     historical_games <- game_results %>%
         dplyr::filter(Year %in% historical_years)
 
-    historical_matchups <- build_explicit_matchup_history(historical_teams, historical_games)
+    historical_closing_lines <- load_historical_closing_lines(config$betting$history_dir %||% NULL)
+    historical_betting_features <- build_historical_betting_feature_table(historical_closing_lines)
+
+    historical_matchups <- build_explicit_matchup_history(historical_teams, historical_games) %>%
+        augment_matchup_rows_with_betting_features(
+            historical_betting_features = historical_betting_features
+        )
     historical_actual_results <- build_actual_game_reference(historical_teams, historical_games)
 
     list(
@@ -506,6 +512,7 @@ load_tournament_data <- function(config) {
         historical_teams = historical_teams,
         historical_games = historical_games,
         historical_actual_results = historical_actual_results,
+        historical_betting_features = historical_betting_features,
         current_teams = current_teams,
         current_play_in_results = current_play_in_results,
         game_results = game_results

@@ -21,8 +21,8 @@ model_quality_has_backtest <- function(backtest) {
 #'
 #' @return A path to the model-quality subdirectory.
 #' @keywords internal
-build_model_quality_directory <- function(output_dir = "output") {
-    file.path(output_dir %||% "output", "model_quality")
+build_model_quality_directory <- function(output_dir = default_runtime_output_root()) {
+    file.path(output_dir %||% default_runtime_output_root(), "model_quality")
 }
 
 #' Build canonical model-quality artifact paths
@@ -33,7 +33,7 @@ build_model_quality_directory <- function(output_dir = "output") {
 #'
 #' @return A named list with quality directory and file paths.
 #' @keywords internal
-build_model_quality_paths <- function(output_dir = "output", timestamp = Sys.time(), process_id = Sys.getpid()) {
+build_model_quality_paths <- function(output_dir = default_runtime_output_root(), timestamp = Sys.time(), process_id = Sys.getpid()) {
     quality_dir <- build_model_quality_directory(output_dir)
     stamp <- gsub("\\.", "", format(timestamp, "%Y%m%d_%H%M%OS6"))
     archive_path <- file.path(quality_dir, sprintf("model_quality_%s_pid%s.rds", stamp, process_id))
@@ -56,7 +56,7 @@ build_model_quality_paths <- function(output_dir = "output", timestamp = Sys.tim
 #' @return A list containing the saved paths and the stored artifact, or `NULL`
 #'   when no usable backtest summary was supplied.
 #' @keywords internal
-save_model_quality_artifact <- function(backtest, output_dir = "output", timestamp = Sys.time(), process_id = Sys.getpid()) {
+save_model_quality_artifact <- function(backtest, output_dir = default_runtime_output_root(), timestamp = Sys.time(), process_id = Sys.getpid()) {
     if (!model_quality_has_backtest(backtest)) {
         return(NULL)
     }
@@ -85,7 +85,7 @@ save_model_quality_artifact <- function(backtest, output_dir = "output", timesta
 #'
 #' @return A stored model-quality artifact, or `NULL` if no snapshot exists.
 #' @keywords internal
-load_latest_model_quality_artifact <- function(output_dir = "output") {
+load_latest_model_quality_artifact <- function(output_dir = default_runtime_output_root()) {
     paths <- build_model_quality_paths(output_dir)
     if (!file.exists(paths$latest_path)) {
         return(NULL)
@@ -110,7 +110,7 @@ load_latest_model_quality_artifact <- function(output_dir = "output") {
 #'
 #' @return A list containing the effective backtest bundle and source labels.
 #' @keywords internal
-resolve_model_quality_context <- function(backtest = NULL, output_dir = "output", allow_fallback = TRUE) {
+resolve_model_quality_context <- function(backtest = NULL, output_dir = default_runtime_output_root(), allow_fallback = TRUE) {
     if (model_quality_has_backtest(backtest)) {
         return(list(
             backtest = backtest,
@@ -339,3 +339,106 @@ summarize_model_quality <- function(backtest) {
     )
 }
 
+#' Summarize live current-year tournament performance
+#'
+#' @param data A loaded tournament-data bundle from [load_tournament_data()].
+#' @param model_results A fitted matchup-model result bundle.
+#' @param draws Number of posterior draws to use when scoring current-year games.
+#'
+#' @return A list with a text summary, summary metrics, and a recent-game table.
+#' @keywords internal
+summarize_live_tournament_performance <- function(data, model_results, draws = 1000) {
+    if (is.null(data) || is.null(model_results)) {
+        return(NULL)
+    }
+
+    bracket_year <- data$bracket_year %||% NA_integer_
+    current_year_games <- data$game_results %>%
+        dplyr::filter(
+            Year == as.character(bracket_year),
+            !is.na(winner),
+            !is.na(teamA_score),
+            !is.na(teamB_score)
+        )
+
+    if (nrow(current_year_games) == 0) {
+        return(list(
+            status = "No completed current-year games have been recorded yet.",
+            summary = tibble::tibble(),
+            round_summary = tibble::tibble(),
+            games = tibble::tibble(),
+            games_played = 0L,
+            rounds_played = character()
+        ))
+    }
+
+    current_reference <- build_actual_game_reference(data$current_teams, current_year_games)
+    matchup_rows <- actual_results_to_matchup_rows(
+        current_reference,
+        historical_betting_features = data$historical_betting_features %||% tibble::tibble(),
+        current_betting_features = model_results$betting_feature_context$current_betting_features %||% tibble::tibble()
+    )
+
+    if (nrow(matchup_rows) == 0) {
+        return(list(
+            status = "Current-year games exist, but no matchup rows could be constructed for live scoring.",
+            summary = tibble::tibble(),
+            round_summary = tibble::tibble(),
+            games = tibble::tibble(),
+            games_played = 0L,
+            rounds_played = character()
+        ))
+    }
+
+    prediction_draws <- predict_matchup_rows(matchup_rows, model_results, draws = draws)
+    predicted_prob <- colMeans(prediction_draws)
+    scored_games <- matchup_rows %>%
+        dplyr::mutate(
+            predicted_prob = predicted_prob,
+            model_pick = dplyr::if_else(predicted_prob >= 0.5, teamA, teamB),
+            model_correct = model_pick == winner,
+            round = factor(round, levels = round_levels())
+        ) %>%
+        dplyr::arrange(round, region, game_index)
+
+    overall_metrics <- compute_binary_metrics(scored_games$predicted_prob, scored_games$actual_outcome)
+    round_summary <- scored_games %>%
+        dplyr::group_by(round) %>%
+        dplyr::summarise(
+            games = dplyr::n(),
+            accuracy = mean(model_correct),
+            mean_predicted_prob = mean(predicted_prob),
+            .groups = "drop"
+        ) %>%
+        dplyr::mutate(round = as.character(round))
+
+    status <- sprintf(
+        "Live tournament performance through %s completed games across %s.",
+        nrow(scored_games),
+        paste(unique(as.character(scored_games$round)), collapse = ", ")
+    )
+
+    list(
+        status = status,
+        summary = tibble::tibble(
+            games_played = nrow(scored_games),
+            log_loss = overall_metrics$log_loss[[1]],
+            brier = overall_metrics$brier[[1]],
+            accuracy = overall_metrics$accuracy[[1]]
+        ),
+        round_summary = round_summary,
+        games = scored_games %>%
+            dplyr::mutate(
+                actual_winner = winner,
+                model_pick = model_pick,
+                model_pick_note = dplyr::if_else(model_correct, "Correct", "Miss")
+            ) %>%
+            dplyr::select(
+                Year, region, round, game_index, teamA, teamB, actual_winner, model_pick,
+                predicted_prob, model_pick_note, actual_outcome
+            ) %>%
+            dplyr::slice_tail(n = 8L),
+        games_played = nrow(scored_games),
+        rounds_played = unique(as.character(scored_games$round))
+    )
+}

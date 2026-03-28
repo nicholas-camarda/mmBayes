@@ -239,6 +239,62 @@ pre_tournament_feature_columns <- function() {
     c("barthag_logit", "AdjOE", "AdjDE", "WAB", "TOR", "TORD", "ORB", "DRB", "3P%", "3P%D", "Adj T.")
 }
 
+#' List betting-derived matchup predictor columns
+#'
+#' @return A character vector of betting feature names for winner models.
+#' @keywords internal
+betting_matchup_feature_columns <- function() {
+    c(
+        "betting_prob_centered",
+        "betting_spread_teamA",
+        "betting_bookmakers",
+        "betting_line_available",
+        "betting_minutes_before_commence",
+        "betting_prob_dispersion",
+        "betting_spread_dispersion"
+    )
+}
+
+#' List betting-derived total-points predictor columns
+#'
+#' @return A character vector of betting feature names for total-points models.
+#' @keywords internal
+betting_total_points_feature_columns <- function() {
+    c(
+        "betting_abs_prob_edge",
+        "betting_abs_spread",
+        "betting_bookmakers",
+        "betting_line_available",
+        "betting_minutes_before_commence",
+        "betting_prob_dispersion",
+        "betting_spread_dispersion"
+    )
+}
+
+#' Return neutral default betting features for a matchup
+#'
+#' @return A named list of neutral betting feature values.
+#' @keywords internal
+default_matchup_betting_features <- function() {
+    list(
+        implied_prob_teamA = 0.5,
+        spread_teamA = 0,
+        n_bookmakers = 0,
+        line_available = 0,
+        minutes_before_commence = 0,
+        prob_dispersion = 0,
+        spread_dispersion = 0
+    )
+}
+
+#' Return neutral default betting features for a total-points matchup
+#'
+#' @return A named list of neutral total-points betting feature values.
+#' @keywords internal
+default_total_points_betting_features <- function() {
+    default_matchup_betting_features()
+}
+
 #' List leakage-prone columns excluded from modeling
 #'
 #' @return A character vector of disallowed post-tournament columns.
@@ -264,7 +320,14 @@ continuous_matchup_diff_columns <- function() {
         "DRB_diff",
         "3P%_diff",
         "3P%D_diff",
-        "Adj T._diff"
+        "Adj T._diff",
+        "betting_prob_centered",
+        "betting_spread_teamA",
+        "betting_bookmakers",
+        "betting_line_available",
+        "betting_minutes_before_commence",
+        "betting_prob_dispersion",
+        "betting_spread_dispersion"
     )
 }
 
@@ -372,10 +435,11 @@ summarize_play_in_resolution <- function(current_teams, actual_play_in_results =
 #' @param round_name The round label for the matchup.
 #' @param actual_outcome Optional observed outcome for team A.
 #' @param metadata Optional metadata such as year, region, team names, and winner.
+#' @param betting_features Optional named betting feature values for the matchup.
 #'
 #' @return A one-row matchup feature tibble.
 #' @keywords internal
-build_matchup_feature_row <- function(team_a, team_b, round_name, actual_outcome = NA_real_, metadata = list()) {
+build_matchup_feature_row <- function(team_a, team_b, round_name, actual_outcome = NA_real_, metadata = list(), betting_features = NULL) {
     if (nrow(team_a) != 1 || nrow(team_b) != 1) {
         stop_with_message("Matchup feature rows require exactly one row for each team")
     }
@@ -389,6 +453,7 @@ build_matchup_feature_row <- function(team_a, team_b, round_name, actual_outcome
         safe_numeric(team_a[[feature_name]][1]) - safe_numeric(team_b[[feature_name]][1])
     })
     names(diff_values) <- paste0(available_features, "_diff")
+    betting_features <- betting_features %||% default_matchup_betting_features()
 
     tibble::tibble(
         Year = as.character(metadata$Year %||% team_a$Year[1]),
@@ -411,7 +476,14 @@ build_matchup_feature_row <- function(team_a, team_b, round_name, actual_outcome
         DRB_diff = diff_values[["DRB_diff"]] %||% 0,
         `3P%_diff` = diff_values[["3P%_diff"]] %||% 0,
         `3P%D_diff` = diff_values[["3P%D_diff"]] %||% 0,
-        `Adj T._diff` = diff_values[["Adj T._diff"]] %||% 0
+        `Adj T._diff` = diff_values[["Adj T._diff"]] %||% 0,
+        betting_prob_centered = safe_numeric(betting_features$implied_prob_teamA %||% 0.5) - 0.5,
+        betting_spread_teamA = safe_numeric(betting_features$spread_teamA %||% 0),
+        betting_bookmakers = safe_numeric(betting_features$n_bookmakers %||% 0),
+        betting_line_available = safe_numeric(betting_features$line_available %||% 0),
+        betting_minutes_before_commence = safe_numeric(betting_features$minutes_before_commence %||% 0),
+        betting_prob_dispersion = safe_numeric(betting_features$prob_dispersion %||% 0),
+        betting_spread_dispersion = safe_numeric(betting_features$spread_dispersion %||% 0)
     )
 }
 
@@ -423,10 +495,11 @@ build_matchup_feature_row <- function(team_a, team_b, round_name, actual_outcome
 #' @param total_points Optional observed combined score for the matchup.
 #' @param metadata Optional metadata such as year, region, game index, and team
 #'   names.
+#' @param betting_features Optional named betting feature values for the matchup.
 #'
 #' @return A one-row matchup feature tibble for total-points modeling.
 #' @keywords internal
-build_total_points_feature_row <- function(team_a, team_b, round_name, total_points = NA_real_, metadata = list()) {
+build_total_points_feature_row <- function(team_a, team_b, round_name, total_points = NA_real_, metadata = list(), betting_features = NULL) {
     if (nrow(team_a) != 1 || nrow(team_b) != 1) {
         stop_with_message("Total-points feature rows require exactly one row for each team")
     }
@@ -444,6 +517,8 @@ build_total_points_feature_row <- function(team_a, team_b, round_name, total_poi
     gap_feature <- function(feature_name) {
         abs(safe_numeric(team_a[[feature_name]][1]) - safe_numeric(team_b[[feature_name]][1]))
     }
+    betting_features <- betting_features %||% default_total_points_betting_features()
+    implied_prob_teamA <- safe_numeric(betting_features$implied_prob_teamA %||% 0.5)
 
     tibble::tibble(
         Year = as.character(metadata$Year %||% team_a$Year[1]),
@@ -468,6 +543,13 @@ build_total_points_feature_row <- function(team_a, team_b, round_name, total_poi
         `3P%D_sum` = sum_feature("3P%D"),
         `Adj T._mean` = mean_feature("Adj T."),
         `Adj T._gap` = gap_feature("Adj T."),
+        betting_abs_prob_edge = abs(implied_prob_teamA - 0.5),
+        betting_abs_spread = abs(safe_numeric(betting_features$spread_teamA %||% 0)),
+        betting_bookmakers = safe_numeric(betting_features$n_bookmakers %||% 0),
+        betting_line_available = safe_numeric(betting_features$line_available %||% 0),
+        betting_minutes_before_commence = safe_numeric(betting_features$minutes_before_commence %||% 0),
+        betting_prob_dispersion = safe_numeric(betting_features$prob_dispersion %||% 0),
+        betting_spread_dispersion = safe_numeric(betting_features$spread_dispersion %||% 0),
         total_points = safe_numeric(total_points, default = NA_real_)
     )
 }
@@ -1358,7 +1440,7 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
 #' @return A list of decision-artifact file paths and the in-memory decision
 #'   sheet.
 #' @export
-save_decision_outputs <- function(bracket_year, candidates, output_dir = "output", backtest = NULL, play_in_resolution = NULL, total_points_predictions = NULL) {
+save_decision_outputs <- function(bracket_year, candidates, output_dir = default_runtime_output_root(), backtest = NULL, play_in_resolution = NULL, total_points_predictions = NULL, live_performance = NULL) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- build_decision_sheet(candidates)
@@ -1439,7 +1521,8 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
             backtest = backtest,
             total_points_predictions = total_points_predictions,
             play_in_resolution = play_in_resolution,
-            model_quality_context = model_quality_context
+            model_quality_context = model_quality_context,
+            live_performance = live_performance
         ),
         technical_dashboard_path
     )
@@ -1469,7 +1552,7 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = "output
 #' @return A list of written output file paths.
 #' @export
 save_results <- function(results, output_config) {
-    output_dir <- output_config$path %||% "output"
+    output_dir <- output_config$path %||% default_runtime_output_root()
     prefix <- output_config$prefix %||% "tournament_sim"
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -1506,7 +1589,8 @@ save_results <- function(results, output_config) {
             output_dir = output_dir,
             backtest = results$backtest,
             play_in_resolution = play_in_resolution,
-            total_points_predictions = results$total_points_predictions
+            total_points_predictions = results$total_points_predictions,
+            live_performance = results$live_performance
         )
     } else {
         NULL

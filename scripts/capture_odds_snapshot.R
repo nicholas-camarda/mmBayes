@@ -40,7 +40,7 @@ config$betting$enabled <- TRUE
 loaded <- load_tournament_data(config)
 bracket_year <- as.integer(loaded$bracket_year)
 
-log_path <- file.path(config$output$path %||% "output", "logs", sprintf("odds_snapshot_%s.log", bracket_year))
+log_path <- file.path(config$output$path %||% default_runtime_output_root(), "logs", sprintf("odds_snapshot_%s.log", bracket_year))
 initialize_logging(log_path)
 
 snapshot <- capture_tournament_odds_snapshot(

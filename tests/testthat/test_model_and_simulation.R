@@ -274,13 +274,27 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(isTRUE(resolved_quality$used_fallback))
     expect_match(resolved_quality$source_label, "Latest saved model-quality snapshot")
 
+    live_team_data <- make_fixture_team_features(current_year = 2025, history_years = 2022:2024)
+    live_results_data <- make_fixture_game_results(live_team_data, history_years = 2022:2025)
+    live_performance <- summarize_live_tournament_performance(
+        data = list(
+            bracket_year = 2025L,
+            game_results = live_results_data,
+            current_teams = live_team_data %>% dplyr::filter(Year == "2025"),
+            historical_betting_features = tibble::tibble()
+        ),
+        model_results = model_results,
+        draws = 25L
+    )
+
     decision_outputs <- save_decision_outputs(
         bracket_year = 2026L,
         candidates = candidates,
         output_dir = output_dir,
         backtest = NULL,
         play_in_resolution = play_in_resolution,
-        total_points_predictions = total_predictions
+        total_points_predictions = total_predictions,
+        live_performance = live_performance
     )
     saved_matchup_totals <- utils::read.csv(decision_outputs$matchup_total_points)
 
@@ -288,6 +302,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(file.exists(decision_outputs$championship_tiebreaker_distribution))
     expect_true(file.exists(decision_outputs$matchup_total_points))
     expect_true(file.exists(decision_outputs$technical_dashboard))
+    expect_match(paste(readLines(decision_outputs$technical_dashboard, warn = FALSE), collapse = "\n"), "Live Tournament Performance")
     expect_true(file.exists(file.path(output_dir, "model_quality", "latest_model_quality.rds")))
     expect_true(any(stringr::str_detect(list.files(file.path(output_dir, "model_quality")), "^model_quality_.*_pid.*\\.rds$")))
     expect_true(isTRUE(decision_outputs$model_quality_used_fallback))
@@ -359,10 +374,13 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         )),
         total_points_predictions = total_predictions,
         play_in_resolution = play_in_resolution,
-        model_quality_context = resolved_quality
+        model_quality_context = resolved_quality,
+        live_performance = live_performance
     )
     expect_match(technical_html, "mmBayes Technical Bracket Dashboard")
     expect_match(technical_html, "How To Use This Dashboard")
+    expect_match(technical_html, "Live Tournament Performance")
+    expect_match(technical_html, "Recent Games")
     expect_match(technical_html, "review-priority queue")
     expect_match(technical_html, "Latest saved model-quality snapshot")
     expect_match(technical_html, "Log loss")
@@ -400,8 +418,11 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         dplyr::arrange(dplyr::desc(decision_score), round, region, matchup_number) %>%
         dplyr::pull(matchup_label)
     expect_true(length(ranked_matchups) >= 2)
-    first_ranked_position <- regexpr(ranked_matchups[[1]], technical_html, fixed = TRUE)[[1]]
-    second_ranked_position <- regexpr(ranked_matchups[[2]], technical_html, fixed = TRUE)[[1]]
+    ranked_section_start <- regexpr("Ranked Decision Board", technical_html, fixed = TRUE)[[1]]
+    ranked_section_end <- regexpr("Upset Opportunity Board", technical_html, fixed = TRUE)[[1]]
+    ranked_section <- substr(technical_html, ranked_section_start, ranked_section_end - 1L)
+    first_ranked_position <- regexpr(ranked_matchups[[1]], ranked_section, fixed = TRUE)[[1]]
+    second_ranked_position <- regexpr(ranked_matchups[[2]], ranked_section, fixed = TRUE)[[1]]
     expect_true(first_ranked_position > 0)
     expect_true(second_ranked_position > first_ranked_position)
 
@@ -412,6 +433,15 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     if (length(diff_matchup) == 1L) {
         expect_match(technical_html, diff_matchup)
     }
+
+    same_winner_board <- decision_sheet %>%
+        dplyr::slice_head(n = 1) %>%
+        dplyr::mutate(
+            candidate_diff_flag = TRUE,
+            candidate_1_pick = "Duke",
+            candidate_2_pick = "Duke"
+        )
+    expect_match(render_ranked_decision_svg(same_winner_board), "Same winner, different path")
 
     technical_html_without_optional <- create_technical_dashboard_html(
         bracket_year = 2026L,

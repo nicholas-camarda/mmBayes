@@ -1,15 +1,185 @@
 library(logger)
 library(yaml)
 
+#' Return the canonical project slug
+#'
+#' @return A scalar character project slug.
+#' @keywords internal
+project_slug <- function() {
+    "mmBayes"
+}
+
+#' Return the default local runtime root
+#'
+#' @return A normalized path under the user's home directory.
+#' @keywords internal
+default_runtime_root <- function() {
+    path.expand(file.path("~", "ProjectsRuntime", project_slug()))
+}
+
+#' Return the default local code root
+#'
+#' @return A normalized path to the active local checkout.
+#' @keywords internal
+default_code_root <- function() {
+    path.expand(file.path("~", "Projects", project_slug()))
+}
+
+#' Return the canonical cloud root for shared project files
+#'
+#' @return A normalized path under OneDrive for shared data and outputs.
+#' @keywords internal
+default_cloud_root <- function() {
+    path.expand(file.path("~", "Library", "CloudStorage", "OneDrive-Personal", "SideProjects", project_slug()))
+}
+
+#' Return the default OneDrive project root
+#'
+#' @return A normalized path to the canonical cloud project root.
+#' @keywords internal
+default_publish_root <- function() {
+    default_cloud_root()
+}
+
+#' Return the canonical cloud data root
+#'
+#' @return A normalized path to the shared cloud data directory.
+#' @keywords internal
+default_cloud_data_root <- function() {
+    file.path(default_cloud_root(), "data")
+}
+
+#' Return the local runtime data root
+#'
+#' @return A normalized path to the runtime data directory.
+#' @keywords internal
+default_runtime_data_root <- function() {
+    file.path(default_runtime_root(), "data")
+}
+
+#' Return the local runtime output root
+#'
+#' @return A normalized path to the runtime output directory.
+#' @keywords internal
+default_runtime_output_root <- function() {
+    file.path(default_runtime_root(), "output")
+}
+
+#' Return the local runtime odds-history root
+#'
+#' @return A normalized path to the runtime odds-history directory.
+#' @keywords internal
+default_runtime_history_root <- function() {
+    file.path(default_runtime_data_root(), "odds_history")
+}
+
+#' Return the canonical cloud output root
+#'
+#' @return A normalized path to the shared cloud output directory.
+#' @keywords internal
+default_cloud_output_root <- function() {
+    file.path(default_cloud_root(), "output")
+}
+
+#' Return the canonical cloud odds-history root
+#'
+#' @return A normalized path to the shared cloud odds-history directory.
+#' @keywords internal
+default_cloud_history_root <- function() {
+    file.path(default_cloud_data_root(), "odds_history")
+}
+
+#' Return the dated publish folder for a release
+#'
+#' @param release_date A date or date-like value used to name the release.
+#' @param publish_root Base cloud publish root.
+#'
+#' @return A normalized path to the dated release folder.
+#' @keywords internal
+project_publish_release_root <- function(release_date = Sys.Date(), publish_root = default_publish_root()) {
+    file.path(path.expand(publish_root), "releases", format(as.Date(release_date), "%Y-%m-%d"))
+}
+
+#' Return the canonical project roots
+#'
+#' @param release_date A date or date-like value used to name the release.
+#'
+#' @return A named list with `code_root`, `runtime_root`, `publish_root`, and
+#'   shared cloud roots.
+#' @keywords internal
+project_roots <- function(release_date = Sys.Date()) {
+    publish_root <- default_publish_root()
+    list(
+        code_root = default_code_root(),
+        runtime_root = default_runtime_root(),
+        cloud_root = default_cloud_root(),
+        data_root = default_cloud_data_root(),
+        output_root = default_runtime_output_root(),
+        history_root = default_runtime_history_root(),
+        publish_root = publish_root,
+        release_root = project_publish_release_root(release_date, publish_root = publish_root)
+    )
+}
+
+#' Normalize configured runtime-relative paths
+#'
+#' @param config A project configuration list.
+#'
+#' @return The input configuration with runtime-aware default paths applied.
+#' @keywords internal
+normalize_project_paths <- function(config) {
+    runtime_root <- path.expand(config$runtime$root %||% default_runtime_root())
+    cloud_data_root <- default_cloud_data_root()
+    runtime_data_root <- file.path(runtime_root, "data")
+    runtime_output_root <- file.path(runtime_root, "output")
+    runtime_history_root <- file.path(runtime_data_root, "odds_history")
+    config$runtime <- merge_config_lists(
+        list(
+            slug = project_slug(),
+            root = runtime_root,
+            exports_root = file.path(runtime_root, "exports")
+        ),
+        config$runtime %||% list()
+    )
+    config$runtime$root <- path.expand(config$runtime$root %||% runtime_root)
+    config$runtime$exports_root <- path.expand(config$runtime$exports_root %||% file.path(config$runtime$root, "exports"))
+
+    config$data <- merge_config_lists(
+        list(
+            team_features_path = file.path(cloud_data_root, "pre_tournament_team_features.xlsx"),
+            game_results_path = file.path(cloud_data_root, "tournament_game_results.xlsx")
+        ),
+        config$data %||% list()
+    )
+    config$data$team_features_path <- path.expand(config$data$team_features_path)
+    config$data$game_results_path <- path.expand(config$data$game_results_path)
+
+    config$betting$history_dir <- path.expand(config$betting$history_dir %||% runtime_history_root)
+    config$output$path <- path.expand(config$output$path %||% runtime_output_root)
+    config$output$model_cache_path <- path.expand(config$output$model_cache_path %||% file.path(config$output$path, "model_cache"))
+    config$output$log_path <- path.expand(config$output$log_path %||% file.path(config$output$path, "logs", "tournament_simulation.log"))
+    config$output$refresh_log_path <- path.expand(config$output$refresh_log_path %||% file.path(config$output$path, "logs", "data_refresh.log"))
+
+    config
+}
+
 #' Default project configuration
 #'
 #' @return A nested list containing default data, model, and output settings.
 #' @export
 default_project_config <- function() {
+    runtime_root <- default_runtime_root()
+    cloud_data_root <- default_cloud_data_root()
+    runtime_output_root <- default_runtime_output_root()
     list(
+        runtime = list(
+            slug = project_slug(),
+            root = runtime_root,
+            exports_root = file.path(runtime_root, "exports")
+        ),
         data = list(
-            team_features_path = "data/pre_tournament_team_features.xlsx",
-            game_results_path = "data/tournament_game_results.xlsx"
+            team_features_path = file.path(cloud_data_root, "pre_tournament_team_features.xlsx"),
+            game_results_path = file.path(cloud_data_root, "tournament_game_results.xlsx")
         ),
         model = list(
             history_window = 8L,
@@ -36,7 +206,14 @@ default_project_config <- function() {
                 "DRB_diff",
                 "3P%_diff",
                 "3P%D_diff",
-                "Adj T._diff"
+                "Adj T._diff",
+                "betting_prob_centered",
+                "betting_spread_teamA",
+                "betting_bookmakers",
+                "betting_line_available",
+                "betting_minutes_before_commence",
+                "betting_prob_dispersion",
+                "betting_spread_dispersion"
             ),
             interaction_terms = character(0),
             prior_type = "normal",
@@ -44,7 +221,7 @@ default_project_config <- function() {
             n_draws = 1000
         ),
         betting = list(
-            enabled = FALSE,
+            enabled = TRUE,
             provider = "odds_api",
             api_key_env = "ODDS_API_KEY",
             sport_key = "basketball_ncaab",
@@ -53,20 +230,22 @@ default_project_config <- function() {
             bookmakers = c("draftkings", "fanduel", "betmgm", "betrivers"),
             odds_format = "american",
             date_format = "iso",
-            history_dir = "data/odds_history",
+            history_dir = default_runtime_history_root(),
             fetch_policy = "if_missing",
             snapshot_cooldown_minutes = 10L,
-            blend_weight = 0.35,
-            blend_rounds = c("Round of 64")
+            require_for_production = FALSE,
+            allow_missing_fallback = TRUE,
+            evaluation_mode = "ablation"
         ),
         output = list(
-            path = "output",
+            path = runtime_output_root,
             prefix = "tournament_sim",
-            model_cache_path = "output/model_cache",
-            log_path = "output/logs/tournament_simulation.log",
-            refresh_log_path = "output/logs/data_refresh.log"
+            model_cache_path = file.path(runtime_output_root, "model_cache"),
+            log_path = file.path(runtime_output_root, "logs", "tournament_simulation.log"),
+            refresh_log_path = file.path(runtime_output_root, "logs", "data_refresh.log")
         )
-    )
+    ) %>%
+        normalize_project_paths()
 }
 
 #' Build a unique log file path for the current run
@@ -139,7 +318,7 @@ load_project_config <- function(path = "config.yml") {
         parsed
     }
 
-    merge_config_lists(config, parsed_default)
+    normalize_project_paths(merge_config_lists(config, parsed_default))
 }
 
 #' Initialize logging for the current run

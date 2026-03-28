@@ -10,7 +10,7 @@ library(logger)
 #' @export
 run_tournament_simulation <- function(config = NULL) {
     config <- config %||% load_project_config()
-    output_dir <- config$output$path %||% "output"
+    output_dir <- config$output$path %||% default_runtime_output_root()
     engine <- config$model$engine %||% "stan_glm"
     bart_config <- config$model$bart %||% list()
     draws_budget <- if (identical(engine, "bart")) {
@@ -18,7 +18,7 @@ run_tournament_simulation <- function(config = NULL) {
     } else {
         as.integer(config$model$n_draws %||% 1000L)
     }
-    log_basename <- basename(config$output$log_path %||% "tournament_simulation.log")
+    log_basename <- basename(config$output$log_path %||% file.path(default_runtime_output_root(), "logs", "tournament_simulation.log"))
     base_log_path <- file.path(output_dir, "logs", log_basename)
     run_log_path <- build_run_log_path(base_log_path)
     initialize_logging(run_log_path)
@@ -33,6 +33,12 @@ run_tournament_simulation <- function(config = NULL) {
         bracket_year = data$bracket_year,
         current_teams = data$current_teams
     )
+    current_betting_features <- build_current_betting_feature_table(betting_context$lines_matchups %||% tibble::tibble())
+    if (isTRUE(config$betting$require_for_production %||% FALSE) &&
+        !isTRUE(config$betting$allow_missing_fallback %||% TRUE) &&
+        nrow(current_betting_features) == 0) {
+        stop_with_message("Betting data is required for production runs, but no usable current matchup lines were available.")
+    }
     logger::log_info("Fitting tournament model")
     interaction_terms <- as.character(unlist(config$model$interaction_terms %||% character(0)))
     if (length(interaction_terms) == 0L) interaction_terms <- NULL
@@ -47,11 +53,10 @@ run_tournament_simulation <- function(config = NULL) {
         interaction_terms = interaction_terms,
         prior_type = config$model$prior_type %||% "normal"
     )
-    model_results$betting <- list(
-        enabled = isTRUE(config$betting$enabled %||% FALSE),
-        blend_weight = suppressWarnings(as.numeric(config$betting$blend_weight %||% 0)),
-        blend_rounds = config$betting$blend_rounds %||% character(),
-        lines_matchups = betting_context$lines_matchups %||% NULL,
+    model_results$betting_feature_context <- list(
+        current_lines_matchups = betting_context$lines_matchups %||% tibble::tibble(),
+        current_betting_features = current_betting_features,
+        historical_betting_features = data$historical_betting_features %||% tibble::tibble(),
         source_label = betting_context$source_label %||% NULL,
         used_api_call = isTRUE(betting_context$used_api_call %||% FALSE),
         latest_lines_matchups_path = betting_context$latest_lines_matchups_path %||% NULL,
@@ -59,13 +64,17 @@ run_tournament_simulation <- function(config = NULL) {
     )
     logger::log_info("Fitting total-points model")
     total_points_model <- fit_total_points_model(
-        historical_total_points = build_total_points_training_rows(data$historical_actual_results),
+        historical_total_points = build_total_points_training_rows(
+            data$historical_actual_results,
+            historical_betting_features = data$historical_betting_features
+        ),
         engine = engine,
         bart_config = bart_config,
         random_seed = config$model$random_seed,
         cache_dir = model_cache_dir,
         use_cache = use_model_cache
     )
+    total_points_model$betting_feature_context <- model_results$betting_feature_context
     logger::log_info("Running backtest")
     backtest_results <- if (isTRUE(config$model$backtest)) {
         run_rolling_backtest(
@@ -79,7 +88,8 @@ run_tournament_simulation <- function(config = NULL) {
             cache_dir = model_cache_dir,
             use_cache = use_model_cache,
             interaction_terms = interaction_terms,
-            prior_type = config$model$prior_type %||% "normal"
+            prior_type = config$model$prior_type %||% "normal",
+            historical_betting_features = data$historical_betting_features
         )
     } else {
         NULL
@@ -110,6 +120,11 @@ run_tournament_simulation <- function(config = NULL) {
         total_points_model = total_points_model,
         draws = draws_budget
     )
+    live_performance <- summarize_live_tournament_performance(
+        data = data,
+        model_results = model_results,
+        draws = draws_budget
+    )
 
     result_bundle <- list(
         bracket_year = data$bracket_year,
@@ -121,8 +136,9 @@ run_tournament_simulation <- function(config = NULL) {
         candidates = candidate_results,
         decision_sheet = decision_sheet,
         total_points_predictions = total_points_predictions,
+        live_performance = live_performance,
         final_four = simulation_results$final_four,
-        betting = model_results$betting,
+        betting = model_results$betting_feature_context,
         output = list(log_path = run_log_path)
     )
 

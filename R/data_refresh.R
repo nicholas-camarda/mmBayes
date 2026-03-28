@@ -966,12 +966,17 @@ fill_current_year_first_four_results <- function(game_results, team_features, br
 #' @param bracket_year The active bracket year.
 #' @param history_window Number of historical tournaments to fetch by default.
 #'
+#' @param config Optional project configuration list. When omitted, the loaded
+#'   project config is used.
+#'
 #' @return A list containing the written team-feature and game-results file paths.
 #' @export
-update_tournament_data <- function(start_year = NULL, bracket_year = as.integer(format(Sys.Date(), "%Y")), history_window = 8L) {
-    team_features_file <- file.path("data", "pre_tournament_team_features.xlsx")
-    game_results_file <- file.path("data", "tournament_game_results.xlsx")
-    dir.create("data", showWarnings = FALSE, recursive = TRUE)
+update_tournament_data <- function(config = NULL, start_year = NULL, bracket_year = as.integer(format(Sys.Date(), "%Y")), history_window = 8L) {
+    config <- config %||% load_project_config()
+    team_features_file <- config$data$team_features_path %||% file.path(default_cloud_data_root(), "pre_tournament_team_features.xlsx")
+    game_results_file <- config$data$game_results_path %||% file.path(default_cloud_data_root(), "tournament_game_results.xlsx")
+    dir.create(dirname(team_features_file), showWarnings = FALSE, recursive = TRUE)
+    dir.create(dirname(game_results_file), showWarnings = FALSE, recursive = TRUE)
 
     start_year <- start_year %||% max(2008L, bracket_year - history_window - 2L)
     historical_years <- seq.int(start_year, bracket_year)

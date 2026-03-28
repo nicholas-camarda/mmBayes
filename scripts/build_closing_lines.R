@@ -44,15 +44,21 @@ args <- commandArgs(trailingOnly = TRUE)
 config <- load_project_config("config.yml")
 
 year_override <- parse_year_arg(args)
-loaded <- load_tournament_data(config)
-bracket_year <- as.integer(year_override %||% loaded$bracket_year)
 
-paths <- build_odds_history_paths(bracket_year, history_dir = config$betting$history_dir %||% "data/odds_history")
+team_features <- normalize_team_features(read_table_file(config$data$team_features_path))
+game_results <- normalize_game_results(read_table_file(config$data$game_results_path))
+validate_team_features(team_features)
+validate_game_results(game_results)
+assert_canonical_data_quality(team_features, game_results)
+
+bracket_year <- as.integer(year_override %||% get_bracket_year(team_features))
+
+paths <- build_odds_history_paths(bracket_year, history_dir = config$betting$history_dir %||% default_runtime_history_root())
 if (!file.exists(paths$lines_matchups)) {
     stop_with_message(sprintf("No odds history found at %s (capture a snapshot first).", paths$lines_matchups))
 }
 
-log_path <- file.path(config$output$path %||% "output", "logs", sprintf("closing_lines_%s.log", bracket_year))
+log_path <- file.path(config$output$path %||% default_runtime_output_root(), "logs", sprintf("closing_lines_%s.log", bracket_year))
 initialize_logging(log_path)
 
 lines_matchups <- dplyr::as_tibble(utils::read.csv(paths$lines_matchups, stringsAsFactors = FALSE))
@@ -62,7 +68,23 @@ lines_matchups <- lines_matchups %>%
         commence_time_utc = as.POSIXct(commence_time, tz = "UTC")
     )
 
-game_results <- normalize_game_results(read_table_file(config$data$game_results_path))
+if (!has_betting_dispersion_columns(lines_matchups)) {
+    if (!file.exists(paths$lines_long)) {
+        stop_with_message(sprintf(
+            "No dispersion columns were found in %s and the long-form odds file is missing at %s.",
+            paths$lines_matchups,
+            paths$lines_long
+        ))
+    }
+
+    lines_long <- dplyr::as_tibble(utils::read.csv(paths$lines_long, stringsAsFactors = FALSE)) %>%
+        dplyr::mutate(
+            snapshot_time_utc = as.POSIXct(snapshot_time_utc, tz = "UTC"),
+            commence_time_utc = as.POSIXct(commence_time, tz = "UTC")
+        )
+    lines_matchups <- summarize_snapshot_matchups(lines_long)
+}
+
 results_year <- game_results %>%
     dplyr::filter(Year == as.character(bracket_year)) %>%
     dplyr::mutate(
@@ -99,6 +121,8 @@ closing <- purrr::map_dfr(seq_len(nrow(results_year)), function(i) {
             spread_teamB = NA_real_,
             n_bookmakers = NA_integer_,
             bookmakers = NA_character_,
+            prob_dispersion_a = NA_real_,
+            spread_dispersion_a = NA_real_,
             closing_before_commence = NA
         ))
     }
@@ -141,6 +165,8 @@ closing <- purrr::map_dfr(seq_len(nrow(results_year)), function(i) {
         spread_teamB = spread_teamB,
         n_bookmakers = suppressWarnings(as.integer(chosen$n_bookmakers[[1]])),
         bookmakers = chosen$bookmakers[[1]],
+        prob_dispersion_a = suppressWarnings(as.numeric(chosen$prob_dispersion_a[[1]])),
+        spread_dispersion_a = suppressWarnings(as.numeric(chosen$spread_dispersion_a[[1]])),
         closing_before_commence = nrow(before) > 0
     )
 })

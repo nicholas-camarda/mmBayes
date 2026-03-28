@@ -1,7 +1,11 @@
 default:
+  runtime:
+    slug: "mmBayes"
+    root: "~/ProjectsRuntime/mmBayes"
+    exports_root: "~/ProjectsRuntime/mmBayes/exports"
   data:
-    team_features_path: "data/pre_tournament_team_features.xlsx"
-    game_results_path: "data/tournament_game_results.xlsx"
+    team_features_path: "~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx"
+    game_results_path: "~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx"
   model:
     history_window: 8
     backtest: true
@@ -27,6 +31,13 @@ default:
       - 3P%_diff
       - 3P%D_diff
       - Adj T._diff
+      - betting_prob_centered
+      - betting_spread_teamA
+      - betting_bookmakers
+      - betting_line_available
+      - betting_minutes_before_commence
+      - betting_prob_dispersion
+      - betting_spread_dispersion
     interaction_terms:
       - "barthag_logit_diff:round"
       - "seed_diff:round"
@@ -49,14 +60,15 @@ default:
       - "betrivers"
     odds_format: "american"
     date_format: "iso"
-    history_dir: "data/odds_history"
+    history_dir: "~/ProjectsRuntime/mmBayes/data/odds_history"
     fetch_policy: "if_missing"
-    blend_weight: 0.35
-    blend_rounds:
-      - "Round of 64"
+    snapshot_cooldown_minutes: 10
+    require_for_production: false
+    allow_missing_fallback: true
+    evaluation_mode: "ablation"
   output:
-    path: "output"
+    path: "~/ProjectsRuntime/mmBayes/output"
     prefix: "tournament_sim"
-    model_cache_path: "output/model_cache"
-    log_path: "output/logs/tournament_simulation.log"
-    refresh_log_path: "output/logs/data_refresh.log"
+    model_cache_path: "~/ProjectsRuntime/mmBayes/output/model_cache"
+    log_path: "~/ProjectsRuntime/mmBayes/output/logs/tournament_simulation.log"
+    refresh_log_path: "~/ProjectsRuntime/mmBayes/output/logs/data_refresh.log"

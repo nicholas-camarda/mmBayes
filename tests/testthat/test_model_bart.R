@@ -30,6 +30,7 @@ test_that("BART engine fits matchup and total-points models and returns draw mat
         engine = "bart",
         bart_config = bart_config,
         random_seed = 123,
+        include_diagnostics = FALSE,
         use_cache = FALSE
     )
 
@@ -47,6 +48,7 @@ test_that("BART engine fits matchup and total-points models and returns draw mat
         engine = "bart",
         bart_config = bart_config,
         random_seed = 123,
+        include_diagnostics = FALSE,
         use_cache = FALSE
     )
 
@@ -113,9 +115,9 @@ test_that("run_rolling_backtest supports both stan_glm and bart engines", {
         bart_config = bart_config,
         random_seed = 123,
         draws = 10L,
+        include_diagnostics = FALSE,
         use_cache = FALSE
     )
     expect_true(is.list(bart_backtest))
     expect_true(nrow(bart_backtest$summary) == 1)
 })
-

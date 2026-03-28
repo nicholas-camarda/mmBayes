@@ -5,17 +5,17 @@ library(tibble)
 
 #' Build the odds-history directory for a tournament year
 #'
-#' Odds history is intentionally stored under `data/`, which is gitignored in
-#' this repository. This keeps snapshots private while enabling local
-#' backtests and evaluation.
+#' Odds history is intentionally stored under the runtime root rather than the
+#' code checkout. This keeps snapshots local while separating them from the
+#' repository snapshot used for review.
 #'
 #' @param year Tournament year (integer-like).
 #' @param history_dir Base directory for odds history storage.
 #'
 #' @return A path to the year-specific odds-history directory.
 #' @export
-build_odds_history_year_dir <- function(year, history_dir = "data/odds_history") {
-    file.path(history_dir %||% "data/odds_history", as.character(as.integer(year)))
+build_odds_history_year_dir <- function(year, history_dir = default_runtime_history_root()) {
+    file.path(history_dir %||% default_runtime_history_root(), as.character(as.integer(year)))
 }
 
 #' Build canonical odds-history file paths for a tournament year
@@ -25,7 +25,7 @@ build_odds_history_year_dir <- function(year, history_dir = "data/odds_history")
 #'
 #' @return A named list of paths for snapshots, long-form odds, and matchup odds.
 #' @keywords internal
-build_odds_history_paths <- function(year, history_dir = "data/odds_history") {
+build_odds_history_paths <- function(year, history_dir = default_runtime_history_root()) {
     year_dir <- build_odds_history_year_dir(year, history_dir = history_dir)
     list(
         year_dir = year_dir,
@@ -75,6 +75,62 @@ read_latest_snapshot_time_utc <- function(path) {
     }
 
     max(times, na.rm = TRUE)
+}
+
+#' Check whether the betting-dispersion schema is present
+#'
+#' @param data A betting-history or latest-lines data frame.
+#'
+#' @return `TRUE` when the required dispersion columns are present.
+#' @keywords internal
+has_betting_dispersion_columns <- function(data) {
+    required <- c("prob_dispersion_a", "spread_dispersion_a")
+    !is.null(data) && all(required %in% names(data))
+}
+
+#' Validate that a betting-history table has the expected schema
+#'
+#' @param data A betting-history or latest-lines data frame.
+#' @param source_label Human-readable source name used in error messages.
+#'
+#' @return Invisibly returns `TRUE` when the expected columns are present.
+#' @keywords internal
+validate_betting_history_schema <- function(data, source_label) {
+    if (is.null(data) || nrow(data) == 0) {
+        return(invisible(TRUE))
+    }
+
+    required <- c("prob_dispersion_a", "spread_dispersion_a")
+    missing <- setdiff(required, names(data))
+    if (length(missing) > 0) {
+        stop_with_message(sprintf(
+            "%s is missing required columns: %s. Rebuild the configured odds-history files from the saved snapshot JSON.",
+            source_label,
+            paste(missing, collapse = ", ")
+        ))
+    }
+
+    invisible(TRUE)
+}
+
+#' Test whether a latest-lines table is usable
+#'
+#' @param path Path to `latest_lines_matchups.csv`.
+#'
+#' @return `TRUE` when the file exists and contains at least one row.
+#' @keywords internal
+latest_lines_table_is_usable <- function(path) {
+    if (!file.exists(path)) {
+        return(FALSE)
+    }
+
+    tbl <- tryCatch(
+        utils::read.csv(path, stringsAsFactors = FALSE),
+        error = function(e) NULL
+    )
+    !is.null(tbl) &&
+        nrow(tbl) > 0 &&
+        has_betting_dispersion_columns(tbl)
 }
 
 #' Find the most recent saved Odds API snapshot JSON file
@@ -179,7 +235,7 @@ rebuild_latest_lines_from_snapshot_json <- function(bracket_year, current_teams,
         allowed_team_names = current_teams$Team
     )
     lines_matchups <- summarize_snapshot_matchups(lines_long)
-    append_odds_history_files(lines_long, lines_matchups, paths = paths)
+    write_latest_lines_matchups(lines_matchups, paths)
 
     list(
         snapshot_path = snapshot_path,
@@ -550,6 +606,7 @@ summarize_snapshot_matchups <- function(lines_long) {
             bookmakers = paste(sort(unique(bookmaker_key)), collapse = ","),
             consensus_prob_a = stats::median(prob_a, na.rm = TRUE),
             consensus_prob_b = 1 - consensus_prob_a,
+            prob_dispersion_a = stats::sd(prob_a, na.rm = TRUE),
             .groups = "drop"
         )
 
@@ -558,12 +615,53 @@ summarize_snapshot_matchups <- function(lines_long) {
         dplyr::summarise(
             consensus_spread_a = stats::median(spread_a, na.rm = TRUE),
             consensus_spread_b = stats::median(spread_b, na.rm = TRUE),
+            spread_dispersion_a = stats::sd(spread_a, na.rm = TRUE),
             .groups = "drop"
         )
 
     h2h_consensus %>%
         dplyr::left_join(spread_consensus, by = c("snapshot_time_utc", "bracket_year", "event_id", "key")) %>%
         dplyr::arrange(snapshot_time_utc, event_id)
+}
+
+#' Build an empty latest-lines table
+#'
+#' @return A zero-row tibble matching the latest-lines schema.
+#' @keywords internal
+empty_latest_lines_matchups <- function() {
+    tibble::tibble(
+        snapshot_time_utc = as.POSIXct(character(), tz = "UTC"),
+        bracket_year = integer(),
+        event_id = character(),
+        commence_time = character(),
+        home_team = character(),
+        away_team = character(),
+        key = character(),
+        team_a = character(),
+        team_b = character(),
+        n_bookmakers = integer(),
+        bookmakers = character(),
+        consensus_prob_a = numeric(),
+        consensus_prob_b = numeric(),
+        prob_dispersion_a = numeric(),
+        consensus_spread_a = numeric(),
+        consensus_spread_b = numeric(),
+        spread_dispersion_a = numeric()
+    )
+}
+
+#' Persist the latest matchup-lines table without mutating history
+#'
+#' @param lines_matchups Matchup-level latest lines.
+#' @param paths Output paths from [build_odds_history_paths()].
+#'
+#' @return Invisibly returns `TRUE` on success.
+#' @keywords internal
+write_latest_lines_matchups <- function(lines_matchups, paths) {
+    ensure_odds_history_dirs(paths)
+    latest_tbl <- if (nrow(lines_matchups) > 0) lines_matchups else empty_latest_lines_matchups()
+    utils::write.csv(latest_tbl, paths$latest_lines_matchups, row.names = FALSE)
+    invisible(TRUE)
 }
 
 #' Append odds tables to year-level history files
@@ -591,27 +689,8 @@ append_odds_history_files <- function(lines_long, lines_matchups, paths) {
         } else {
             utils::write.table(lines_matchups, paths$lines_matchups, sep = ",", row.names = FALSE, col.names = FALSE, append = TRUE)
         }
-        utils::write.csv(lines_matchups, paths$latest_lines_matchups, row.names = FALSE)
-    } else if (!file.exists(paths$latest_lines_matchups)) {
-        empty_tbl <- tibble::tibble(
-            snapshot_time_utc = as.POSIXct(character(), tz = "UTC"),
-            bracket_year = integer(),
-            event_id = character(),
-            commence_time = character(),
-            home_team = character(),
-            away_team = character(),
-            key = character(),
-            team_a = character(),
-            team_b = character(),
-            n_bookmakers = integer(),
-            bookmakers = character(),
-            consensus_prob_a = numeric(),
-            consensus_prob_b = numeric(),
-            consensus_spread_a = numeric(),
-            consensus_spread_b = numeric()
-        )
-        utils::write.csv(empty_tbl, paths$latest_lines_matchups, row.names = FALSE)
     }
+    write_latest_lines_matchups(lines_matchups, paths)
 
     invisible(TRUE)
 }
@@ -632,7 +711,7 @@ capture_tournament_odds_snapshot <- function(config, bracket_year, current_teams
         stop_with_message(sprintf("Unsupported betting provider: %s", provider))
     }
 
-    paths <- build_odds_history_paths(bracket_year, history_dir = betting$history_dir %||% "data/odds_history")
+    paths <- build_odds_history_paths(bracket_year, history_dir = betting$history_dir %||% default_runtime_history_root())
     ensure_odds_history_dirs(paths)
 
     force <- isTRUE(force)
@@ -718,8 +797,8 @@ resolve_latest_matchup_lines <- function(config, bracket_year, current_teams) {
         return(list(lines_matchups = NULL, source_label = NULL, used_api_call = FALSE))
     }
 
-    paths <- build_odds_history_paths(bracket_year, history_dir = betting$history_dir %||% "data/odds_history")
-    if (file.exists(paths$latest_lines_matchups)) {
+    paths <- build_odds_history_paths(bracket_year, history_dir = betting$history_dir %||% default_runtime_history_root())
+    if (latest_lines_table_is_usable(paths$latest_lines_matchups)) {
         tbl <- utils::read.csv(paths$latest_lines_matchups, stringsAsFactors = FALSE)
         return(list(
             lines_matchups = dplyr::as_tibble(tbl),
@@ -755,6 +834,241 @@ resolve_latest_matchup_lines <- function(config, bracket_year, current_teams) {
     }
 
     list(lines_matchups = NULL, source_label = NULL, used_api_call = FALSE)
+}
+
+#' Load all historical closing lines from the cloud history root
+#'
+#' @param history_dir Base directory for odds history storage.
+#'
+#' @return A tibble of combined closing lines across available years.
+#' @export
+load_historical_closing_lines <- function(history_dir) {
+    base_dir <- path.expand(history_dir %||% default_runtime_history_root())
+    if (!dir.exists(base_dir)) {
+        return(tibble::tibble())
+    }
+
+    paths <- list.files(base_dir, pattern = "^closing_lines\\.csv$", recursive = TRUE, full.names = TRUE)
+    if (length(paths) == 0) {
+        return(tibble::tibble())
+    }
+
+    purrr::map_dfr(paths, function(path) {
+        tbl <- tryCatch(utils::read.csv(path, stringsAsFactors = FALSE), error = function(e) NULL)
+        if (is.null(tbl)) {
+            return(tibble::tibble())
+        }
+        dplyr::as_tibble(tbl)
+    })
+}
+
+#' Build a betting feature reference table from closing lines
+#'
+#' @param closing_lines A historical closing-lines table.
+#'
+#' @return A normalized tibble of historical betting features.
+#' @export
+build_historical_betting_feature_table <- function(closing_lines) {
+    if (is.null(closing_lines) || nrow(closing_lines) == 0) {
+        return(tibble::tibble())
+    }
+
+    validate_betting_history_schema(closing_lines, "Historical closing lines")
+    closing_lines %>%
+        dplyr::mutate(
+            Year = as.character(Year),
+            round = as.character(round),
+            teamA = canonicalize_team_name(teamA),
+            teamB = canonicalize_team_name(teamB),
+            matchup_key = purrr::map2_chr(teamA, teamB, build_matchup_key),
+            implied_prob_teamA = safe_numeric(implied_prob_teamA, default = 0.5),
+            spread_teamA = safe_numeric(spread_teamA, default = 0),
+            n_bookmakers = safe_numeric(n_bookmakers, default = 0),
+            line_available = as.integer(is.finite(implied_prob_teamA)),
+            minutes_before_commence = dplyr::if_else(
+                !is.na(closing_snapshot_time_utc) & !is.na(commence_time_utc),
+                as.numeric(difftime(as.POSIXct(commence_time_utc, tz = "UTC"), as.POSIXct(closing_snapshot_time_utc, tz = "UTC"), units = "mins")),
+                0
+            ),
+            prob_dispersion = safe_numeric(prob_dispersion_a, default = 0),
+            spread_dispersion = safe_numeric(spread_dispersion_a, default = 0)
+        ) %>%
+        dplyr::select(
+            Year,
+            round,
+            matchup_key,
+            implied_prob_teamA,
+            spread_teamA,
+            n_bookmakers,
+            line_available,
+            minutes_before_commence,
+            prob_dispersion,
+            spread_dispersion
+        )
+}
+
+#' Build a current betting feature reference table from latest matchup lines
+#'
+#' @param lines_matchups A latest-lines matchup table.
+#'
+#' @return A normalized tibble of current betting features.
+#' @export
+build_current_betting_feature_table <- function(lines_matchups) {
+    if (is.null(lines_matchups) || nrow(lines_matchups) == 0) {
+        return(tibble::tibble())
+    }
+
+    validate_betting_history_schema(lines_matchups, "Latest matchup lines")
+    dplyr::as_tibble(lines_matchups) %>%
+        dplyr::mutate(
+            matchup_key = as.character(key),
+            implied_prob_teamA = safe_numeric(consensus_prob_a, default = 0.5),
+            spread_teamA = safe_numeric(consensus_spread_a, default = 0),
+            n_bookmakers = safe_numeric(n_bookmakers, default = 0),
+            line_available = as.integer(n_bookmakers > 0),
+            minutes_before_commence = dplyr::if_else(
+                !is.na(snapshot_time_utc) & !is.na(commence_time),
+                as.numeric(difftime(as.POSIXct(commence_time, tz = "UTC"), as.POSIXct(snapshot_time_utc, tz = "UTC"), units = "mins")),
+                0
+            ),
+            prob_dispersion = safe_numeric(prob_dispersion_a, default = 0),
+            spread_dispersion = safe_numeric(spread_dispersion_a, default = 0)
+        ) %>%
+        dplyr::select(
+            matchup_key,
+            implied_prob_teamA,
+            spread_teamA,
+            n_bookmakers,
+            line_available,
+            minutes_before_commence,
+            prob_dispersion,
+            spread_dispersion
+        )
+}
+
+#' Attach betting-derived matchup features to modeling rows
+#'
+#' @param matchup_rows A matchup-level table.
+#' @param historical_betting_features Optional historical feature table.
+#' @param current_betting_features Optional current/latest feature table.
+#'
+#' @return `matchup_rows` with betting predictors added or overwritten.
+#' @export
+augment_matchup_rows_with_betting_features <- function(matchup_rows,
+                                                       historical_betting_features = NULL,
+                                                       current_betting_features = NULL) {
+    if (is.null(matchup_rows) || nrow(matchup_rows) == 0) {
+        return(tibble::tibble())
+    }
+
+    prepared <- dplyr::as_tibble(matchup_rows) %>%
+        dplyr::mutate(
+            Year = as.character(Year),
+            round = as.character(round),
+            teamA = canonicalize_team_name(teamA),
+            teamB = canonicalize_team_name(teamB),
+            matchup_key = purrr::map2_chr(teamA, teamB, build_matchup_key)
+        )
+
+    historical_betting_features <- historical_betting_features %||% tibble::tibble()
+    current_betting_features <- current_betting_features %||% tibble::tibble()
+
+    if (nrow(historical_betting_features) > 0) {
+        prepared <- prepared %>%
+            dplyr::left_join(
+                historical_betting_features,
+                by = c("Year", "round", "matchup_key")
+            )
+    }
+
+    for (column_name in c(
+        "implied_prob_teamA",
+        "spread_teamA",
+        "n_bookmakers",
+        "line_available",
+        "minutes_before_commence",
+        "prob_dispersion",
+        "spread_dispersion"
+    )) {
+        if (!column_name %in% names(prepared)) {
+            prepared[[column_name]] <- NA_real_
+        }
+    }
+
+    if (nrow(current_betting_features) > 0) {
+        prepared <- prepared %>%
+            dplyr::left_join(
+                current_betting_features %>%
+                    dplyr::rename_with(~ paste0(.x, "_current"), -matchup_key),
+                by = "matchup_key"
+            ) %>%
+            dplyr::mutate(
+                implied_prob_teamA = dplyr::coalesce(implied_prob_teamA, implied_prob_teamA_current),
+                spread_teamA = dplyr::coalesce(spread_teamA, spread_teamA_current),
+                n_bookmakers = dplyr::coalesce(n_bookmakers, n_bookmakers_current),
+                line_available = dplyr::coalesce(line_available, line_available_current),
+                minutes_before_commence = dplyr::coalesce(minutes_before_commence, minutes_before_commence_current),
+                prob_dispersion = dplyr::coalesce(prob_dispersion, prob_dispersion_current),
+                spread_dispersion = dplyr::coalesce(spread_dispersion, spread_dispersion_current)
+            ) %>%
+            dplyr::select(-dplyr::ends_with("_current"))
+    }
+
+    prepared %>%
+        dplyr::mutate(
+            implied_prob_teamA = safe_numeric(implied_prob_teamA, default = 0.5),
+            spread_teamA = safe_numeric(spread_teamA, default = 0),
+            n_bookmakers = safe_numeric(n_bookmakers, default = 0),
+            line_available = safe_numeric(line_available, default = 0),
+            minutes_before_commence = safe_numeric(minutes_before_commence, default = 0),
+            prob_dispersion = safe_numeric(prob_dispersion, default = 0),
+            spread_dispersion = safe_numeric(spread_dispersion, default = 0),
+            betting_prob_centered = implied_prob_teamA - 0.5,
+            betting_spread_teamA = spread_teamA,
+            betting_bookmakers = n_bookmakers,
+            betting_line_available = line_available,
+            betting_minutes_before_commence = minutes_before_commence,
+            betting_prob_dispersion = prob_dispersion,
+            betting_spread_dispersion = spread_dispersion
+        ) %>%
+        dplyr::select(-dplyr::any_of(c(
+            "matchup_key",
+            "implied_prob_teamA",
+            "spread_teamA",
+            "n_bookmakers",
+            "line_available",
+            "minutes_before_commence",
+            "prob_dispersion",
+            "spread_dispersion"
+        )))
+}
+
+#' Attach betting-derived total-points features to modeling rows
+#'
+#' @param total_rows A total-points modeling table.
+#' @param historical_betting_features Optional historical feature table.
+#' @param current_betting_features Optional current/latest feature table.
+#'
+#' @return `total_rows` with betting predictors added or overwritten.
+#' @export
+augment_total_points_rows_with_betting_features <- function(total_rows,
+                                                            historical_betting_features = NULL,
+                                                            current_betting_features = NULL) {
+    if (is.null(total_rows) || nrow(total_rows) == 0) {
+        return(tibble::tibble())
+    }
+
+    matchup_augmented <- augment_matchup_rows_with_betting_features(
+        matchup_rows = total_rows,
+        historical_betting_features = historical_betting_features,
+        current_betting_features = current_betting_features
+    )
+
+    matchup_augmented %>%
+        dplyr::mutate(
+            betting_abs_prob_edge = abs(betting_prob_centered),
+            betting_abs_spread = abs(betting_spread_teamA)
+        )
 }
 
 #' Look up a consensus line-implied probability for team A in a matchup

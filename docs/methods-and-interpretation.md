@@ -40,17 +40,17 @@ The canonical data refresh in `update_tournament_data()` pulls from these source
 
 | Canonical output | Function | Source | URL pattern | Purpose |
 | --- | --- | --- | --- | --- |
-| `data/pre_tournament_team_features.xlsx` | `scrape_bart_data()` | Bart Torvik season ratings | `https://barttorvik.com/?year={year}&...` | Pre-tournament team metrics |
-| `data/pre_tournament_team_features.xlsx` | `scrape_conf_assignments()` | Bart Torvik Tourney Time | `https://barttorvik.com/tourneytime.php?year={year}&sort=7&conlimit=All` | Tournament field, seeds, regions, conferences |
-| `data/tournament_game_results.xlsx` | `scrape_tournament_results()` | Sports-Reference NCAA bracket page | `https://www.sports-reference.com/cbb/postseason/men/{year}-ncaa.html` | Historical completed tournament game results and scores |
-| `data/tournament_game_results.xlsx` | `scrape_espn_first_four_results()` | ESPN scoreboard API | `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?...` | Current-year First Four fallback when Sports-Reference is incomplete |
+| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` | `scrape_bart_data()` | Bart Torvik season ratings | `https://barttorvik.com/?year={year}&...` | Pre-tournament team metrics |
+| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` | `scrape_conf_assignments()` | Bart Torvik Tourney Time | `https://barttorvik.com/tourneytime.php?year={year}&sort=7&conlimit=All` | Tournament field, seeds, regions, conferences |
+| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` | `scrape_tournament_results()` | Sports-Reference NCAA bracket page | `https://www.sports-reference.com/cbb/postseason/men/{year}-ncaa.html` | Historical completed tournament game results and scores |
+| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` | `scrape_espn_first_four_results()` | ESPN scoreboard API | `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?...` | Current-year First Four fallback when Sports-Reference is incomplete |
 
 ### What gets written to disk
 
 The refresh writes exactly two canonical files:
 
-- `data/pre_tournament_team_features.xlsx`
-- `data/tournament_game_results.xlsx`
+- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx`
+- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx`
 
 Those two files are the only data inputs used by the active modeling runtime.
 

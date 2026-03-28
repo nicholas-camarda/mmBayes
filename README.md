@@ -1,6 +1,6 @@
 # mmBayes
 
-An R-based NCAA tournament bracket lab. Turns pre-tournament team data and historical results into Bayesian win probabilities, ranked bracket candidates, and review artifacts for manual entry.
+An R-based NCAA tournament bracket lab. Turns pre-tournament team data, historical results, and sportsbook market data into Bayesian win probabilities, ranked bracket candidates, and review artifacts for manual entry.
 
 ## Table of Contents
 
@@ -10,7 +10,7 @@ An R-based NCAA tournament bracket lab. Turns pre-tournament team data and histo
 - [Commands](#commands)
 - [How It Works](#how-it-works)
 - [Model Details](#model-details)
-- [Betting Lines](#betting-lines-optional)
+- [Betting Data](#betting-data-default-input)
 - [Repository Layout](#repository-layout)
 - [Documentation](#documentation)
 
@@ -32,6 +32,17 @@ The main review loop usually looks like this:
 
 The dashboard is designed to answer two questions fast: which picks matter most, where the bracket is still sensitive to unresolved play-in games, and whether the most recent backtest snapshot says the model is sharp and calibrated enough to trust.
 
+## Working Roots
+
+- Code checkout: `~/Projects/mmBayes`
+- Runtime scratch: `~/ProjectsRuntime/mmBayes`
+- Cloud project root: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes`
+- Cloud data: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/`
+- Cloud outputs: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output/`
+- Cloud publish drops: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/releases/<YYYY-MM-DD>/`
+
+The checkout is a local workspace. The cloud project root now holds the canonical inputs and shared outputs, while the runtime root stays available for local scratch artifacts.
+
 ## Quick Start
 
 ```sh
@@ -42,16 +53,17 @@ Rscript scripts/update_data.R
 Rscript scripts/run_simulation.R
 
 # 3. Open the bracket dashboard in your browser
-open output/bracket_dashboard.html
+open ~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output/bracket_dashboard.html
 ```
 
 Then scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) to identify the highest-leverage picks before filling out your entry.
+The pipeline writes its live outputs under `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output` by default.
 
 ---
 
 ## Outputs
 
-After a pipeline run the following files are generated in `output/`. HTML dashboards and the human-readable CSV / TXT artifacts are committed to the repo so they can be reviewed directly on GitHub.
+After a pipeline run the following files are generated in the cloud output directory, which defaults to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output`. The repository keeps example outputs for reference, but the active run artifacts live in the cloud output tree.
 
 ### Dashboards (HTML)
 
@@ -99,6 +111,7 @@ After a pipeline run the following files are generated in `output/`. HTML dashbo
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
 | `Rscript scripts/capture_odds_snapshot.R` | Capture a private Odds API snapshot |
 | `Rscript scripts/build_closing_lines.R --year=2026` | Derive closing-line estimates from saved snapshots |
+| `Rscript scripts/publish_release.R` | Copy approved deliverables and the odds-history snapshot into the dated OneDrive release folder |
 
 ---
 
@@ -106,19 +119,19 @@ After a pipeline run the following files are generated in `output/`. HTML dashbo
 
 The pipeline runs in six steps:
 
-1. Load `config.yml` and read team features plus historical results from `data/`
-2. Build one training row per historical tournament game at the matchup level
-3. Fit a Bayesian logistic regression for game-winner probability
-4. Run a rolling held-out-tournament backtest to validate calibration
-5. Simulate the current bracket forward round by round using posterior draws
-6. Export dashboards, the decision sheet, and candidate bracket files
+1. Load `config.yml` and read team features plus historical results from the cloud `data/` directory
+2. Resolve sportsbook line history from the cloud `data/odds_history/` directory
+3. Build one training row per historical tournament game at the matchup level, including betting-derived features when available
+4. Fit a winner model with either `stan_glm` or `bart`
+5. Run a rolling held-out-tournament backtest to validate calibration and whether betting features improve predictions
+6. Simulate the current bracket forward round by round using posterior draws and export dashboards, the decision sheet, and candidate bracket files
 
 The model estimates game-by-game win probabilities rather than predicting the whole bracket at once. Posterior draws surface those probabilities as ranked picks, uncertainty intervals, and alternate bracket paths, so the dashboard shows where the bracket is settled and where it is still sensitive to unresolved play-in games.
 
 Data sources:
 
-- `data/pre_tournament_team_features.xlsx` - pre-tournament season metrics per team
-- `data/tournament_game_results.xlsx` - historical tournament game results
+- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` - pre-tournament season metrics per team
+- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` - historical tournament game results
 
 The default configuration uses the eight most recent completed tournaments, skips 2020, and backtests on rolling held-out years.
 
@@ -127,6 +140,13 @@ The default configuration uses the eight most recent completed tournaments, skip
 ## Model Details
 
 ### Winner Model
+
+`mmBayes` currently supports two engines for winner prediction:
+
+- `stan_glm` for Bayesian logistic regression with explicit priors
+- `bart` for Bayesian additive regression trees
+
+There is no neural-network engine in this repo today.
 
 A Bayesian logistic regression with a logit link:
 
@@ -150,22 +170,25 @@ Matchup predictors (differences between the two teams):
 | `3P%_diff` / `3P%D_diff` | Three-point shooting / defense difference |
 | `Adj T._diff` | Adjusted tempo difference |
 
-The seed and efficiency terms (`seed_diff`, `barthag_logit_diff`, `AdjOE_diff`, `AdjDE_diff`, `WAB_diff`) tend to carry the most posterior weight.
+The seed and efficiency terms (`seed_diff`, `barthag_logit_diff`, `AdjOE_diff`, `AdjDE_diff`, `WAB_diff`) tend to carry the most posterior weight, and the default model now also includes betting-derived features such as line-implied probability, spread, bookmaker coverage, freshness, and market disagreement.
 
 ### Tiebreaker Model
 
-A separate Bayesian Gaussian model estimates total championship points, powering the tiebreaker outputs in the dashboard.
+A separate total-points model estimates championship points, powering the tiebreaker outputs in the dashboard. It uses the same engine family selected for the winner model and can also consume betting-derived features.
 
 ---
 
-## Betting Lines (Optional)
+## Betting Data (Default Input)
 
-The pipeline can optionally blend sportsbook-implied probabilities into the matchup simulation. Odds snapshots are stored under `data/odds_history/`, which is gitignored in this repo so the history stays local/private.
+Betting data is a default model input because it captures latent information the repo cannot access directly from season stats alone, including injuries, coaching adjustments, and market consensus.
 
 - The Odds API key is read from `ODDS_API_KEY` and is never written to disk.
 - Bookmakers default to `draftkings`, `fanduel`, `betmgm`, and `betrivers`.
 - Markets default to `h2h` moneyline and `spreads`.
-- When enabled, the main pipeline only calls the API if no local snapshot exists yet for the bracket year; otherwise it reuses `data/odds_history/<year>/latest_lines_matchups.csv`.
+- Runtime odds history lives under `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/odds_history`.
+- Historical training rows use time-appropriate closing or last-pre-commence lines when available.
+- Current prediction rows use the latest reusable snapshot for the active tournament year.
+- `Rscript scripts/evaluate_odds_blend.R` now runs a betting-feature ablation that compares a no-betting baseline, the betting-enhanced model, and a market-only benchmark.
 
 ---
 
@@ -176,16 +199,19 @@ mmBayes/
 ├── R/                  # Active package runtime
 ├── scripts/            # Command-line entry points
 ├── tests/              # Automated tests and fixtures
-├── data/               # Canonical team features and game results (git-ignored)
-├── output/             # Generated artifacts (HTML, CSV, TXT committed; RDS ignored)
+├── data/               # Canonical team features and game results
+├── output/             # Checked-in example outputs; active runs use the runtime output root
 ├── docs/               # Methods guide and reference material
 ├── archive/            # Historical material no longer in the active workflow
 └── config.yml          # Pipeline configuration
 ```
+
+Local runtime artifacts such as transient logs and scratch caches can still live under `~/ProjectsRuntime/mmBayes`, but the canonical data and shared outputs live under the cloud project root.
 
 ---
 
 ## Documentation
 
 - [Methods and Interpretation Guide](docs/methods-and-interpretation.md) - data sources, feature engineering, Bayesian likelihoods and priors, posterior summaries, bracket decision logic
+- [Runtime Roots](docs/runtime-roots.md) - local code root, runtime root, and OneDrive publish layout
 - [Docs Index](docs/README.md)
