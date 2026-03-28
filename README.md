@@ -99,19 +99,27 @@ After a pipeline run the following files are generated in `output/`. HTML dashbo
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
 | `Rscript scripts/capture_odds_snapshot.R` | Capture a private Odds API snapshot |
 | `Rscript scripts/build_closing_lines.R --year=2026` | Derive closing-line estimates from saved snapshots |
+| `Rscript scripts/evaluate_odds_blend.R --year=2026` | Compare model-only vs blended probabilities against closing lines |
+
+Notes:
+
+- `scripts/run_simulation.R`, `scripts/run_bracket_candidates.R`, and odds scripts load `.env` when present via `load_dotenv_file()`.
+- Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
+- Odds workflows keep local history under `data/odds_history/` (gitignored).
 
 ---
 
 ## How It Works
 
-The pipeline runs in six steps:
+The pipeline runs in seven steps:
 
 1. Load `config.yml` and read team features plus historical results from `data/`
 2. Build one training row per historical tournament game at the matchup level
 3. Fit a Bayesian logistic regression for game-winner probability
-4. Run a rolling held-out-tournament backtest to validate calibration
-5. Simulate the current bracket forward round by round using posterior draws
-6. Export dashboards, the decision sheet, and candidate bracket files
+4. Resolve local betting lines (and optionally capture a new Odds API snapshot when enabled and missing)
+5. Run a rolling held-out-tournament backtest to validate calibration
+6. Simulate the current bracket forward round by round using posterior draws (optionally blending model and market probabilities by round)
+7. Export dashboards, the decision sheet, and candidate bracket files
 
 The model estimates game-by-game win probabilities rather than predicting the whole bracket at once. Posterior draws surface those probabilities as ranked picks, uncertainty intervals, and alternate bracket paths, so the dashboard shows where the bracket is settled and where it is still sensitive to unresolved play-in games.
 
@@ -188,4 +196,3 @@ mmBayes/
 ## Documentation
 
 - [Methods and Interpretation Guide](docs/methods-and-interpretation.md) - data sources, feature engineering, Bayesian likelihoods and priors, posterior summaries, bracket decision logic
-- [Docs Index](docs/README.md)
