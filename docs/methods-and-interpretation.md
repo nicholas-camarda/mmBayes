@@ -9,6 +9,10 @@ This document describes the active `mmBayes` runtime as implemented in:
 - `R/model_fitting.R`
 - `R/simulation_functions.R`
 - `R/utils.R`
+- `R/betting_lines.R`
+- `R/betting_evaluation.R`
+- `R/model_quality.R`
+- `R/plotting_functions.R`
 
 It is meant to answer four questions clearly:
 
@@ -25,12 +29,52 @@ At a high level, the workflow is:
 2. normalize team names and validate the tournament field
 3. build historical matchup-level training rows
 4. fit a Bayesian logistic regression for game winners
-5. optionally fit a Bayesian Gaussian model for total points
-6. draw posterior predictions for each matchup in the current bracket
-7. simulate the bracket forward round by round
-8. rank and export bracket candidates plus review artifacts
+5. optionally resolve latest matchup betting lines from local odds history (or capture a new snapshot, based on `fetch_policy`)
+6. optionally fit a Bayesian Gaussian model for total points
+7. draw posterior predictions for each matchup in the current bracket
+8. optionally blend model probabilities with line-implied probabilities for configured rounds
+9. simulate the bracket forward round by round
+10. rank and export bracket candidates plus review artifacts
 
 The project is matchup-based. It does not fit a team-level "who wins the title?" target directly. Instead, it estimates game-level probabilities and then propagates them through the bracket.
+
+## Betting-Line Integration (Optional)
+
+Betting-line integration is handled by `resolve_latest_matchup_lines()` in `R/betting_lines.R` and consumed during simulation in `simulate_matchup()` from `R/simulation_functions.R`.
+
+### Data flow
+
+1. `run_tournament_simulation()` resolves context in `main.R`:
+   - if betting is disabled, the model runs pure model-based probabilities
+   - if betting is enabled, it loads `data/odds_history/<year>/latest_lines_matchups.csv` when present
+   - with `fetch_policy: if_missing`, it captures a new Odds API snapshot only when the local matchup file is missing
+2. The resolved lines table is attached to `model_results$betting`.
+3. During each simulated matchup, blending is only considered when:
+   - betting is enabled
+   - a matching line-implied probability exists for the exact team pairing
+   - the round is in `config$betting$blend_rounds`
+
+### Blend formula
+
+For each posterior draw probability \(p_{\text{model}}\) and line-implied team-A probability \(p_{\text{line}}\), the simulation uses:
+
+$$
+p_{\text{blend}} = (1 - w)\,p_{\text{model}} + w\,p_{\text{line}}
+$$
+
+where \(w = \text{blend\_weight}\) clipped to \([0,1]\).
+
+Interpretation:
+
+- \(w = 0\): pure model (no market influence)
+- \(w = 1\): pure betting line
+- \(0 < w < 1\): convex combination of model and market
+
+### Impact on outputs
+
+- Matchup rows include `betting_blend_weight` and `used_betting_line` flags.
+- Candidate scoring still uses the same bracket-probability framework; only matchup-level win probabilities change when blending is active.
+- Odds history remains local under `data/odds_history/` (gitignored), while outputs continue to be written under `output/`.
 
 ## Source Data
 
@@ -287,9 +331,9 @@ Both engines ultimately produce a **draw-by-game matrix** of posterior win proba
 
 When using `bart`, the draw budget is controlled by `config$model$bart$n_post` (the number of post-burn-in draws stored by BART).
 
-### Likelihood
+### Likelihood (when `engine: stan_glm`)
 
-The active game-winner model in `fit_tournament_model()` is a Bayesian logistic regression fit with `rstanarm::stan_glm(..., family = binomial(link = "logit"))`.
+When `engine` is `stan_glm` (the default in `default_project_config()`), the game-winner model in `fit_tournament_model()` is Bayesian logistic regression fit with `rstanarm::stan_glm(..., family = binomial(link = "logit"))`.
 
 For game `i`, the full model is:
 
@@ -348,6 +392,8 @@ The inverse logit maps the linear predictor back to probability:
 $$
 p_i = \frac{1}{1 + e^{-\eta_i}}
 $$
+
+When `engine` is `bart`, the runtime uses `BART::pbart()` to learn a nonlinear Bernoulli probability surface instead of an explicit logit-linear formula, but the downstream exported summaries (`mean`, intervals, SD, candidate scoring) are computed from the same draw-by-game probability matrix interface.
 
 ### Priors
 
