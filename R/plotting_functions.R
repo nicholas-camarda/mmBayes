@@ -742,6 +742,71 @@ render_confidence_legend_html <- function() {
     paste0("<div class='legend-row'>", chips, "</div>")
 }
 
+#' Render a compact glossary for the dashboard variables
+#'
+#' @return A scalar character string containing HTML markup for the glossary.
+#' @keywords internal
+render_dashboard_term_legend_html <- function() {
+    term_rows <- tibble::tibble(
+        term = c(
+            "Barthag",
+            "AdjOE",
+            "AdjDE",
+            "WAB",
+            "TOR",
+            "TORD",
+            "ORB",
+            "DRB",
+            "3P%",
+            "3P%D",
+            "Adj T.",
+            "decision_score",
+            "upset_leverage",
+            "confidence_tier",
+            "inspection_level"
+        ),
+        definition = c(
+            "Overall strength rating",
+            "Adjusted offense",
+            "Adjusted defense",
+            "Wins above bubble",
+            "Turnover rate",
+            "Opponent turnover rate",
+            "Offensive rebounding",
+            "Defensive rebounding",
+            "Three-point make rate",
+            "Opponent three-point make rate",
+            "Adjusted tempo",
+            "Review priority score",
+            "Upset payoff if it hits",
+            "Lock / Lean / Toss-up / Volatile",
+            "Primary, secondary, or watchlist"
+        )
+    )
+
+    chips <- paste(
+        vapply(seq_len(nrow(term_rows)), function(index) {
+            row <- term_rows[index, , drop = FALSE]
+            sprintf(
+                "<div class='term-chip'><strong>%s</strong><span>%s</span></div>",
+                html_escape(row$term[[1]]),
+                html_escape(row$definition[[1]])
+            )
+        }, character(1)),
+        collapse = "\n"
+    )
+
+    paste0(
+        "<section class='term-legend' aria-label='Key terms'>",
+        "<div class='term-legend__label'>Key terms</div>",
+        "<div class='term-legend__grid'>",
+        chips,
+        "</div>",
+        "<p class='term-legend__note'>These are the short labels used in the dashboard cards and evidence panels. Seeds still appear beside every matchup.</p>",
+        "</section>"
+    )
+}
+
 #' Render a compact guide for reading dashboard rows
 #'
 #' @return A scalar character string containing HTML markup for the guide.
@@ -1567,6 +1632,13 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         ".legend-copy{font-size:12px;color:#6b7280;}",
         ".legend-primary{background:#fbbf24;}",
         ".legend-secondary{background:#fb923c;}",
+        ".term-legend{margin:14px 0 18px 0;padding:14px 16px;border:1px solid #e2e8f0;border-radius:18px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);}",
+        ".term-legend__label{font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:10px;}",
+        ".term-legend__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 10px;}",
+        ".term-chip{padding:8px 10px;border-radius:14px;background:#fff;border:1px solid #dbe4ef;}",
+        ".term-chip strong{display:block;font-size:13px;color:#0f172a;line-height:1.2;}",
+        ".term-chip span{display:block;font-size:12px;color:#475569;line-height:1.35;margin-top:2px;}",
+        ".term-legend__note{margin:10px 0 0 0;font-size:12px;color:#64748b;max-width:88ch;}",
         ".empty-state{color:#6b7280;font-style:italic;}",
         ".model-overview-strip{margin:10px 0 18px 0;padding:10px 12px;border-radius:999px;background:#eef2ff;color:#1e293b;font-size:13px;border:1px solid #c7d2fe;}",
         ".comparison-link-panel{border-left:5px solid #0f172a;}",
@@ -3726,6 +3798,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<h1>Bracket-building decision workspace</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year), ". Start with Candidate 1 and Candidate 2, then use the delta rows and evidence drawers to decide what actually goes on paper. The technical dashboard stays available as secondary diagnostics.</p>",
         top_links,
+        render_dashboard_term_legend_html(),
         "</header>",
         status_panel,
         "<section class='section' id='build'>",

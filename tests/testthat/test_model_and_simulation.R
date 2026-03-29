@@ -348,6 +348,9 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         model_overview = model_overview
     )
     expect_match(dashboard_html, "Build Your Entries")
+    expect_match(dashboard_html, "Key terms")
+    expect_match(dashboard_html, "Overall strength rating")
+    expect_match(dashboard_html, "Review priority score")
     expect_match(dashboard_html, "Candidate 2 Delta From Candidate 1")
     expect_match(dashboard_html, "Think Harder About These Matchups")
     expect_match(dashboard_html, "Matchup Evidence")
@@ -365,11 +368,14 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         expect_match(dashboard_html, "First Four slots are resolved")
     }
     build_pos <- regexpr("Build Your Entries", dashboard_html, fixed = TRUE)[[1]]
+    key_terms_pos <- regexpr("Key terms", dashboard_html, fixed = TRUE)[[1]]
     delta_pos <- regexpr("Candidate 2 Delta From Candidate 1", dashboard_html, fixed = TRUE)[[1]]
     watch_pos <- regexpr("Think Harder About These Matchups", dashboard_html, fixed = TRUE)[[1]]
     evidence_pos <- regexpr("Matchup Evidence", dashboard_html, fixed = TRUE)[[1]]
     paths_pos <- regexpr("Full Candidate Paths", dashboard_html, fixed = TRUE)[[1]]
     expect_true(build_pos > 0)
+    expect_true(key_terms_pos > 0)
+    expect_true(key_terms_pos < build_pos)
     expect_true(build_pos < delta_pos)
     expect_true(delta_pos < watch_pos)
     expect_true(watch_pos < evidence_pos)
