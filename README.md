@@ -199,6 +199,8 @@ Rscript scripts/uninstall_odds_collector_launchd.R
 
 There is no neural-network engine in this repo today.
 
+`interaction_terms` are a `stan_glm`-only formula option in this repo. BART comparison runs use the same base predictors but omit explicit interaction terms by design, because BART learns interaction structure implicitly through tree splits.
+
 A Bayesian logistic regression with a logit link:
 
 $$

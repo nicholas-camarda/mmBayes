@@ -469,9 +469,9 @@ So:
 
 Because the prior standard deviation is `1.5`, the model allows meaningful effects but still shrinks implausibly large coefficients back toward zero unless the data support them.
 
-### Interaction terms (optional)
+### Interaction terms (Stan GLM only)
 
-Setting `interaction_terms` in the model configuration adds interaction terms to the formula.  These are appended verbatim to the right-hand side of the `stan_glm` formula in the same syntax as base R formulas.
+Setting `interaction_terms` in the model configuration adds interaction terms to the `stan_glm` formula. These are appended verbatim to the right-hand side of the `stan_glm` formula in the same syntax as base R formulas.
 
 Example: to let the effect of overall quality differential vary by round, add:
 
@@ -485,6 +485,8 @@ model:
 These two interactions capture that the predictive value of team-quality and seeding differences is not constant across rounds.  In early-round matchups (Round of 64, Round of 32), large seed differentials are common but a wider fraction of upsets occur because weaker teams are simply underestimated.  In later rounds the field is leveled and the same quality gap carries different meaning.
 
 The interaction terms receive the same `prior_type` prior as the other fixed effects.
+
+This repo's BART implementation does not accept explicit `interaction_terms`. When comparing `stan_glm` to BART, the comparison uses the same base predictors for both engines, while BART learns interaction structure implicitly through tree splits.
 
 ### Round handling
 

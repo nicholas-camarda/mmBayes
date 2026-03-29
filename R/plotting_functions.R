@@ -1260,13 +1260,28 @@ render_model_comparison_summary_html <- function(model_comparison) {
     alternate_label <- model_comparison$alternate_label %||% "Alternate model"
     backtest_table <- model_comparison$backtest_comparison %||% tibble::tibble()
     live_table <- model_comparison$live_comparison %||% tibble::tibble()
+    modeling_notes <- model_comparison$notes %||% character()
     backtest_summary <- summarize_model_metric_comparison(backtest_table, current_label, alternate_label)
     live_summary <- summarize_model_metric_comparison(live_table, current_label, alternate_label)
+    notes_html <- if (length(modeling_notes) > 0L) {
+        paste(
+            purrr::map_chr(modeling_notes, function(note) paste0("<li>", html_escape(note), "</li>")),
+            collapse = "\n"
+        )
+    } else {
+        ""
+    }
 
     paste0(
         "<div class='panel'>",
         "<h2>Model Comparison</h2>",
         "<p class='panel-caption'>This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " on the same tournament data. Start in Compare, then move into an engine tab only if you want the full diagnostics behind a winner.</p>",
+        if (nzchar(notes_html)) paste0(
+            "<div class='quality-card comparison-note-card'>",
+            "<h3>Modeling note</h3>",
+            "<ul class='note-list'>", notes_html, "</ul>",
+            "</div>"
+        ) else "",
         "<div class='overview-grid'>",
         "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value'>", html_escape(backtest_summary$text), "</div><p class='summary-note'>Cross-validation style metrics from completed historical games.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Live takeaway</div><div class='summary-value'>", html_escape(live_summary$text), "</div><p class='summary-note'>Current-year games already completed in the live dashboard.</p></div>",
@@ -1349,6 +1364,9 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         ".summary-label{text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#6b7280;margin-bottom:8px;}",
         ".summary-value{font-size:24px;font-weight:700;line-height:1.1;color:#111827;}",
         ".summary-note{font-size:13px;color:#4b5563;margin:8px 0 0 0;}",
+        ".comparison-note-card{margin-bottom:16px;}",
+        ".note-list{margin:0;padding-left:18px;color:#374151;}",
+        ".note-list li + li{margin-top:8px;}",
         ".overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:18px 0;}",
         ".toggle-button{appearance:none;border:1px solid #cbd5e1;background:white;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:600;color:#334155;cursor:pointer;}",
         ".toggle-button.is-active{background:#0f172a;color:white;border-color:#0f172a;}",

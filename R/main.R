@@ -14,6 +14,28 @@ engine_display_label <- function(engine) {
     }
 }
 
+#' Resolve comparison-specific engine options
+#'
+#' @param alternate_engine Alternate model engine being compared.
+#' @param interaction_terms Interaction terms from the primary configuration.
+#' @param prior_type Prior type from the primary configuration.
+#'
+#' @return A list of engine-specific options suitable for the alternate fit.
+#' @keywords internal
+resolve_comparison_engine_options <- function(alternate_engine, interaction_terms, prior_type) {
+    resolved <- list(
+        interaction_terms = interaction_terms,
+        prior_type = prior_type
+    )
+
+    if (identical(alternate_engine, "bart")) {
+        resolved$interaction_terms <- NULL
+        resolved$prior_type <- "normal"
+    }
+
+    resolved
+}
+
 #' Build an opt-in comparison bundle for Stan GLM and BART
 #'
 #' @param data Loaded tournament data bundle.
@@ -56,7 +78,11 @@ build_model_comparison_bundle <- function(data,
     alternate_engine <- if (identical(current_engine, "bart")) "stan_glm" else "bart"
     current_label <- engine_display_label(current_engine)
     alternate_label <- engine_display_label(alternate_engine)
-    alternate_prior_type <- if (identical(alternate_engine, "bart")) "normal" else prior_type
+    alternate_engine_options <- resolve_comparison_engine_options(
+        alternate_engine = alternate_engine,
+        interaction_terms = interaction_terms,
+        prior_type = prior_type
+    )
 
     logger::log_info("Comparison mode enabled; fitting alternate {alternate_label} run")
 
@@ -69,8 +95,8 @@ build_model_comparison_bundle <- function(data,
             random_seed = random_seed,
             cache_dir = model_cache_dir,
             use_cache = use_model_cache,
-            interaction_terms = interaction_terms,
-            prior_type = alternate_prior_type
+            interaction_terms = alternate_engine_options$interaction_terms,
+            prior_type = alternate_engine_options$prior_type
         ),
         error = function(e) {
             logger::log_warn("Alternate matchup model fit failed: {e$message}")
@@ -130,8 +156,8 @@ build_model_comparison_bundle <- function(data,
                 draws = draws_budget,
                 cache_dir = model_cache_dir,
                 use_cache = use_model_cache,
-                interaction_terms = interaction_terms,
-                prior_type = alternate_prior_type
+                interaction_terms = alternate_engine_options$interaction_terms,
+                prior_type = alternate_engine_options$prior_type
             ),
             error = function(e) {
                 logger::log_warn("Alternate backtest failed: {e$message}")
@@ -208,7 +234,11 @@ build_model_comparison_bundle <- function(data,
             )
         },
         notes = c(
-            if (identical(alternate_engine, "bart")) "BART uses tree-based posterior draws, so calibration and sharpness often matter more than raw accuracy." else NULL
+            if (identical(alternate_engine, "bart")) c(
+                "This comparison uses the same base predictors for both engines.",
+                "Explicit interaction terms are retained for Stan GLM.",
+                "BART is fit without explicit interaction terms because it learns interactions implicitly through tree splits."
+            ) else NULL
         )
     )
 }

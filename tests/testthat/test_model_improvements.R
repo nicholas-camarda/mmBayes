@@ -175,6 +175,263 @@ test_that("compare_model_configurations returns a valid comparison bundle", {
     expect_true(all(c("mean_log_loss", "mean_brier", "mean_accuracy") %in% names(comparison$delta)))
 })
 
+test_that("resolve_comparison_engine_options keeps Stan options and strips BART interactions", {
+    stan_options <- resolve_comparison_engine_options(
+        alternate_engine = "stan_glm",
+        interaction_terms = c("barthag_logit_diff:round", "seed_diff:round"),
+        prior_type = "hs"
+    )
+    bart_options <- resolve_comparison_engine_options(
+        alternate_engine = "bart",
+        interaction_terms = c("barthag_logit_diff:round", "seed_diff:round"),
+        prior_type = "hs"
+    )
+
+    expect_equal(stan_options$interaction_terms, c("barthag_logit_diff:round", "seed_diff:round"))
+    expect_equal(stan_options$prior_type, "hs")
+    expect_null(bart_options$interaction_terms)
+    expect_equal(bart_options$prior_type, "normal")
+})
+
+test_that("build_model_comparison_bundle sanitizes BART options and renders the comparison note", {
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    fixture_paths <- write_fixture_data_files(team_file, results_file)
+
+    config <- default_project_config()
+    config$data$team_features_path <- fixture_paths$team_path
+    config$data$game_results_path <- fixture_paths$results_path
+    config$model$history_window <- 3L
+
+    loaded <- load_tournament_data(config)
+
+    current_backtest <- list(
+        summary = tibble::tibble(
+            mean_log_loss = 0.401,
+            mean_brier = 0.188,
+            mean_accuracy = 0.713,
+            mean_bracket_score = 85.4,
+            mean_correct_picks = 42.7
+        ),
+        calibration = tibble::tibble(
+            mean_predicted = c(0.32, 0.54, 0.76),
+            empirical_rate = c(0.29, 0.57, 0.79),
+            n_games = c(12L, 16L, 10L)
+        )
+    )
+    current_live_performance <- list(
+        summary = tibble::tibble(
+            games_played = 18L,
+            accuracy = 0.722,
+            log_loss = 0.398,
+            brier = 0.184
+        ),
+        round_summary = tibble::tibble(
+            round = "Round of 64",
+            games = 8L,
+            accuracy = 0.750,
+            mean_predicted_prob = 0.681
+        ),
+        games = tibble::tibble(
+            round = "Round of 64",
+            teamA = "A",
+            teamB = "B",
+            actual_winner = "A",
+            model_pick = "A",
+            predicted_prob = 0.681,
+            model_pick_note = "Mock live performance."
+        ),
+        status = "Current-year results update here when the refresh job runs again."
+    )
+
+    captured <- list()
+    bart_config <- list(
+        n_trees = 20L,
+        n_burn = 5L,
+        n_post = 40L,
+        k = 2,
+        power = 2
+    )
+
+    testthat::local_mocked_bindings(
+        fit_tournament_model = function(historical_matchups,
+                                        predictor_columns,
+                                        engine = c("stan_glm", "bart"),
+                                        bart_config = NULL,
+                                        random_seed = 123,
+                                        include_diagnostics = TRUE,
+                                        cache_dir = NULL,
+                                        use_cache = TRUE,
+                                        interaction_terms = NULL,
+                                        prior_type = "normal") {
+            captured$fit_tournament_model <- list(
+                engine = engine,
+                interaction_terms = interaction_terms,
+                prior_type = prior_type,
+                include_diagnostics = include_diagnostics
+            )
+            list(
+                engine = "bart",
+                bart_config = bart_config,
+                predictor_columns = config$model$required_predictors,
+                interaction_terms = character(0),
+                prior_type = "normal"
+            )
+        },
+        fit_total_points_model = function(historical_total_points,
+                                          predictor_columns = default_total_points_predictors(),
+                                          engine = c("stan_glm", "bart"),
+                                          bart_config = NULL,
+                                          random_seed = 123,
+                                          include_diagnostics = FALSE,
+                                          cache_dir = NULL,
+                                          use_cache = TRUE) {
+            captured$fit_total_points_model <- list(
+                engine = engine,
+                include_diagnostics = include_diagnostics
+            )
+            list(
+                engine = "bart",
+                outcome = "total_points",
+                bart_config = bart_config,
+                predictor_columns = config$model$required_predictors
+            )
+        },
+        run_rolling_backtest = function(historical_teams,
+                                        historical_actual_results,
+                                        predictor_columns,
+                                        engine = c("stan_glm", "bart"),
+                                        bart_config = NULL,
+                                        random_seed = 123,
+                                        draws = 1000,
+                                        include_diagnostics = FALSE,
+                                        cache_dir = NULL,
+                                        use_cache = TRUE,
+                                        interaction_terms = NULL,
+                                        prior_type = "normal",
+                                        historical_betting_features = NULL) {
+            captured$run_rolling_backtest <- list(
+                engine = engine,
+                interaction_terms = interaction_terms,
+                prior_type = prior_type
+            )
+            list(summary = current_backtest$summary, calibration = current_backtest$calibration)
+        },
+        summarize_live_tournament_performance = function(...) {
+            captured$summarize_live_tournament_performance <- list(...)
+            current_live_performance
+        },
+        summarize_model_overview = function(model_results, draws) {
+            list(
+                engine = model_results$engine %||% "bart",
+                engine_label = if (identical(model_results$engine, "bart")) "BART" else "Stan GLM",
+                draw_budget = draws,
+                predictor_count = length(model_results$predictor_columns %||% config$model$required_predictors),
+                predictor_summary = "Mock predictor summary",
+                bart_config = model_results$bart_config %||% bart_config,
+                interaction_terms = model_results$interaction_terms %||% character(0),
+                prior_type = model_results$prior_type %||% "normal"
+            )
+        },
+        build_model_metric_comparison_table = function(...) {
+            tibble::tibble(metric = "log_loss", current = 0.401, alternate = 0.398)
+        },
+        summarize_model_metric_comparison = function(...) {
+            list(
+                text = "Comparison completed for Stan GLM and BART.",
+                current_wins = 1L,
+                alternate_wins = 1L,
+                ties = 0L
+            )
+        },
+        render_model_overview_html = function(...) "<div class='panel'><h2>Model Overview</h2><p>Mock overview.</p></div>",
+        render_model_diagnostics_html = function(...) "<div class='panel'><h2>Diagnostics</h2><p>Mock diagnostics.</p></div>",
+        render_live_performance_html = function(...) "<div class='panel'><h2>Live Tournament Performance</h2><p>Mock live performance.</p></div>",
+        .package = "mmBayes"
+    )
+
+    comparison <- build_model_comparison_bundle(
+        data = list(
+            historical_matchups = loaded$historical_matchups,
+            historical_actual_results = loaded$historical_actual_results
+        ),
+        current_engine = "stan_glm",
+        current_model_results = list(engine = "stan_glm", interaction_terms = config$model$interaction_terms, prior_type = "normal"),
+        current_total_points_model = list(engine = "stan_glm"),
+        current_backtest = current_backtest,
+        current_live_performance = current_live_performance,
+        current_model_overview = list(
+            engine = "stan_glm",
+            engine_label = "Stan GLM",
+            draw_budget = 25L,
+            predictor_count = length(config$model$required_predictors),
+            predictor_summary = "Mock predictor summary",
+            interaction_terms = config$model$interaction_terms,
+            prior_type = "normal"
+        ),
+        current_total_points_overview = list(
+            engine = "stan_glm",
+            engine_label = "Stan GLM",
+            draw_budget = 25L,
+            predictor_count = length(config$model$required_predictors),
+            predictor_summary = "Mock predictor summary",
+            interaction_terms = character(0),
+            prior_type = "normal"
+        ),
+        draws_budget = 25L,
+        bart_config = bart_config,
+        random_seed = 123,
+        model_cache_dir = tempfile("bart-comparison-cache-"),
+        use_model_cache = FALSE,
+        interaction_terms = config$model$interaction_terms,
+        prior_type = "normal",
+        matchup_predictors = config$model$required_predictors,
+        run_backtest = TRUE
+    )
+
+    expect_true(is.list(comparison))
+    expect_true(isTRUE(comparison$available))
+    expect_equal(captured$fit_tournament_model$interaction_terms, NULL)
+    expect_equal(captured$run_rolling_backtest$interaction_terms, NULL)
+    expect_true(any(grepl("same base predictors", comparison$notes, fixed = TRUE)))
+    expect_true(any(grepl("learns interactions implicitly through tree splits", comparison$notes, fixed = TRUE)))
+
+    comparison_html <- create_model_comparison_dashboard_html(
+        bracket_year = 2026L,
+        model_comparison = comparison
+    )
+    expect_match(comparison_html, "same base predictors")
+    expect_match(comparison_html, "learns interactions implicitly through tree splits")
+})
+
+test_that("direct BART matchup fits still reject explicit interaction terms", {
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    fixture_paths <- write_fixture_data_files(team_file, results_file)
+
+    config <- default_project_config()
+    config$data$team_features_path <- fixture_paths$team_path
+    config$data$game_results_path <- fixture_paths$results_path
+    config$model$history_window <- 3L
+
+    loaded <- load_tournament_data(config)
+
+    expect_error(
+        fit_tournament_model(
+            historical_matchups = loaded$historical_matchups,
+            predictor_columns = config$model$required_predictors,
+            engine = "bart",
+            bart_config = list(n_trees = 20L, n_burn = 5L, n_post = 40L, k = 2, power = 2),
+            random_seed = 123,
+            include_diagnostics = FALSE,
+            use_cache = FALSE,
+            interaction_terms = "barthag_logit_diff:seed_diff",
+            prior_type = "normal"
+        ),
+        regexp = "does not support interaction_terms"
+    )
+})
+
 test_that("committed fixture CSV files load correctly as team features and game results", {
     fixture_team_path <- testthat::test_path("fixtures", "team_features.csv")
     fixture_results_path <- testthat::test_path("fixtures", "game_results.csv")
