@@ -33,6 +33,12 @@ The GitHub Pages hub is just a convenience landing page:
 
 [Open the GitHub Pages dashboard hub](https://nicholas-camarda.github.io/mmBayes/)
 
+To refresh the GitHub-linked dashboards from the latest runtime HTML, run:
+
+`Rscript scripts/publish_github_pages.R`
+
+If you published the latest bundle to the cloud output tree instead of the local runtime root, set `MMBAYES_PAGES_SOURCE` to that folder before running the sync.
+
 The main review loop usually looks like this:
 
 1. open [output/bracket_dashboard.html](output/bracket_dashboard.html) to build the two entries and review the evidence trail
