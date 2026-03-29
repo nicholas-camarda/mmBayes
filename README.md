@@ -24,11 +24,6 @@ If you only open one file, open the main bracket dashboard:
 
 [Open the bracket dashboard](https://nicholas-camarda.github.io/mmBayes/output/bracket_dashboard.html)
 
-The other pages are secondary:
-
-- [Technical dashboard](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) - diagnostics and simulation detail
-- [Model comparison dashboard](https://nicholas-camarda.github.io/mmBayes/output/model_comparison_dashboard.html) - engine comparison and calibration appendix
-
 The GitHub Pages hub is just a convenience landing page:
 
 [Open the GitHub Pages dashboard hub](https://nicholas-camarda.github.io/mmBayes/)
@@ -47,6 +42,11 @@ The main review loop usually looks like this:
 4. check the status banner to see whether First Four slots are still simulated or already final
 
 The main dashboard is designed to answer three jobs fast: what Candidate 1 and Candidate 2 are, which evidence drives the key decisions, and which matchups deserve another look before you trust the entries.
+
+Optional diagnostics:
+
+- [Technical dashboard](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) - diagnostics and simulation detail
+- [Model comparison dashboard](https://nicholas-camarda.github.io/mmBayes/output/model_comparison_dashboard.html) - engine comparison and calibration appendix
 
 ## Working Roots
 

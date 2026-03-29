@@ -17,8 +17,8 @@ test_that("GitHub Pages landing page links to the public dashboards", {
 
     index_text <- paste(readLines(index_path, warn = FALSE), collapse = "\n")
     expect_match(index_text, "output/bracket_dashboard\\.html")
-    expect_match(index_text, "output/technical_dashboard\\.html")
-    expect_match(index_text, "output/model_comparison_dashboard\\.html")
+    expect_no_match(index_text, "output/technical_dashboard\\.html")
+    expect_no_match(index_text, "output/model_comparison_dashboard\\.html")
 })
 
 test_that("methods guide documents betting-line integration", {
