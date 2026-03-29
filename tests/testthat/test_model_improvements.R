@@ -392,6 +392,7 @@ test_that("build_model_comparison_bundle sanitizes BART options and renders the 
     expect_true(is.list(comparison))
     expect_true(isTRUE(comparison$available))
     expect_equal(captured$fit_tournament_model$interaction_terms, NULL)
+    expect_false(isTRUE(captured$fit_tournament_model$include_diagnostics))
     expect_equal(captured$run_rolling_backtest$interaction_terms, NULL)
     expect_true(any(grepl("same base predictors", comparison$notes, fixed = TRUE)))
     expect_true(any(grepl("learns interactions implicitly through tree splits", comparison$notes, fixed = TRUE)))
