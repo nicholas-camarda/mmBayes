@@ -116,6 +116,20 @@ html_escape <- function(x) {
     gsub("\"", "&quot;", x, fixed = TRUE)
 }
 
+#' Build a GitHub-preview URL for a dashboard file
+#'
+#' @param filename Dashboard filename inside `output/`.
+#'
+#' @return A preview-service URL that opens the GitHub blob through
+#'   `html-preview.github.io`.
+#' @keywords internal
+dashboard_preview_url <- function(filename) {
+    repo_url <- Sys.getenv("MMBAYES_GITHUB_REPO_URL", unset = "https://github.com/nicholas-camarda/mmBayes")
+    branch <- Sys.getenv("MMBAYES_GITHUB_BRANCH", unset = "master")
+    blob_url <- sprintf("%s/blob/%s/output/%s", sub("/+$", "", repo_url), branch, filename)
+    sprintf("https://html-preview.github.io/?url=%s", utils::URLencode(blob_url, reserved = TRUE))
+}
+
 #' Format probabilities for dashboard display
 #'
 #' @param x A numeric vector of probabilities.
@@ -1148,7 +1162,7 @@ render_model_comparison_link_html <- function(model_comparison) {
         "<div class='summary-card'><div class='summary-label'>Alternate engine</div><div class='summary-value'>", html_escape(alternate_label), "</div><p class='summary-note'>The compare page shows the alternate fit alongside the current run.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value'>", html_escape(if (is.character(summary_text)) truncate_dashboard_label(summary_text, width = 22L) else "See comparison"), "</div><p class='summary-note'>Backtest winner summary from the comparison bundle.</p></div>",
         "</div>",
-        "<p class='comparison-link-copy'><a href='model_comparison_dashboard.html'>Open the full model comparison dashboard</a></p>",
+        "<p class='comparison-link-copy'><a href='", dashboard_preview_url("model_comparison_dashboard.html"), "'>Open the full model comparison dashboard</a></p>",
         "</div>"
     )
 }
@@ -1241,6 +1255,7 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
             "<!DOCTYPE html><html><head><meta charset='utf-8'><title>mmBayes Model Comparison</title></head><body>",
             "<h1>mmBayes Model Comparison</h1>",
             "<p class='empty-state'>Model comparison was not supplied for this run.</p>",
+            "<p><a href='", dashboard_preview_url("technical_dashboard.html"), "'>Back to the technical dashboard</a></p>",
             "</body></html>"
         ))
     }
@@ -1284,7 +1299,7 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         "<h1>mmBayes Model Comparison</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year), ". This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " so you can judge calibration, accuracy, and live behavior without mixing the comparison into the main bracket workflow.</p>",
         "<div class='panel'><strong>Status:</strong> ", html_escape(comparison_status), "</div>",
-        "<p class='comparison-link-copy'><a href='technical_dashboard.html'>Back to the technical dashboard</a></p>",
+        "<p class='comparison-link-copy'><a href='", dashboard_preview_url("technical_dashboard.html"), "'>Back to the technical dashboard</a></p>",
         render_model_comparison_summary_html(model_comparison),
         "</body></html>"
     )
@@ -3291,7 +3306,14 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                 row$why_swap_exists[[1]],
                 evidence_button
             )
-            cell_html <- paste(sprintf("<td>%s</td>", html_escape(cells)), collapse = "")
+            escaped_cells <- html_escape(cells[-length(cells)])
+            cell_html <- paste(
+                c(
+                    sprintf("<td>%s</td>", escaped_cells),
+                    sprintf("<td>%s</td>", evidence_button)
+                ),
+                collapse = ""
+            )
             sprintf("<tr>%s</tr>", cell_html)
         })
 
@@ -3485,8 +3507,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
 
     appendix_links <- paste0(
         "<div class='appendix-links'>",
-        "<a href='technical_dashboard.html'>Open technical_dashboard.html</a>",
-        "<a href='model_comparison_dashboard.html'>Open model_comparison_dashboard.html</a>",
+        "<a href='", dashboard_preview_url("technical_dashboard.html"), "'>Open technical_dashboard.html</a>",
+        "<a href='", dashboard_preview_url("model_comparison_dashboard.html"), "'>Open model_comparison_dashboard.html</a>",
         "</div>"
     )
 
@@ -3572,7 +3594,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<div class='diagnostic-callout'>",
         "<strong>Need more diagnostics?</strong>",
         "<p>The technical dashboard keeps calibration, backtest, and engine diagnostics separate from the bracket workflow.</p>",
-        "<p><a href='technical_dashboard.html'>Open technical_dashboard.html</a> <span class='muted'>|</span> <a href='model_comparison_dashboard.html'>Open model_comparison_dashboard.html</a></p>",
+        "<p><a href='", dashboard_preview_url("technical_dashboard.html"), "'>Open technical_dashboard.html</a> <span class='muted'>|</span> <a href='", dashboard_preview_url("model_comparison_dashboard.html"), "'>Open model_comparison_dashboard.html</a></p>",
         "</div>"
     )
 

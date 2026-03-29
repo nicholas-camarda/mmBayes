@@ -18,19 +18,26 @@ An R-based NCAA tournament bracket lab. Turns pre-tournament team data, historic
 
 ## Preview
 
-This repo is meant to produce bracket-entry materials you can review quickly in a browser or spreadsheet. The bracket visualization is the live HTML dashboard:
+This repo is meant to produce bracket-entry materials you can review quickly in a browser or spreadsheet. The main artifact is a one-page bracket-building decision workspace:
 
-[Open the bracket dashboard](output/bracket_dashboard.html)
-[Open the technical dashboard](output/technical_dashboard.html)
+[Open the bracket dashboard](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/bracket_dashboard.html)
+[Open the technical dashboard](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/technical_dashboard.html)
+[Open the model comparison dashboard](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/model_comparison_dashboard.html)
+
+If you are browsing the repository on GitHub, the HTML files are easier to open through [html-preview.github.io](https://html-preview.github.io/):
+
+- [Bracket dashboard preview](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/bracket_dashboard.html)
+- [Technical dashboard preview](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/technical_dashboard.html)
+- [Model comparison preview](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/model_comparison_dashboard.html)
 
 The main review loop usually looks like this:
 
-1. open [output/bracket_dashboard.html](output/bracket_dashboard.html) to compare the safe bracket and alternate bracket
+1. open [output/bracket_dashboard.html](output/bracket_dashboard.html) to build the two entries and review the evidence trail
 2. scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) for the hardest decisions first
 3. use [output/bracket_candidate_1.csv](output/bracket_candidate_1.csv) and [output/bracket_candidate_2.csv](output/bracket_candidate_2.csv) if you want the underlying pick paths
 4. check the status banner to see whether First Four slots are still simulated or already final
 
-The dashboard is designed to answer two questions fast: which picks matter most, where the bracket is still sensitive to unresolved play-in games, and whether the most recent backtest snapshot says the model is sharp and calibrated enough to trust.
+The dashboard is designed to answer three jobs fast: what Candidate 1 and Candidate 2 are, which evidence drives the key decisions, and which matchups deserve another look before you trust the entries.
 
 ## Working Roots
 
@@ -38,7 +45,7 @@ The dashboard is designed to answer two questions fast: which picks matter most,
 - Runtime scratch: `~/ProjectsRuntime/mmBayes`
 - Cloud project root: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes`
 - Cloud data: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/`
-- Cloud outputs: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output/`
+- Cloud outputs: published copies under `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output/`
 - Cloud publish drops: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/releases/<YYYY-MM-DD>/`
 
 The checkout is a local workspace. The cloud project root now holds the canonical inputs and shared outputs, while the runtime root stays available for local scratch artifacts.
@@ -53,30 +60,32 @@ Rscript scripts/update_data.R
 Rscript scripts/run_simulation.R
 
 # 3. Open the bracket dashboard in your browser
-open ~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output/bracket_dashboard.html
+open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
 
 Then scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) to identify the highest-leverage picks before filling out your entry.
-The pipeline writes its live outputs under `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output` by default.
+The pipeline writes its live outputs under `~/ProjectsRuntime/mmBayes/output` by default. Publish scripts can copy approved artifacts into the cloud project tree when you want a shared release bundle.
 
 ---
 
 ## Outputs
 
-After a pipeline run the following files are generated in the cloud output directory, which defaults to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output`. The repository keeps example outputs for reference, but the active run artifacts live in the cloud output tree.
+After a pipeline run the following files are generated in the runtime output directory, which defaults to `~/ProjectsRuntime/mmBayes/output`. The repository keeps example outputs for reference, and publish scripts can mirror the active run artifacts into the cloud output tree when needed.
 
 ### Dashboards (HTML)
 
 | File | Description |
 |------|-------------|
-| [bracket_dashboard.html](output/bracket_dashboard.html) | Main bracket review console |
-| [technical_dashboard.html](output/technical_dashboard.html) | Model diagnostics and simulation detail |
+| [bracket_dashboard.html](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/bracket_dashboard.html) | Main bracket-building decision workspace |
+| [technical_dashboard.html](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/technical_dashboard.html) | Secondary model diagnostics and simulation detail |
+| [model_comparison_dashboard.html](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/model_comparison_dashboard.html) | Engine comparison and calibration appendix |
 
 ### Decision Artifacts (CSV)
 
 | File | Description |
 |------|-------------|
 | [bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) | Ranked picks sorted by leverage - start here |
+| [bracket_matchup_context.csv](output/bracket_matchup_context.csv) | Enriched matchup evidence used by the dashboard |
 | [bracket_candidate_1.csv](output/bracket_candidate_1.csv) | Safe bracket path |
 | [bracket_candidate_2.csv](output/bracket_candidate_2.csv) | Alternate bracket path |
 | [candidate_matchup_total_points.csv](output/candidate_matchup_total_points.csv) | Matchup-level total-points support |
