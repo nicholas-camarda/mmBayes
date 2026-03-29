@@ -51,12 +51,12 @@ The main dashboard is designed to answer three jobs fast: what Candidate 1 and C
 - Cloud outputs: published copies under `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output/`
 - Cloud publish drops: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/releases/<YYYY-MM-DD>/`
 
-The checkout is a local workspace. The cloud project root now holds the canonical inputs and shared outputs, while the runtime root stays available for local scratch artifacts.
+The checkout is a local workspace. The cloud project root holds the canonical input data and published release bundles. The runtime root stays available for local scratch artifacts and live generated outputs.
 
 ## Quick Start
 
 ```sh
-# 1. Refresh the canonical data files
+# 1. Refresh the canonical data files in the cloud project root
 Rscript scripts/update_data.R
 
 # 2. Run the full simulation and generate all outputs
@@ -67,13 +67,13 @@ open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
 
 Then scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) to identify the highest-leverage picks before filling out your entry.
-The pipeline writes its live outputs under `~/ProjectsRuntime/mmBayes/output` by default. Publish scripts can copy approved artifacts into the cloud project tree when you want a shared release bundle.
+The pipeline writes its live outputs under `~/ProjectsRuntime/mmBayes/output` by default. The tracked files under `output/` in this repo are reference snapshots, not the live run directory. Publish scripts can copy approved artifacts into the cloud project tree when you want a shared release bundle.
 
 ---
 
 ## Outputs
 
-After a pipeline run the following files are generated in the runtime output directory, which defaults to `~/ProjectsRuntime/mmBayes/output`. The repository keeps example outputs for reference, and publish scripts can mirror the active run artifacts into the cloud output tree when needed.
+After a pipeline run the following files are generated in the runtime output directory, which defaults to `~/ProjectsRuntime/mmBayes/output`. The repository keeps example outputs for reference only. The cloud project root holds the canonical input data and dated release bundles, while the runtime root holds the active run outputs and scratch files.
 
 ### Dashboards (HTML)
 
@@ -242,14 +242,14 @@ mmBayes/
 ├── R/                  # Active package runtime
 ├── scripts/            # Command-line entry points
 ├── tests/              # Automated tests and fixtures
-├── data/               # Canonical team features and game results
+├── data/               # Checked-in reference inputs; live canonical data lives in the cloud project root
 ├── output/             # Checked-in example outputs; active runs use the runtime output root
 ├── docs/               # Methods guide and reference material
 ├── archive/            # Historical material no longer in the active workflow
 └── config.yml          # Pipeline configuration
 ```
 
-Local runtime artifacts such as transient logs and scratch caches can still live under `~/ProjectsRuntime/mmBayes`, but the canonical data and shared outputs live under the cloud project root.
+Local runtime artifacts such as transient logs and scratch caches live under `~/ProjectsRuntime/mmBayes`. The canonical data live under the cloud project root, and published release bundles are written there as dated releases.
 
 ---
 

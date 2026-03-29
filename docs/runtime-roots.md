@@ -1,6 +1,6 @@
 # Runtime Roots
 
-`mmBayes` uses a local checkout, a local scratch runtime, and a cloud project root so the canonical data and shared outputs do not overlap with the code tree.
+`mmBayes` uses a local checkout, a local scratch runtime, and a cloud project root so the canonical data and published release bundles do not overlap with the code tree.
 
 ## Roots
 
@@ -17,7 +17,8 @@
 
 - Active runs may still use `~/ProjectsRuntime/mmBayes` for scratch artifacts.
 - The repository checkout is a local non-synced working tree.
-- Cloud storage holds the canonical input data, shared outputs, and published release bundles.
+- Cloud storage holds the canonical input data and published release bundles.
+- Live generated outputs belong in `~/ProjectsRuntime/mmBayes/output` during active runs.
 - Release drops must be append-only and split into `deliverables/` and `data_snapshot/`.
 
 ## Publish Layout
