@@ -81,11 +81,16 @@ The pipeline writes its live outputs under `~/ProjectsRuntime/mmBayes/output` by
 
 After a pipeline run the following files are generated in the runtime output directory, which defaults to `~/ProjectsRuntime/mmBayes/output`. The repository keeps example outputs for reference only. The cloud project root holds the canonical input data and dated release bundles, while the runtime root holds the active run outputs and scratch files.
 
-### Dashboards (HTML)
+### Primary Dashboard (HTML)
 
 | File | Description |
 |------|-------------|
 | [bracket_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/bracket_dashboard.html) | Primary dashboard for building and reviewing the two entries |
+
+### Optional Diagnostics (HTML)
+
+| File | Description |
+|------|-------------|
 | [technical_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) | Secondary diagnostics and simulation detail |
 | [model_comparison_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/model_comparison_dashboard.html) | Secondary calibration and engine-comparison appendix |
 
