@@ -1292,6 +1292,9 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
 
 #' Create the bracket dashboard HTML
 #'
+#' Legacy renderer retained only as an internal historical reference while the
+#' workflow dashboard lives below. The new renderer is the active implementation.
+#'
 #' @param bracket_year The active bracket year.
 #' @param decision_sheet The decision-sheet data frame.
 #' @param candidates A list of candidate bracket objects.
@@ -1305,8 +1308,8 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
 #'   reading the latest backtest snapshot.
 #'
 #' @return A complete HTML document as a scalar character string.
-#' @export
-create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL, play_in_resolution = NULL, total_points_predictions = NULL, model_quality_context = NULL, model_overview = NULL, model_comparison = NULL) {
+#' @keywords internal
+.deprecated_create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidates, backtest = NULL, play_in_resolution = NULL, total_points_predictions = NULL, model_quality_context = NULL, model_overview = NULL, model_comparison = NULL) {
     primary <- candidates[[1]]
     alternate <- if (length(candidates) >= 2) candidates[[2]] else candidates[[1]]
 
@@ -2991,6 +2994,757 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         "setView('compare');",
         "})();",
         "</script>",
+        "</body></html>"
+    )
+}
+
+#' Create the bracket dashboard HTML
+#'
+#' @param bracket_year The active bracket year.
+#' @param decision_sheet The decision-sheet data frame.
+#' @param candidates A list of candidate bracket objects.
+#' @param current_teams Optional current-year team feature table.
+#' @param dashboard_context Optional prebuilt dashboard context from
+#'   [build_bracket_dashboard_context()].
+#' @param backtest Optional backtest result bundle.
+#' @param play_in_resolution Optional one-row tibble from
+#'   [summarize_play_in_resolution()] describing whether unresolved simulated
+#'   First Four slots remain in the active bracket.
+#' @param total_points_predictions Optional list returned by
+#'   [predict_candidate_total_points()].
+#' @param model_quality_context Optional resolved model-quality bundle used for
+#'   reading the latest backtest snapshot.
+#'
+#' @return A complete HTML document as a scalar character string.
+#' @export
+create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidates, current_teams = NULL, dashboard_context = NULL, backtest = NULL, play_in_resolution = NULL, total_points_predictions = NULL, model_quality_context = NULL, model_overview = NULL, model_comparison = NULL) {
+    dashboard_context <- dashboard_context %||% build_bracket_dashboard_context(
+        current_teams = current_teams,
+        decision_sheet = decision_sheet,
+        candidates = candidates,
+        total_points_predictions = total_points_predictions,
+        play_in_resolution = play_in_resolution
+    )
+
+    candidate_summary_rows <- dashboard_context$candidate_summary_rows %||% tibble::tibble()
+    candidate_delta_rows <- dashboard_context$candidate_delta_rows %||% tibble::tibble()
+    watchlist_rows <- dashboard_context$watchlist_rows %||% tibble::tibble()
+    matchup_context_rows <- dashboard_context$matchup_context_rows %||% tibble::tibble()
+
+    primary_candidate <- if (length(candidates) >= 1L) candidates[[1]] else list(candidate_id = 1L, type = "safe", champion = NA_character_, final_four = NA_character_, bracket_log_prob = NA_real_, mean_game_prob = NA_real_, diff_summary = "Primary bracket.")
+    alternate_candidate <- if (length(candidates) >= 2L) candidates[[2]] else primary_candidate
+
+    quality_context <- model_quality_context
+    if (is.null(quality_context)) {
+        quality_context <- list(backtest = backtest, source_label = "Current run backtest")
+    }
+    quality_backtest <- NULL
+    if (!is.null(quality_context) && is.list(quality_context) && model_quality_has_backtest(quality_context$backtest %||% NULL)) {
+        quality_backtest <- quality_context$backtest
+    }
+    if (!model_quality_has_backtest(quality_backtest) && model_quality_has_backtest(backtest)) {
+        quality_backtest <- backtest
+    }
+    quality_source_label <- quality_context$source_label %||% "Current run backtest"
+
+    status_panel <- ""
+    if (!is.null(play_in_resolution) && nrow(play_in_resolution) > 0 && isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
+        status_panel <- paste0(
+            "<div class='status-panel status-simulated'><strong>Status: Simulated bracket path.</strong> ",
+            html_escape(sprintf(
+                "%s of %s play-in slots are still unresolved, so the generated brackets assume simulated First Four winners. Any downstream Round of 64 and later matchups can shift until those games are final.",
+                play_in_resolution$unresolved_slots[[1]],
+                play_in_resolution$expected_slots[[1]]
+            )),
+            "</div>"
+        )
+    } else if (!is.null(play_in_resolution) && nrow(play_in_resolution) > 0) {
+        status_panel <- "<div class='status-panel status-final'><strong>Status: Final result.</strong> First Four slots are resolved, so the displayed bracket path reflects finalized play-in outcomes.</div>"
+    } else {
+        status_panel <- "<div class='status-panel status-unknown'><strong>Status not supplied.</strong> No play-in summary was supplied, so the review panel cannot tell whether these slots are simulated or final.</div>"
+    }
+
+    round_order <- round_levels()
+    region_order <- bracket_region_levels()
+
+    row_value <- function(row, name, default = NA_character_) {
+        if (!name %in% names(row) || length(row[[name]]) == 0) {
+            return(default)
+        }
+        value <- row[[name]][[1]]
+        if (is.null(value) || (length(value) == 1L && is.na(value))) default else value
+    }
+
+    display_value <- function(value, digits = 1L, scale_percent = FALSE) {
+        if (length(value) == 0 || all(is.na(value))) {
+            return("n/a")
+        }
+        value <- safe_numeric(value, default = NA_real_)
+        if (all(is.na(value))) {
+            return("n/a")
+        }
+        if (scale_percent) {
+            return(sprintf("%.1f%%", 100 * value))
+        }
+        sprintf(paste0("%.", digits, "f"), value)
+    }
+
+    surface_class <- function(surface) {
+        paste0("surface-", gsub("[^a-z0-9]+", "-", tolower(surface)))
+    }
+
+    render_value_table <- function(title, data) {
+        paste0(
+            "<div class='mini-table-card'>",
+            "<div class='mini-table-title'>", html_escape(title), "</div>",
+            render_html_table(data),
+            "</div>"
+        )
+    }
+
+    render_metric_grid <- function(metrics) {
+        paste0(
+            "<div class='metric-grid'>",
+            paste(
+                purrr::map_chr(seq_len(nrow(metrics)), function(index) {
+                    paste0(
+                        "<div class='metric-pill'><span>", html_escape(metrics$Metric[[index]]), "</span><strong>",
+                        html_escape(metrics$Value[[index]]),
+                        "</strong></div>"
+                    )
+                }),
+                collapse = ""
+            ),
+            "</div>"
+        )
+    }
+
+    render_team_card <- function(row, prefix, fallback_name) {
+        team_name <- row_value(row, paste0(prefix, "_Team"), fallback_name)
+        seed <- row_value(row, paste0(prefix, "_Seed"), row_value(row, paste0(prefix, "_seed"), NA_integer_))
+        conf <- row_value(row, paste0(prefix, "_Conf"), row_value(row, paste0(prefix, "_conf"), "n/a"))
+        core_metrics <- tibble::tibble(
+            Metric = c("Barthag", "AdjOE", "AdjDE", "WAB"),
+            Value = c(
+                display_value(row_value(row, paste0(prefix, "_Barthag"), NA_real_), digits = 1L, scale_percent = TRUE),
+                display_value(row_value(row, paste0(prefix, "_AdjOE"), NA_real_), digits = 1L),
+                display_value(row_value(row, paste0(prefix, "_AdjDE"), NA_real_), digits = 1L),
+                display_value(row_value(row, paste0(prefix, "_WAB"), NA_real_), digits = 1L)
+            )
+        )
+        style_metrics <- tibble::tibble(
+            Metric = c("TOR", "TORD", "ORB", "DRB", "3P%", "3P%D", "Adj T."),
+            Value = c(
+                display_value(row_value(row, paste0(prefix, "_TOR"), NA_real_), digits = 3L),
+                display_value(row_value(row, paste0(prefix, "_TORD"), NA_real_), digits = 3L),
+                display_value(row_value(row, paste0(prefix, "_ORB"), NA_real_), digits = 3L),
+                display_value(row_value(row, paste0(prefix, "_DRB"), NA_real_), digits = 3L),
+                display_value(row_value(row, paste0(prefix, "_3P%"), NA_real_), digits = 3L),
+                display_value(row_value(row, paste0(prefix, "_3P%D"), NA_real_), digits = 3L),
+                display_value(row_value(row, paste0(prefix, "_Adj T."), NA_real_), digits = 1L)
+            )
+        )
+
+        paste0(
+            "<div class='team-card'>",
+            "<div class='team-card__head'>",
+            "<div>",
+            "<div class='team-card__eyebrow'>", html_escape(fallback_name), "</div>",
+            "<h4>", html_escape(team_name), "</h4>",
+            "</div>",
+            "<div class='team-card__seed'>Seed ", html_escape(display_value(seed, digits = 0L)), "</div>",
+            "</div>",
+            "<p class='team-card__meta'><strong>Conference:</strong> ", html_escape(conf), "</p>",
+            render_value_table("Core metrics", core_metrics),
+            render_value_table("Style metrics", style_metrics),
+            "</div>"
+        )
+    }
+
+    render_diff_table <- function(row) {
+        metric_rows <- tibble::tibble(
+            Feature = c("same_conf", "Seed", "Barthag logit", "AdjOE", "AdjDE", "WAB", "TOR", "TORD", "ORB", "DRB", "3P%", "3P%D", "Adj T."),
+            `Team A` = c(
+                display_value(row_value(row, "same_conf", NA_integer_), digits = 0L),
+                display_value(row_value(row, "teamA_Seed", NA_real_), digits = 0L),
+                display_value(row_value(row, "teamA_barthag_logit", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamA_AdjOE", NA_real_), digits = 1L),
+                display_value(row_value(row, "teamA_AdjDE", NA_real_), digits = 1L),
+                display_value(row_value(row, "teamA_WAB", NA_real_), digits = 1L),
+                display_value(row_value(row, "teamA_TOR", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamA_TORD", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamA_ORB", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamA_DRB", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamA_3P%", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamA_3P%D", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamA_Adj T.", NA_real_), digits = 1L)
+            ),
+            `Team B` = c(
+                display_value(row_value(row, "same_conf", NA_integer_), digits = 0L),
+                display_value(row_value(row, "teamB_Seed", NA_real_), digits = 0L),
+                display_value(row_value(row, "teamB_barthag_logit", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamB_AdjOE", NA_real_), digits = 1L),
+                display_value(row_value(row, "teamB_AdjDE", NA_real_), digits = 1L),
+                display_value(row_value(row, "teamB_WAB", NA_real_), digits = 1L),
+                display_value(row_value(row, "teamB_TOR", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamB_TORD", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamB_ORB", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamB_DRB", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamB_3P%", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamB_3P%D", NA_real_), digits = 3L),
+                display_value(row_value(row, "teamB_Adj T.", NA_real_), digits = 1L)
+            ),
+            Diff = c(
+                display_value(row_value(row, "same_conf", NA_integer_), digits = 0L),
+                display_value(row_value(row, "seed_diff", NA_real_), digits = 0L),
+                display_value(row_value(row, "barthag_logit_diff", NA_real_), digits = 3L),
+                display_value(row_value(row, "AdjOE_diff", NA_real_), digits = 1L),
+                display_value(row_value(row, "AdjDE_diff", NA_real_), digits = 1L),
+                display_value(row_value(row, "WAB_diff", NA_real_), digits = 1L),
+                display_value(row_value(row, "TOR_diff", NA_real_), digits = 3L),
+                display_value(row_value(row, "TORD_diff", NA_real_), digits = 3L),
+                display_value(row_value(row, "ORB_diff", NA_real_), digits = 3L),
+                display_value(row_value(row, "DRB_diff", NA_real_), digits = 3L),
+                display_value(row_value(row, "3P%_diff", NA_real_), digits = 3L),
+                display_value(row_value(row, "3P%D_diff", NA_real_), digits = 3L),
+                display_value(row_value(row, "Adj T._diff", NA_real_), digits = 1L)
+            )
+        )
+
+        render_value_table("Model-facing matchup diffs", metric_rows)
+    }
+
+    render_candidate_card <- function(summary_row) {
+        candidate_id <- row_value(summary_row, "candidate_id", 1L)
+        tiebreaker_points <- row_value(summary_row, "recommended_tiebreaker_points", NA_integer_)
+        tiebreaker_matchup <- row_value(summary_row, "championship_matchup", NA_character_)
+        tiebreaker_interval <- format_total_interval(
+            row_value(summary_row, "predicted_total_80_lower", NA_real_),
+            row_value(summary_row, "predicted_total_80_upper", NA_real_)
+        )
+        tiebreaker_median <- display_value(row_value(summary_row, "predicted_total_median", NA_real_), digits = 1L)
+        summary_note <- row_value(summary_row, "identity_text", "No summary available.")
+        change_copy <- sprintf(
+            "%s changed slot%s | late-round changes: %s",
+            display_value(row_value(summary_row, "diff_count", NA_real_), digits = 0L),
+            ifelse(safe_numeric(row_value(summary_row, "diff_count", 0L), default = 0) == 1, "", "s"),
+            display_value(row_value(summary_row, "late_round_diff_count", NA_real_), digits = 0L)
+        )
+
+        paste0(
+            "<article class='candidate-card' id='candidate-summary-", candidate_id, "'>",
+            "<div class='candidate-card__head'>",
+            "<div>",
+            "<div class='candidate-card__eyebrow'>Candidate ", candidate_id, " ", html_escape(row_value(summary_row, "candidate_type", "unknown")), "</div>",
+            "<h3>", html_escape(row_value(summary_row, "champion", "n/a")), "</h3>",
+            "</div>",
+            "<div class='candidate-card__mini'>", html_escape(display_value(row_value(summary_row, "bracket_log_probability", NA_real_), digits = 3L)), "</div>",
+            "</div>",
+            "<p class='candidate-card__subline'><strong>Final Four:</strong> ", html_escape(row_value(summary_row, "final_four", "n/a")), "</p>",
+            "<p class='candidate-card__subline'><strong>Identity:</strong> ", html_escape(summary_note), "</p>",
+            "<div class='candidate-card__facts'>",
+            "<div><span>Bracket log probability</span><strong>", html_escape(display_value(row_value(summary_row, "bracket_log_probability", NA_real_), digits = 3L)), "</strong></div>",
+            "<div><span>Mean picked-game probability</span><strong>", html_escape(display_value(row_value(summary_row, "mean_picked_game_probability", NA_real_), digits = 3L)), "</strong></div>",
+            "<div><span>Championship tiebreaker</span><strong>", html_escape(display_value(tiebreaker_points, digits = 0L)), "</strong></div>",
+            "<div><span>Title-game total</span><strong>", html_escape(tiebreaker_median), " <span class='muted'>(", html_escape(tiebreaker_interval), ")</span></strong></div>",
+            "<div><span>Change count</span><strong>", html_escape(change_copy), "</strong></div>",
+            "</div>",
+            if (!is.na(tiebreaker_points)) {
+                paste0(
+                    "<div class='candidate-card__tiebreaker'>",
+                    "<p><strong>Projected title game:</strong> ", html_escape(tiebreaker_matchup), "</p>",
+                    "</div>"
+                )
+            } else {
+                "<div class='candidate-card__tiebreaker'><p class='empty-state'>Championship total-points prediction was not supplied for this run.</p></div>"
+            },
+            "<div class='candidate-card__links'>",
+            "<a href='#candidate-path-", candidate_id, "'>Full path</a>",
+            "<a href='#evidence'>Evidence</a>",
+            "<a href='#delta'>Delta</a>",
+            "</div>",
+            "</article>"
+        )
+    }
+
+    render_delta_round <- function(round_name, round_rows) {
+        if (nrow(round_rows) == 0) {
+            return("")
+        }
+
+        headers <- c("Round", "Region", "Slot", "Candidate 1 pick", "Candidate 2 pick", "Posterior favorite", "Favorite win probability", "Confidence tier", "Why this swap exists", "Evidence")
+        header_html <- paste(sprintf("<th>%s</th>", html_escape(headers)), collapse = "")
+        row_html <- purrr::map_chr(seq_len(nrow(round_rows)), function(index) {
+            row <- round_rows[index, , drop = FALSE]
+            evidence_button <- paste0(
+                "<button type='button' class='jump-button' data-open-evidence='", html_escape(row$evidence_id[[1]]), "'>Open evidence</button>"
+            )
+            cells <- c(
+                round_name,
+                row$region[[1]],
+                row$matchup_slot[[1]],
+                row$candidate_1_pick[[1]],
+                row$candidate_2_pick[[1]],
+                row$posterior_favorite[[1]],
+                sprintf("%.1f%%", 100 * safe_numeric(row$win_prob_favorite[[1]], default = NA_real_)),
+                row$confidence_tier[[1]],
+                row$why_swap_exists[[1]],
+                evidence_button
+            )
+            cell_html <- paste(sprintf("<td>%s</td>", html_escape(cells)), collapse = "")
+            sprintf("<tr>%s</tr>", cell_html)
+        })
+
+        paste0(
+            "<section class='delta-round'>",
+            "<h3>", html_escape(round_name), "</h3>",
+            "<div class='table-shell'>",
+            "<table class='dashboard-table'>",
+            "<thead><tr>", header_html, "</tr></thead>",
+            "<tbody>", paste(row_html, collapse = "\n"), "</tbody>",
+            "</table>",
+            "</div>",
+            "</section>"
+        )
+    }
+
+    render_watchlist_card <- function(row, hidden = FALSE) {
+        surface <- row_value(row, "reason_surface", "Bracket-changing toss-ups")
+        surface_attr <- html_escape(surface)
+        hidden_class <- if (hidden) " collapsed-row" else ""
+        round_name <- row_value(row, "round", "n/a")
+        matchup_label <- row_value(row, "matchup_label", sprintf("%s vs %s", row_value(row, "teamA", "n/a"), row_value(row, "teamB", "n/a")))
+        seeds_label <- sprintf("%s vs %s", display_value(row_value(row, "teamA_seed", NA_real_), digits = 0L), display_value(row_value(row, "teamB_seed", NA_real_), digits = 0L))
+        why <- row_value(row, "why_this_matters", "No summary available.")
+        usage <- row_value(row, "candidate_usage", "n/a")
+        late_round <- isTRUE(row_value(row, "late_round_only", FALSE))
+
+        paste0(
+            "<article class='watchlist-card", hidden_class, "' data-surface='", surface_attr, "' data-late-round='", ifelse(late_round, "true", "false"), "' data-evidence-id='", html_escape(row_value(row, "evidence_id", "")), "'>",
+            "<div class='watchlist-card__head'>",
+            "<div>",
+            "<div class='surface-pill'>", surface_attr, "</div>",
+            "<h3>", html_escape(matchup_label), "</h3>",
+            "<p class='watchlist-card__meta'>", html_escape(round_name), " | ", html_escape(row_value(row, "region", "n/a")), " | Seeds ", html_escape(seeds_label), "</p>",
+            "</div>",
+            "<button type='button' class='jump-button' data-open-evidence='", html_escape(row_value(row, "evidence_id", "")), "'>Open evidence</button>",
+            "</div>",
+            "<p><strong>Why this matters:</strong> ", html_escape(why), "</p>",
+            "<p><strong>Candidate usage:</strong> ", html_escape(usage), "</p>",
+            if (late_round) "<p class='watchlist-card__note'>Late-round only row.</p>" else "",
+            "</article>"
+        )
+    }
+
+    render_evidence_detail <- function(row) {
+        surface <- row_value(row, "reason_surface", "Bracket-changing toss-ups")
+        latest_note <- row_value(row, "downstream_implication_text", NA_character_)
+        detail_id <- row_value(row, "evidence_id", "")
+        round_name <- row_value(row, "round", "n/a")
+        matchup_label <- row_value(row, "matchup_label", sprintf("%s vs %s", row_value(row, "teamA", "n/a"), row_value(row, "teamB", "n/a")))
+        team_a_name <- row_value(row, "teamA", row_value(row, "teamA_Team", "n/a"))
+        team_b_name <- row_value(row, "teamB", row_value(row, "teamB_Team", "n/a"))
+        row_context <- matchup_context_rows %>%
+            dplyr::filter(slot_key == row_value(row, "slot_key", ""))
+        if (nrow(row_context) == 0) {
+            row_context <- row
+        } else {
+            row_context <- row_context[1, , drop = FALSE]
+        }
+
+        usage_table <- tibble::tibble(
+            Candidate = c("Candidate 1", "Candidate 2"),
+            Pick = c(row_value(row, "candidate_1_pick", "n/a"), row_value(row, "candidate_2_pick", "n/a")),
+            Usage = c(
+                if (isTRUE(row_value(row, "candidate_1_upset", FALSE))) "Underdog" else "Favorite",
+                if (isTRUE(row_value(row, "candidate_2_upset", FALSE))) "Underdog" else "Favorite"
+            )
+        )
+
+        favorite_prob <- display_value(row_value(row, "win_prob_favorite", NA_real_), digits = 1L, scale_percent = TRUE)
+        favorite_interval <- format_probability_interval(row_value(row, "ci_lower", NA_real_), row_value(row, "ci_upper", NA_real_))
+        underdog_prob <- display_value(row_value(row, "win_prob_underdog", NA_real_), digits = 1L, scale_percent = TRUE)
+        leverage <- display_value(row_value(row, "upset_leverage", NA_real_), digits = 3L)
+
+        paste0(
+            "<details class='evidence-panel", "' id='", html_escape(detail_id), "' data-surface='", html_escape(surface), "' data-late-round='", ifelse(isTRUE(row_value(row, "late_round_only", FALSE)), "true", "false"), "'>",
+            "<summary>",
+            "<div class='evidence-panel__summary'>",
+            "<span class='surface-pill'>", html_escape(surface), "</span>",
+            "<strong>", html_escape(matchup_label), "</strong>",
+            "<span>", html_escape(round_name), " | ", html_escape(row_value(row, "region", "n/a")), " | Seeds ", html_escape(sprintf("%s vs %s", display_value(row_value(row, "teamA_seed", NA_real_), digits = 0L), display_value(row_value(row, "teamB_seed", NA_real_), digits = 0L))), "</span>",
+            "</div>",
+            "</summary>",
+            "<div class='evidence-panel__body'>",
+            "<p class='evidence-panel__lede'><strong>Why this surfaced:</strong> ", html_escape(row_value(row, "why_this_matters", "No summary available.")), "</p>",
+            if (!is.na(latest_note)) {
+                paste0("<p class='evidence-panel__implication'><strong>Downstream implication:</strong> ", html_escape(latest_note), "</p>")
+            } else {
+                "<p class='evidence-panel__implication muted'>No downstream implication text is attached because this row does not change the path.</p>"
+            },
+            "<div class='evidence-summary-grid'>",
+            "<div class='summary-chip'><span>Favorite probability</span><strong>", html_escape(favorite_prob), "</strong><small>", html_escape(favorite_interval), "</small></div>",
+            "<div class='summary-chip'><span>Underdog probability</span><strong>", html_escape(underdog_prob), "</strong><small>Leverage ", html_escape(leverage), "</small></div>",
+            "<div class='summary-chip'><span>Candidate usage</span><strong>", html_escape(row_value(row, "candidate_usage", "n/a")), "</strong><small>", html_escape(row_value(row, "difference_mode", "n/a")), "</small></div>",
+            "</div>",
+            "<div class='team-grid'>",
+            render_team_card(row_context, "teamA", team_a_name),
+            render_team_card(row_context, "teamB", team_b_name),
+            "</div>",
+            render_diff_table(row_context),
+            render_value_table("Candidate usage", usage_table),
+            "<p class='evidence-panel__note'>This is the matchup evidence the model saw, not a decomposition of why the model caused the pick.</p>",
+            "</div>",
+            "</details>"
+        )
+    }
+
+    round_candidates <- lapply(round_order, function(round_name) {
+        if (nrow(candidate_delta_rows) == 0) {
+            return(NULL)
+        }
+        candidate_delta_rows %>% dplyr::filter(round == round_name)
+    })
+    names(round_candidates) <- round_order
+
+    candidate_delta_html <- if (nrow(candidate_delta_rows) == 0) {
+        "<p class='empty-state'>Candidate 1 and Candidate 2 currently match on every slot.</p>"
+    } else {
+        paste(
+            purrr::map_chr(round_order, function(round_name) {
+                round_rows <- candidate_delta_rows %>% dplyr::filter(round == round_name)
+                render_delta_round(round_name, round_rows)
+            })[vapply(round_order, function(round_name) nrow(candidate_delta_rows %>% dplyr::filter(round == round_name)) > 0, logical(1))],
+            collapse = "\n"
+        )
+    }
+
+    watchlist_summary_cards <- watchlist_rows %>%
+        dplyr::count(reason_surface, name = "n") %>%
+        dplyr::right_join(
+            tibble::tibble(reason_surface = c("Bracket-changing toss-ups", "Upset pivots", "Fragile favorites")),
+            by = "reason_surface"
+        ) %>%
+        dplyr::mutate(n = dplyr::coalesce(n, 0L))
+    get_watchlist_count <- function(surface_name) {
+        value <- watchlist_summary_cards$n[watchlist_summary_cards$reason_surface == surface_name]
+        if (length(value) == 0) 0L else value[[1]]
+    }
+
+    watchlist_cards <- if (nrow(watchlist_rows) == 0) {
+        "<p class='empty-state'>No rows met the current watchlist rules.</p>"
+    } else {
+        paste(
+            purrr::map_chr(seq_len(nrow(watchlist_rows)), function(index) {
+                render_watchlist_card(watchlist_rows[index, , drop = FALSE], hidden = index > 5L)
+            }),
+            collapse = "\n"
+        )
+    }
+
+    evidence_panels <- if (nrow(watchlist_rows) == 0) {
+        "<p class='empty-state'>No evidence drawers to show yet.</p>"
+    } else {
+        paste(
+            purrr::map_chr(seq_len(nrow(watchlist_rows)), function(index) {
+                render_evidence_detail(watchlist_rows[index, , drop = FALSE])
+            }),
+            collapse = "\n"
+        )
+    }
+
+    candidate_paths_html <- paste(
+        purrr::map_chr(candidates, function(candidate) {
+            candidate_id_value <- candidate$candidate_id %||% 1L
+            summary_row <- candidate_summary_rows %>% dplyr::filter(candidate_id == candidate_id_value)
+            if (nrow(summary_row) == 0) {
+                summary_row <- tibble::tibble(
+                    candidate_id = candidate_id_value,
+                    candidate_type = candidate$type %||% "unknown",
+                    champion = candidate$champion %||% "n/a",
+                    final_four = candidate$final_four %||% "n/a"
+                )
+            }
+            path_view <- if (candidate_id_value == 1L) {
+                build_candidate_sequence_view(decision_sheet, "matchup_label", "candidate_1_pick")
+            } else {
+                build_candidate_sequence_view(decision_sheet, "candidate_2_matchup", "candidate_2_pick")
+            }
+            row_classes <- inspection_row_class(path_view$inspection_level)
+            path_view <- path_view %>% dplyr::select(-inspection_level)
+            paste0(
+                "<details class='path-panel' id='candidate-path-", candidate_id_value, "'>",
+                "<summary><strong>Candidate ", candidate_id_value, " full path</strong></summary>",
+                "<p class='path-panel__lede'>Reference material only. Open this when you want the bracket-ordered sequence after you have decided what to enter.</p>",
+                render_html_table(path_view, row_classes = row_classes),
+                "</details>"
+            )
+        }),
+        collapse = "\n"
+    )
+
+    appendix_links <- paste0(
+        "<div class='appendix-links'>",
+        "<a href='technical_dashboard.html'>Open technical_dashboard.html</a>",
+        "<a href='model_comparison_dashboard.html'>Open model_comparison_dashboard.html</a>",
+        "</div>"
+    )
+
+    appendix_panel <- paste0(
+        "<section class='section' id='technical-appendix'>",
+        "<h2>Technical Appendix</h2>",
+        "<p class='section-note'>Use this only after you have the bracket entries and matchup evidence in hand. The technical dashboard stays available for calibration, diagnostics, and engine comparison.</p>",
+        appendix_links,
+        if (!is.null(model_comparison) && length(model_comparison) > 0) render_model_comparison_link_html(model_comparison) else "",
+        "</section>"
+    )
+
+    candidate_cards_html <- if (nrow(candidate_summary_rows) == 0) {
+        paste(
+            purrr::map_chr(seq_along(candidates), function(index) {
+                candidate <- candidates[[index]]
+                candidate_summary <- tibble::tibble(
+                    candidate_id = candidate$candidate_id %||% index,
+                    candidate_type = candidate$type %||% "unknown",
+                    champion = candidate$champion %||% "n/a",
+                    final_four = candidate$final_four %||% "n/a",
+                    bracket_log_probability = candidate$bracket_log_prob %||% NA_real_,
+                    mean_picked_game_probability = candidate$mean_game_prob %||% NA_real_,
+                    diff_count = if (nrow(candidate_delta_rows) > 0) nrow(candidate_delta_rows) else 0L,
+                    late_round_diff_count = if (nrow(candidate_delta_rows) > 0) sum(candidate_delta_rows$round %in% c("Sweet 16", "Elite 8", "Final Four", "Championship"), na.rm = TRUE) else 0L,
+                    identity_text = candidate$diff_summary %||% "Bracket summary unavailable."
+                )
+                render_candidate_card(candidate_summary)
+            }),
+            collapse = "\n"
+        )
+    } else {
+        paste(
+            purrr::map_chr(seq_len(nrow(candidate_summary_rows)), function(index) {
+                render_candidate_card(candidate_summary_rows[index, , drop = FALSE])
+            }),
+            collapse = "\n"
+        )
+    }
+
+    watchlist_filter_toolbar <- paste0(
+        "<div class='filter-toolbar' role='group' aria-label='Watchlist filters'>",
+        "<button type='button' class='filter-chip is-active' data-surface-filter='All'>All</button>",
+        "<button type='button' class='filter-chip' data-surface-filter='Bracket-changing toss-ups'>Bracket-changing</button>",
+        "<button type='button' class='filter-chip' data-surface-filter='Upset pivots'>Upset pivots</button>",
+        "<button type='button' class='filter-chip' data-surface-filter='Fragile favorites'>Fragile favorites</button>",
+        "<button type='button' class='filter-chip' data-surface-filter='Late-round only'>Late-round only</button>",
+        "</div>"
+    )
+
+    watchlist_shell <- paste0(
+        "<div class='watchlist-shell' data-shell='watchlist'>",
+        watchlist_cards,
+        "</div>",
+        "<div class='show-more-row'>",
+        "<button type='button' class='show-more-button' data-shell-toggle='watchlist'>Show more</button>",
+        "</div>"
+    )
+
+    evidence_shell <- paste0(
+        "<div class='evidence-shell'>",
+        evidence_panels,
+        "</div>"
+    )
+
+    build_note <- if (!is.null(total_points_predictions) && nrow(candidate_summary_rows) > 0) {
+        "Championship tiebreakers are included in the candidate cards. If you want the exact total-point distributions, open the technical appendix."
+    } else {
+        "Championship tiebreakers are not available in this run, so the candidate cards show only bracket-path context."
+    }
+
+    top_links <- paste0(
+        "<nav class='jump-nav' aria-label='Dashboard sections'>",
+        "<a href='#build'>Build</a>",
+        "<a href='#delta'>Delta</a>",
+        "<a href='#watchlist'>Watchlist</a>",
+        "<a href='#evidence'>Evidence</a>",
+        "<a href='#paths'>Paths</a>",
+        "</nav>"
+    )
+
+    appendix_callout <- paste0(
+        "<div class='diagnostic-callout'>",
+        "<strong>Need more diagnostics?</strong>",
+        "<p>The technical dashboard keeps calibration, backtest, and engine diagnostics separate from the bracket workflow.</p>",
+        "<p><a href='technical_dashboard.html'>Open technical_dashboard.html</a> <span class='muted'>|</span> <a href='model_comparison_dashboard.html'>Open model_comparison_dashboard.html</a></p>",
+        "</div>"
+    )
+
+    page_style <- paste0(
+        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(180deg,#f7f4ee 0%,#faf8f2 40%,#f5f7fb 100%);color:#111827;margin:0;line-height:1.45;}",
+        "a{color:#1d4ed8;text-decoration:none;} a:hover{text-decoration:underline;}",
+        ".page{max-width:1320px;margin:0 auto;padding:24px 22px 48px;}",
+        ".hero{background:rgba(255,255,255,0.78);backdrop-filter:blur(8px);border:1px solid #e7e5e4;border-radius:24px;padding:22px 22px 18px;box-shadow:0 18px 40px rgba(15,23,42,0.06);margin-bottom:18px;}",
+        ".eyebrow{text-transform:uppercase;letter-spacing:0.12em;font-size:11px;color:#6b7280;margin-bottom:8px;}",
+        "h1,h2,h3,h4{margin:0 0 8px 0;line-height:1.1;}",
+        "h1{font-size:34px;} h2{font-size:24px;margin-top:4px;} h3{font-size:18px;} h4{font-size:16px;}",
+        ".lede{max-width:940px;color:#374151;margin:0 0 14px 0;font-size:16px;}",
+        ".jump-nav{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;}",
+        ".jump-nav a,.filter-chip,.show-more-button,.jump-button{border:1px solid #d6d3d1;background:#fff;border-radius:999px;padding:9px 14px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}",
+        ".jump-nav a{background:#101827;color:#fff;border-color:#101827;}",
+        ".section{background:rgba(255,255,255,0.84);border:1px solid #e7e5e4;border-radius:22px;padding:20px;box-shadow:0 12px 30px rgba(15,23,42,0.05);margin:18px 0;}",
+        ".section-note{color:#5b6472;max-width:900px;margin:0 0 14px 0;}",
+        ".section-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start;}",
+        ".candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout{background:#fff;border:1px solid #e7e5e4;border-radius:18px;padding:16px;box-shadow:0 2px 10px rgba(15,23,42,0.04);}",
+        ".candidate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;}",
+        ".candidate-card__head,.watchlist-card__head,.evidence-panel__summary{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;}",
+        ".candidate-card__eyebrow,.team-card__eyebrow,.surface-pill{text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#64748b;font-weight:700;}",
+        ".candidate-card__mini{font-size:20px;font-weight:800;color:#0f172a;}",
+        ".candidate-card__subline{margin:6px 0;color:#334155;}",
+        ".candidate-card__facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0;}",
+        ".candidate-card__facts div,.summary-chip,.metric-pill{border:1px solid #e2e8f0;border-radius:14px;padding:10px 12px;background:#f8fafc;}",
+        ".candidate-card__facts span,.summary-chip span,.metric-pill span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px;}",
+        ".candidate-card__facts strong,.summary-chip strong,.metric-pill strong{display:block;font-size:14px;color:#0f172a;}",
+        ".candidate-card__links{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}",
+        ".candidate-card__tiebreaker{margin-top:12px;padding-top:12px;border-top:1px dashed #e2e8f0;}",
+        ".summary-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:12px 0 0;}",
+        ".summary-strip .summary-chip{box-shadow:none;}",
+        ".delta-round{margin-top:16px;}",
+        ".table-shell{overflow:auto;border:1px solid #e7e5e4;border-radius:16px;background:#fff;}",
+        ".dashboard-table{width:100%;border-collapse:collapse;font-size:13px;min-width:960px;}",
+        ".dashboard-table th,.dashboard-table td{border-bottom:1px solid #eef2f7;padding:10px 12px;vertical-align:top;text-align:left;}",
+        ".dashboard-table th{background:#f8fafc;position:sticky;top:0;z-index:1;}",
+        ".dashboard-table tr:last-child td{border-bottom:none;}",
+        ".watchlist-toolbar,.filter-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px;}",
+        ".filter-chip.is-active{background:#101827;color:#fff;border-color:#101827;}",
+        ".watchlist-shell{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start;}",
+        ".watchlist-card p{margin:8px 0 0;}",
+        ".watchlist-card__meta{color:#64748b;font-size:13px;}",
+        ".collapsed-row{display:none;}",
+        ".watchlist-shell:not(.is-expanded) .collapsed-row{display:none;}",
+        ".show-more-row{margin-top:12px;}",
+        ".show-more-button{background:#f8fafc;}",
+        ".watchlist-card.is-hidden-by-filter,.evidence-panel.is-hidden-by-filter{display:none !important;}",
+        ".evidence-shell{display:grid;gap:14px;}",
+        ".evidence-panel{padding:0;overflow:hidden;}",
+        ".evidence-panel > summary{list-style:none;cursor:pointer;padding:16px;}",
+        ".evidence-panel > summary::-webkit-details-marker{display:none;}",
+        ".evidence-panel__body{padding:0 16px 16px;}",
+        ".evidence-panel__lede,.evidence-panel__implication,.evidence-panel__note{margin:12px 0 0;color:#334155;}",
+        ".evidence-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:14px 0;}",
+        ".summary-chip small{display:block;color:#64748b;margin-top:4px;}",
+        ".team-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin:14px 0;}",
+        ".team-card{border:1px solid #e7e5e4;border-radius:16px;padding:14px;background:#fffaf4;}",
+        ".team-card__head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}",
+        ".team-card__seed{font-weight:800;color:#0f172a;background:#fff;border:1px solid #e7e5e4;border-radius:999px;padding:6px 10px;}",
+        ".team-card__meta{margin:8px 0 12px;color:#374151;}",
+        ".mini-table-title{text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;}",
+        ".mini-table-card{margin-top:12px;}",
+        ".mini-table-card .dashboard-table{min-width:0;}",
+        ".metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}",
+        ".metric-pill{display:flex;flex-direction:column;gap:2px;}",
+        ".path-panel{margin-top:14px;}",
+        ".path-panel > summary{cursor:pointer;font-weight:700;}",
+        ".path-panel__lede{color:#64748b;margin:8px 0 12px;}",
+        ".appendix-links{display:flex;gap:12px;flex-wrap:wrap;}",
+        ".diagnostic-callout{margin-top:16px;}",
+        ".diagnostic-callout p{margin:6px 0 0;}",
+        ".muted{color:#64748b;}",
+        ".empty-state{color:#64748b;font-style:italic;}",
+        ".status-panel strong{display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;}",
+        ".status-simulated{background:#fff6d8;border-color:#d97706;color:#7c2d12;}",
+        ".status-final{background:#ecfdf3;border-color:#16a34a;color:#14532d;}",
+        ".status-unknown{background:#eef2ff;border-color:#6366f1;color:#312e81;}",
+        ".surface-pill{display:inline-flex;align-items:center;gap:8px;padding:4px 9px;border-radius:999px;background:#f8fafc;border:1px solid #e2e8f0;}",
+        ".jump-button{background:#101827;color:#fff;border-color:#101827;}",
+        "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.dashboard-table{min-width:820px;}.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid{grid-template-columns:1fr;}}"
+    )
+
+    script <- paste0(
+        "<script>",
+        "(function(){",
+        "var filterButtons=Array.from(document.querySelectorAll('[data-surface-filter]'));",
+        "var filterTargets=Array.from(document.querySelectorAll('[data-surface]'));",
+        "var shells=Array.from(document.querySelectorAll('[data-shell-toggle]'));",
+        "function setFilter(value){",
+        "filterButtons.forEach(function(button){var active=button.getAttribute('data-surface-filter')===value;button.classList.toggle('is-active', active);});",
+        "filterTargets.forEach(function(node){",
+        "var surface=node.getAttribute('data-surface')||'';",
+        "var lateRound=node.getAttribute('data-late-round')==='true';",
+        "var show=value==='All' || (value==='Late-round only' && lateRound) || surface===value;",
+        "node.classList.toggle('is-hidden-by-filter', !show);",
+        "node.hidden=!show;",
+        "if(show){node.hidden=false;}",
+        "});",
+        "}",
+        "filterButtons.forEach(function(button){button.addEventListener('click', function(){setFilter(button.getAttribute('data-surface-filter'));});});",
+        "shells.forEach(function(button){button.addEventListener('click', function(){var shell=document.querySelector('[data-shell=\"'+button.getAttribute('data-shell-toggle')+'\"]');if(shell){shell.classList.toggle('is-expanded');button.textContent=shell.classList.contains('is-expanded') ? 'Show less' : 'Show more';}});});",
+        "document.addEventListener('click', function(event){",
+        "var target=event.target.closest('[data-open-evidence]');",
+        "if(!target){return;}",
+        "var id=target.getAttribute('data-open-evidence');",
+        "if(!id){return;}",
+        "setFilter('All');",
+        "var panel=document.getElementById(id);",
+        "if(panel){panel.open=true;panel.scrollIntoView({behavior:'smooth', block:'start'});}",
+        "});",
+        "setFilter('All');",
+        "})();",
+        "</script>"
+    )
+
+    candidate_path_blocks <- if (nchar(candidate_paths_html) > 0) candidate_paths_html else "<p class='empty-state'>Candidate paths were not supplied.</p>"
+
+    paste0(
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        "<title>mmBayes Bracket Dashboard</title>",
+        "<style>", page_style, "</style>",
+        "</head><body>",
+        "<div class='page'>",
+        "<header class='hero'>",
+        "<div class='eyebrow'>mmBayes Bracket Workspace</div>",
+        "<h1>Bracket-building decision workspace</h1>",
+        "<p class='lede'>Bracket year ", html_escape(bracket_year), ". Start with Candidate 1 and Candidate 2, then use the delta rows and evidence drawers to decide what actually goes on paper. The technical dashboard stays available as secondary diagnostics.</p>",
+        top_links,
+        "</header>",
+        status_panel,
+        "<section class='section' id='build'>",
+        "<h2>Build Your Entries</h2>",
+        "<p class='section-note'>Candidate 1 is the baseline entry. Candidate 2 is the alternate bracket. Use the jump links on each card to move straight to the path reference or matchup evidence.</p>",
+        "<div class='candidate-grid'>",
+        candidate_cards_html,
+        "</div>",
+        "<div class='summary-strip'>",
+        "<div class='summary-chip'><span>Candidate 2 delta rows</span><strong>", html_escape(display_value(nrow(candidate_delta_rows), digits = 0L)), "</strong></div>",
+        "<div class='summary-chip'><span>Bracket-changing rows</span><strong>", html_escape(display_value(get_watchlist_count("Bracket-changing toss-ups"), digits = 0L)), "</strong></div>",
+        "<div class='summary-chip'><span>Upset pivots</span><strong>", html_escape(display_value(get_watchlist_count("Upset pivots"), digits = 0L)), "</strong></div>",
+        "<div class='summary-chip'><span>Fragile favorites</span><strong>", html_escape(display_value(get_watchlist_count("Fragile favorites"), digits = 0L)), "</strong></div>",
+        "</div>",
+        "</section>",
+        "<section class='section' id='delta'>",
+        "<h2>Candidate 2 Delta From Candidate 1</h2>",
+        "<p class='section-note'>Candidate 2 is the same bracket as Candidate 1 except for the rows below. The rows are ordered by bracket fill order, not by score.</p>",
+        candidate_delta_html,
+        "</section>",
+        "<section class='section' id='watchlist'>",
+        "<h2>Think Harder About These Matchups</h2>",
+        "<p class='section-note'>This watchlist only surfaces rows that matter for human review: bracket-changing toss-ups, high-payoff upset pivots, and fragile favorites with enough score to deserve another look.</p>",
+        watchlist_filter_toolbar,
+        render_confidence_legend_html(),
+        watchlist_shell,
+        appendix_callout,
+        "</section>",
+        "<section class='section' id='evidence'>",
+        "<h2>Matchup Evidence</h2>",
+        "<p class='section-note'>Each drawer shows the matchup evidence the model saw. It is not a causal decomposition. Use the jump buttons in the delta and watchlist sections to open a specific drawer.</p>",
+        evidence_shell,
+        "</section>",
+        "<section class='section' id='paths'>",
+        "<h2>Full Candidate Paths</h2>",
+        "<p class='section-note'>Reference material only. These panels keep the full bracket-ordered sequence for each candidate behind collapsible details so the landing page stays focused on the entry workflow.</p>",
+        candidate_path_blocks,
+        "</section>",
+        appendix_panel,
+        if (!is.null(model_comparison) && length(model_comparison) > 0) render_model_comparison_link_html(model_comparison) else "",
+        if (!is.null(quality_backtest) && model_quality_has_backtest(quality_backtest)) paste0("<div class='section'><p class='section-note'>Calibration and backtest details live on the technical dashboard.</p><p class='muted'>", html_escape(quality_source_label), "</p></div>") else "",
+        "</div>",
+        script,
         "</body></html>"
     )
 }

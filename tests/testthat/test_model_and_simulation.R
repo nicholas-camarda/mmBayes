@@ -314,6 +314,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         bracket_year = 2026L,
         candidates = candidates,
         output_dir = output_dir,
+        current_teams = loaded$current_teams,
         backtest = NULL,
         model_overview = model_overview,
         quality_signature = quality_signature,
@@ -326,6 +327,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(file.exists(decision_outputs$championship_tiebreaker_summary))
     expect_true(file.exists(decision_outputs$championship_tiebreaker_distribution))
     expect_true(file.exists(decision_outputs$matchup_total_points))
+    expect_true(file.exists(decision_outputs$matchup_context))
     expect_true(file.exists(decision_outputs$technical_dashboard))
     expect_match(paste(readLines(decision_outputs$technical_dashboard, warn = FALSE), collapse = "\n"), "Live Tournament Performance")
     expect_true(file.exists(file.path(output_dir, "model_quality", "latest_model_quality.rds")))
@@ -338,21 +340,21 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         bracket_year = 2026L,
         decision_sheet = decision_sheet,
         candidates = candidates,
+        current_teams = loaded$current_teams,
         backtest = NULL,
         play_in_resolution = play_in_resolution,
         total_points_predictions = total_predictions,
         model_quality_context = resolved_quality,
         model_overview = model_overview
     )
-    expect_match(dashboard_html, "Stable favorite")
-    expect_match(dashboard_html, "Clear edge")
-    expect_match(dashboard_html, "Near coin flip")
-    expect_match(dashboard_html, "Wide interval")
-    expect_match(dashboard_html, "<th>winner</th>")
-    expect_match(dashboard_html, "<th>winner</th><th>matchup</th>")
-    expect_match(dashboard_html, "Championship Tiebreaker")
-    expect_match(dashboard_html, "Championship Tiebreaker Distribution")
-    expect_match(dashboard_html, "Inspect now")
+    expect_match(dashboard_html, "Build Your Entries")
+    expect_match(dashboard_html, "Candidate 2 Delta From Candidate 1")
+    expect_match(dashboard_html, "Think Harder About These Matchups")
+    expect_match(dashboard_html, "Matchup Evidence")
+    expect_match(dashboard_html, "Full Candidate Paths")
+    expect_match(dashboard_html, "Technical Appendix")
+    expect_match(dashboard_html, "Need more diagnostics?")
+    expect_match(dashboard_html, "Open technical_dashboard.html")
     if (isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
         expect_match(dashboard_html, "Status: Simulated bracket path")
         expect_match(dashboard_html, "generated brackets assume simulated First Four winners")
@@ -360,29 +362,27 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         expect_match(dashboard_html, "Status: Final result")
         expect_match(dashboard_html, "First Four slots are resolved")
     }
-    safe_pos <- regexpr("Safe Bracket #1 Sequence", dashboard_html, fixed = TRUE)[[1]]
-    alternate_pos <- regexpr("Bracket #2 Sequence", dashboard_html, fixed = TRUE)[[1]]
-    expect_true(safe_pos > 0)
-    expect_true(alternate_pos > safe_pos)
-
-    safe_chunk <- substr(dashboard_html, safe_pos, alternate_pos - 1L)
-    firstfour_pos <- regexpr("First Four", safe_chunk, fixed = TRUE)[[1]]
-    round64_pos <- regexpr("Round of 64", safe_chunk, fixed = TRUE)[[1]]
-    round32_pos <- regexpr("Round of 32", safe_chunk, fixed = TRUE)[[1]]
-    sweet16_pos <- regexpr("Sweet 16", safe_chunk, fixed = TRUE)[[1]]
-    elite8_pos <- regexpr("Elite 8", safe_chunk, fixed = TRUE)[[1]]
-    finalfour_pos <- regexpr("Final Four", safe_chunk, fixed = TRUE)[[1]]
-    championship_pos <- regexpr("Championship", safe_chunk, fixed = TRUE)[[1]]
-
-    expect_true(firstfour_pos > 0)
-    expect_true(firstfour_pos < round64_pos)
-    expect_true(round64_pos < round32_pos)
-    expect_true(round32_pos < sweet16_pos)
-    expect_true(sweet16_pos < elite8_pos)
-    expect_true(elite8_pos < finalfour_pos)
-    expect_true(finalfour_pos < championship_pos)
-    expect_match(dashboard_html, "inspection-primary")
-    expect_match(dashboard_html, "inspection-secondary")
+    build_pos <- regexpr("Build Your Entries", dashboard_html, fixed = TRUE)[[1]]
+    delta_pos <- regexpr("Candidate 2 Delta From Candidate 1", dashboard_html, fixed = TRUE)[[1]]
+    watch_pos <- regexpr("Think Harder About These Matchups", dashboard_html, fixed = TRUE)[[1]]
+    evidence_pos <- regexpr("Matchup Evidence", dashboard_html, fixed = TRUE)[[1]]
+    paths_pos <- regexpr("Full Candidate Paths", dashboard_html, fixed = TRUE)[[1]]
+    expect_true(build_pos > 0)
+    expect_true(build_pos < delta_pos)
+    expect_true(delta_pos < watch_pos)
+    expect_true(watch_pos < evidence_pos)
+    expect_true(evidence_pos < paths_pos)
+    expect_match(dashboard_html, "Bracket-changing toss-ups")
+    expect_match(dashboard_html, "Upset pivots")
+    expect_match(dashboard_html, "Fragile favorites")
+    expect_match(dashboard_html, "data-open-evidence")
+    expect_match(dashboard_html, "Candidate 1 full path")
+    expect_match(dashboard_html, "Candidate 2 full path")
+    expect_match(dashboard_html, "Need more diagnostics?")
+    expect_match(dashboard_html, "Core metrics")
+    expect_match(dashboard_html, "Model-facing matchup diffs")
+    expect_match(dashboard_html, "Favorite probability")
+    expect_match(dashboard_html, "Candidate usage")
 
     technical_html <- create_technical_dashboard_html(
         bracket_year = 2026L,
@@ -650,6 +650,133 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(technical_html_without_optional, "Championship Tiebreaker Comparison")
 })
 
+test_that("bracket dashboard context builder enriches matchup evidence deterministically", {
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    fixture_paths <- write_fixture_data_files(team_file, results_file)
+
+    config <- default_project_config()
+    config$data$team_features_path <- fixture_paths$team_path
+    config$data$game_results_path <- fixture_paths$results_path
+    config$model$history_window <- 3L
+    config$model$n_draws <- 25L
+
+    old_options <- options(
+        mmBayes.stan_chains = 1L,
+        mmBayes.stan_iter = 60L,
+        mmBayes.stan_refresh = 0L
+    )
+    on.exit(options(old_options), add = TRUE)
+
+    loaded <- load_tournament_data(config)
+    model_results <- fit_tournament_model(
+        loaded$historical_matchups,
+        config$model$required_predictors,
+        random_seed = 123,
+        include_diagnostics = FALSE
+    )
+    total_model <- fit_total_points_model(
+        historical_total_points = build_total_points_training_rows(loaded$historical_actual_results),
+        random_seed = 123,
+        include_diagnostics = FALSE
+    )
+
+    candidates <- generate_bracket_candidates(
+        all_teams = loaded$current_teams,
+        model_results = model_results,
+        draws = 25L,
+        actual_play_in_results = loaded$current_play_in_results,
+        n_candidates = 2L,
+        n_simulations = 8L,
+        random_seed = 123
+    )
+    decision_sheet <- build_decision_sheet(candidates)
+    total_predictions <- predict_candidate_total_points(
+        candidates = candidates,
+        current_teams = loaded$current_teams,
+        total_points_model = total_model,
+        draws = 25L
+    )
+    play_in_resolution <- summarize_play_in_resolution(
+        current_teams = loaded$current_teams,
+        actual_play_in_results = loaded$current_play_in_results
+    )
+
+    context_one <- build_bracket_dashboard_context(
+        current_teams = loaded$current_teams,
+        decision_sheet = decision_sheet,
+        candidates = candidates,
+        total_points_predictions = total_predictions,
+        play_in_resolution = play_in_resolution
+    )
+    context_two <- build_bracket_dashboard_context(
+        current_teams = loaded$current_teams,
+        decision_sheet = decision_sheet,
+        candidates = candidates,
+        total_points_predictions = total_predictions,
+        play_in_resolution = play_in_resolution
+    )
+
+    expect_true(all(c(
+        "teamA_Seed", "teamB_Seed", "teamA_Conf", "teamB_Conf",
+        "teamA_AdjOE", "teamB_AdjOE", "seed_diff", "barthag_logit_diff",
+        "AdjOE_diff", "AdjDE_diff", "WAB_diff", "TOR_diff", "TORD_diff",
+        "ORB_diff", "DRB_diff", "3P%_diff", "3P%D_diff", "Adj T._diff"
+    ) %in% names(context_one$matchup_context_rows)))
+
+    sample_row <- context_one$matchup_context_rows %>% dplyr::slice_head(n = 1)
+    team_a_lookup <- loaded$current_teams %>%
+        dplyr::mutate(team_key = normalize_team_key(Team)) %>%
+        dplyr::filter(team_key == normalize_team_key(sample_row$teamA[[1]]))
+    team_b_lookup <- loaded$current_teams %>%
+        dplyr::mutate(team_key = normalize_team_key(Team)) %>%
+        dplyr::filter(team_key == normalize_team_key(sample_row$teamB[[1]]))
+    expect_equal(sample_row$teamA_Seed[[1]], team_a_lookup$Seed[[1]])
+    expect_equal(sample_row$teamB_Seed[[1]], team_b_lookup$Seed[[1]])
+    expect_equal(sample_row$teamA_Conf[[1]], team_a_lookup$Conf[[1]])
+    expect_equal(sample_row$teamB_Conf[[1]], team_b_lookup$Conf[[1]])
+
+    expect_identical(context_one$candidate_delta_rows$slot_key, context_two$candidate_delta_rows$slot_key)
+    expect_identical(context_one$watchlist_rows$slot_key, context_two$watchlist_rows$slot_key)
+    expect_identical(context_one$watchlist_rows$reason_surface, context_two$watchlist_rows$reason_surface)
+
+    expected_delta_order <- context_one$candidate_delta_rows %>%
+        dplyr::arrange(factor(round, levels = round_levels()), factor(region, levels = bracket_region_levels()), matchup_slot) %>%
+        dplyr::pull(slot_key)
+    expect_identical(context_one$candidate_delta_rows$slot_key, expected_delta_order)
+    if (nrow(context_one$candidate_delta_rows) > 0) {
+        expect_true(all(context_one$candidate_delta_rows$candidate_diff_flag))
+    }
+
+    expect_true(nrow(context_one$watchlist_rows) > 0)
+    expect_true(any(context_one$watchlist_rows$reason_surface == "Bracket-changing toss-ups"))
+    upset_watch_rows <- context_one$watchlist_rows %>%
+        dplyr::filter(reason_surface == "Upset pivots")
+    if (nrow(upset_watch_rows) > 0) {
+        expect_true(all(upset_watch_rows$candidate_1_upset | upset_watch_rows$candidate_2_upset))
+        expect_true(all(nzchar(upset_watch_rows$why_this_matters)))
+    }
+
+    if (nrow(context_one$candidate_delta_rows) > 0) {
+        expect_true(all(nzchar(context_one$candidate_delta_rows$downstream_implication_text)))
+        expect_true(all(!is.na(context_one$candidate_delta_rows$why_swap_exists)))
+    }
+
+    differing_watch_row <- context_one$watchlist_rows %>%
+        dplyr::filter(reason_surface == "Bracket-changing toss-ups", candidate_diff_flag) %>%
+        dplyr::slice_head(n = 1)
+    if (nrow(differing_watch_row) == 1) {
+        expect_true(nzchar(differing_watch_row$downstream_implication_text[[1]]))
+    }
+
+    non_differing_watch_row <- context_one$watchlist_rows %>%
+        dplyr::filter(!candidate_diff_flag) %>%
+        dplyr::slice_head(n = 1)
+    if (nrow(non_differing_watch_row) == 1) {
+        expect_true(is.na(non_differing_watch_row$downstream_implication_text[[1]]))
+    }
+})
+
 test_that("actual First Four winners replace stale Round of 64 opponents", {
     team_file <- tempfile(fileext = ".xlsx")
     results_file <- tempfile(fileext = ".xlsx")
@@ -799,6 +926,7 @@ test_that("dashboard warning tracks unresolved versus completed First Four slots
         bracket_year = loaded_partial$bracket_year,
         decision_sheet = build_decision_sheet(candidates_partial),
         candidates = candidates_partial,
+        current_teams = loaded_partial$current_teams,
         backtest = fake_quality_backtest,
         play_in_resolution = summarize_play_in_resolution(loaded_partial$current_teams, loaded_partial$current_play_in_results)
     )
@@ -820,6 +948,7 @@ test_that("dashboard warning tracks unresolved versus completed First Four slots
         bracket_year = loaded_resolved$bracket_year,
         decision_sheet = build_decision_sheet(candidates_resolved),
         candidates = candidates_resolved,
+        current_teams = loaded_resolved$current_teams,
         backtest = fake_quality_backtest,
         play_in_resolution = summarize_play_in_resolution(loaded_resolved$current_teams, loaded_resolved$current_play_in_results)
     )

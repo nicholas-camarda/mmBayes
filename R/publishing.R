@@ -13,6 +13,7 @@ release_deliverable_manifest <- function() {
         "bracket_decision_sheet.csv",
         "bracket_candidate_1.csv",
         "bracket_candidate_2.csv",
+        "bracket_matchup_context.csv",
         "candidate_matchup_total_points.csv",
         "championship_tiebreaker_summary.csv",
         "championship_tiebreaker_distribution.csv",

@@ -108,6 +108,7 @@ decision_outputs <- save_decision_outputs(
     bracket_year = data$bracket_year,
     candidates = candidates,
     output_dir = output_dir,
+    current_teams = data$current_teams,
     backtest = NULL,
     model_overview = model_overview,
     quality_signature = quality_signature,

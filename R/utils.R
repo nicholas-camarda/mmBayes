@@ -1025,6 +1025,378 @@ build_flip_rationale <- function(comparison_row) {
     "Controlled alternate path with a plausible downstream payoff."
 }
 
+#' Build the bracket dashboard context used by the main HTML page
+#'
+#' @param current_teams A current-year team feature table.
+#' @param decision_sheet The canonical decision sheet.
+#' @param candidates A list of bracket candidate objects.
+#' @param total_points_predictions Optional list returned by
+#'   [predict_candidate_total_points()].
+#' @param play_in_resolution Optional play-in summary table.
+#'
+#' @return A named list of dashboard-ready context tables.
+#' @keywords internal
+build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet = tibble::tibble(), candidates = list(), total_points_predictions = NULL, play_in_resolution = NULL) {
+    decision_sheet <- decision_sheet %||% tibble::tibble()
+    candidates <- candidates %||% list()
+
+    round_fill_levels <- round_levels()
+    region_fill_levels <- bracket_region_levels()
+
+    team_lookup <- tibble::tibble()
+    if (!is.null(current_teams) && nrow(current_teams) > 0) {
+        team_lookup <- current_teams %>%
+            dplyr::mutate(
+                team_key = normalize_team_key(Team)
+            ) %>%
+            dplyr::distinct(team_key, .keep_all = TRUE)
+
+        if (!"Barthag" %in% names(team_lookup) && "barthag_logit" %in% names(team_lookup)) {
+            team_lookup$Barthag <- stats::plogis(safe_numeric(team_lookup$barthag_logit, default = NA_real_))
+        }
+    }
+
+    team_context_cols <- c(
+        "Team",
+        "Seed",
+        "Region",
+        "Conf",
+        "Barthag",
+        "barthag_logit",
+        pre_tournament_feature_columns()
+    )
+    team_context_cols <- intersect(team_context_cols, names(team_lookup))
+
+    matchup_context_rows <- decision_sheet %>%
+        dplyr::mutate(
+            slot_key = dplyr::coalesce(as.character(slot_key), sprintf("%s|%s|%s", region, round, matchup_number)),
+            teamA_key = normalize_team_key(teamA),
+            teamB_key = normalize_team_key(teamB)
+        )
+
+    if (nrow(team_lookup) > 0) {
+        team_a_lookup <- team_lookup %>%
+            dplyr::select(team_key, dplyr::all_of(team_context_cols)) %>%
+            dplyr::rename_with(~ paste0("teamA_", .x), -team_key)
+        team_b_lookup <- team_lookup %>%
+            dplyr::select(team_key, dplyr::all_of(team_context_cols)) %>%
+            dplyr::rename_with(~ paste0("teamB_", .x), -team_key)
+
+        matchup_context_rows <- matchup_context_rows %>%
+            dplyr::left_join(team_a_lookup, by = c("teamA_key" = "team_key")) %>%
+            dplyr::left_join(team_b_lookup, by = c("teamB_key" = "team_key"))
+    }
+
+    if (nrow(matchup_context_rows) > 0) {
+        if ("teamA_Barthag" %in% names(matchup_context_rows) || "teamA_barthag_logit" %in% names(matchup_context_rows)) {
+            matchup_context_rows <- matchup_context_rows %>%
+                dplyr::mutate(
+                    teamA_Barthag = dplyr::coalesce(
+                        if ("teamA_Barthag" %in% names(matchup_context_rows)) teamA_Barthag else NA_real_,
+                        if ("teamA_barthag_logit" %in% names(matchup_context_rows)) stats::plogis(safe_numeric(teamA_barthag_logit, default = NA_real_)) else NA_real_
+                    ),
+                    teamB_Barthag = dplyr::coalesce(
+                        if ("teamB_Barthag" %in% names(matchup_context_rows)) teamB_Barthag else NA_real_,
+                        if ("teamB_barthag_logit" %in% names(matchup_context_rows)) stats::plogis(safe_numeric(teamB_barthag_logit, default = NA_real_)) else NA_real_
+                    )
+                )
+        }
+
+        diff_spec <- c(
+            Seed = "seed_diff",
+            barthag_logit = "barthag_logit_diff",
+            AdjOE = "AdjOE_diff",
+            AdjDE = "AdjDE_diff",
+            WAB = "WAB_diff",
+            TOR = "TOR_diff",
+            TORD = "TORD_diff",
+            ORB = "ORB_diff",
+            DRB = "DRB_diff",
+            `3P%` = "3P%_diff",
+            `3P%D` = "3P%D_diff",
+            `Adj T.` = "Adj T._diff"
+        )
+
+        for (source_name in names(diff_spec)) {
+            lhs <- paste0("teamA_", source_name)
+            rhs <- paste0("teamB_", source_name)
+            target <- diff_spec[[source_name]]
+            if (lhs %in% names(matchup_context_rows) && rhs %in% names(matchup_context_rows)) {
+                matchup_context_rows[[target]] <- safe_numeric(matchup_context_rows[[lhs]], default = NA_real_) - safe_numeric(matchup_context_rows[[rhs]], default = NA_real_)
+            } else {
+                matchup_context_rows[[target]] <- NA_real_
+            }
+        }
+
+        if ("teamA_Conf" %in% names(matchup_context_rows) && "teamB_Conf" %in% names(matchup_context_rows)) {
+            matchup_context_rows <- matchup_context_rows %>%
+                dplyr::mutate(
+                    same_conf = dplyr::case_when(
+                        !is.na(teamA_Conf) & !is.na(teamB_Conf) & teamA_Conf == teamB_Conf ~ 1L,
+                        TRUE ~ 0L
+                    )
+                )
+        } else {
+            matchup_context_rows$same_conf <- NA_integer_
+        }
+    }
+
+    if (nrow(matchup_context_rows) == 0) {
+        candidate_delta_rows <- tibble::tibble()
+    } else {
+        candidate_delta_rows <- matchup_context_rows %>%
+            dplyr::filter(candidate_diff_flag) %>%
+            dplyr::mutate(
+                round = factor(as.character(round), levels = round_fill_levels),
+                region = factor(as.character(region), levels = region_fill_levels),
+                fill_round = round,
+                fill_region = region,
+                matchup_slot = matchup_number,
+                difference_mode = dplyr::case_when(
+                    candidate_1_pick != candidate_2_pick & matchup_label != candidate_2_matchup ~ "Winner and path",
+                    candidate_1_pick != candidate_2_pick ~ "Winner",
+                    matchup_label != candidate_2_matchup ~ "Path",
+                    TRUE ~ "Same"
+                ),
+                why_swap_exists = alternate_rationale %||% "Matches the primary bracket.",
+                candidate_1_usage = dplyr::if_else(candidate_1_upset %||% FALSE, underdog, posterior_favorite),
+                candidate_2_usage = dplyr::if_else(candidate_2_upset %||% FALSE, underdog, posterior_favorite),
+                candidate_1_usage_label = dplyr::if_else(candidate_1_upset %||% FALSE, "Underdog", "Favorite"),
+                candidate_2_usage_label = dplyr::if_else(candidate_2_upset %||% FALSE, "Underdog", "Favorite"),
+                downstream_implication_text = dplyr::if_else(
+                    candidate_diff_flag,
+                    vapply(
+                        seq_len(n()),
+                        function(index) build_divergence_change_text(
+                            candidate_one_pick = candidate_1_pick[[index]],
+                            candidate_two_pick = candidate_2_pick[[index]],
+                            round_name = as.character(round[[index]]),
+                            confidence_tier = confidence_tier[[index]],
+                            candidate_one_matchup = matchup_label[[index]],
+                            candidate_two_matchup = candidate_2_matchup[[index]]
+                        ),
+                        character(1)
+                    ),
+                    NA_character_
+                ),
+                evidence_id = paste0("evidence-", slot_key)
+            ) %>%
+            dplyr::arrange(fill_round, fill_region, matchup_number) %>%
+            dplyr::transmute(
+                slot_key,
+                candidate_diff_flag,
+                round = as.character(round),
+                region = as.character(region),
+                matchup_slot,
+                candidate_1_pick,
+                candidate_2_pick,
+                posterior_favorite,
+                win_prob_favorite,
+                confidence_tier,
+                why_swap_exists,
+                difference_mode,
+                candidate_1_matchup = matchup_label,
+                candidate_2_matchup,
+                candidate_1_usage,
+                candidate_2_usage,
+                candidate_1_usage_label,
+                candidate_2_usage_label,
+                downstream_implication_text,
+                evidence_id
+            )
+    }
+
+    watchlist_seed <- matchup_context_rows %>%
+        dplyr::mutate(
+            fill_round = factor(as.character(round), levels = round_fill_levels),
+            fill_region = factor(as.character(region), levels = region_fill_levels),
+            late_round_only = as.character(round) %in% c("Sweet 16", "Elite 8", "Final Four", "Championship"),
+            candidate_1_usage = dplyr::if_else(candidate_1_upset %||% FALSE, underdog, posterior_favorite),
+            candidate_2_usage = dplyr::if_else(candidate_2_upset %||% FALSE, underdog, posterior_favorite),
+            candidate_1_usage_label = dplyr::if_else(candidate_1_upset %||% FALSE, "Underdog", "Favorite"),
+            candidate_2_usage_label = dplyr::if_else(candidate_2_upset %||% FALSE, "Underdog", "Favorite"),
+            evidence_id = paste0("evidence-", slot_key)
+        )
+
+    assigned_slots <- character()
+
+    bracket_rows <- watchlist_seed %>%
+        dplyr::filter(candidate_diff_flag | inspection_level == "primary") %>%
+        dplyr::arrange(fill_round, fill_region, matchup_number) %>%
+        dplyr::mutate(
+            reason_surface = "Bracket-changing toss-ups",
+            reason_surface_rank = 1L,
+            why_this_matters = vapply(
+                seq_len(n()),
+                function(index) {
+                    if (isTRUE(candidate_diff_flag[[index]])) {
+                        if (as.character(round[[index]]) %in% c("Sweet 16", "Elite 8", "Final Four", "Championship")) {
+                            return(build_divergence_note(as.character(round[[index]]), confidence_tier[[index]]))
+                        }
+                        return(alternate_rationale[[index]] %||% build_divergence_note(as.character(round[[index]]), confidence_tier[[index]]))
+                    }
+                    build_ranked_decision_note(
+                        candidate_diff_flag = candidate_diff_flag[[index]],
+                        confidence_tier = confidence_tier[[index]],
+                        round_name = as.character(round[[index]])
+                    )
+                },
+                character(1)
+            ),
+            surface_filter = "Bracket-changing"
+        )
+    assigned_slots <- bracket_rows$slot_key
+
+    upset_rows <- watchlist_seed %>%
+        dplyr::filter(!(slot_key %in% assigned_slots), candidate_1_upset | candidate_2_upset) %>%
+        dplyr::arrange(dplyr::desc(upset_leverage), fill_round, fill_region, matchup_number) %>%
+        dplyr::slice_head(n = 6L) %>%
+        dplyr::mutate(
+            reason_surface = "Upset pivots",
+            reason_surface_rank = 2L,
+            why_this_matters = purrr::pmap_chr(
+                list(candidate_1_pick, candidate_2_pick, underdog, as.character(round)),
+                build_upset_pivot_note
+            ),
+            surface_filter = "Upset pivots"
+        )
+    assigned_slots <- c(assigned_slots, upset_rows$slot_key)
+
+    fragile_rows <- watchlist_seed %>%
+        dplyr::filter(!(slot_key %in% assigned_slots), !candidate_diff_flag) %>%
+        dplyr::arrange(dplyr::desc(decision_score), dplyr::desc(interval_width), fill_round, fill_region, matchup_number) %>%
+        dplyr::slice_head(n = 6L) %>%
+        dplyr::mutate(
+            reason_surface = "Fragile favorites",
+            reason_surface_rank = 3L,
+            why_this_matters = sprintf(
+                "Both candidates agree here, but the decision score is still %.2f, so the favorite is fragile enough to re-check.",
+                safe_numeric(decision_score, default = NA_real_)
+            ),
+            surface_filter = "Fragile favorites"
+        )
+
+    watchlist_rows <- dplyr::bind_rows(bracket_rows, upset_rows, fragile_rows) %>%
+        dplyr::mutate(
+            late_round_only = as.character(round) %in% c("Sweet 16", "Elite 8", "Final Four", "Championship"),
+            candidate_usage = sprintf(
+                "C1: %s (%s); C2: %s (%s)",
+                candidate_1_pick,
+                candidate_1_usage_label,
+                candidate_2_pick,
+                candidate_2_usage_label
+            ),
+            why_this_matters = dplyr::coalesce(why_this_matters, alternate_rationale, rationale_short),
+            downstream_implication_text = dplyr::if_else(
+                candidate_diff_flag,
+                vapply(
+                    seq_len(n()),
+                    function(index) build_divergence_change_text(
+                        candidate_one_pick = candidate_1_pick[[index]],
+                        candidate_two_pick = candidate_2_pick[[index]],
+                        round_name = as.character(round[[index]]),
+                        confidence_tier = confidence_tier[[index]],
+                        candidate_one_matchup = matchup_label[[index]],
+                        candidate_two_matchup = candidate_2_matchup[[index]]
+                    ),
+                    character(1)
+                ),
+                NA_character_
+            ),
+            evidence_id = paste0("evidence-", slot_key)
+        ) %>%
+        dplyr::arrange(reason_surface_rank, fill_round, fill_region, matchup_number)
+
+    late_round_diff_count <- if (nrow(candidate_delta_rows) > 0) {
+        sum(as.character(candidate_delta_rows$round) %in% c("Sweet 16", "Elite 8", "Final Four", "Championship"), na.rm = TRUE)
+    } else {
+        0L
+    }
+    diff_count <- nrow(candidate_delta_rows)
+
+    total_points_summary <- total_points_predictions$candidate_summaries %||% tibble::tibble()
+    if (!"candidate_id" %in% names(total_points_summary)) {
+        total_points_summary <- tibble::tibble()
+    }
+
+    first_or_default <- function(x, default = NA) {
+        if (length(x) == 0) {
+            return(default)
+        }
+        value <- x[[1]]
+        if (is.null(value) || (length(value) == 1 && is.na(value))) default else value
+    }
+
+    first_or_default_from_df <- function(data, name, default = NA) {
+        if (nrow(data) == 0 || !(name %in% names(data))) {
+            return(default)
+        }
+        first_or_default(data[[name]], default)
+    }
+
+    build_identity_text <- function(candidate, diff_count, late_round_diff_count) {
+        candidate_type <- candidate$type %||% ""
+        if (identical(candidate_type, "safe")) {
+            return("Baseline bracket that follows the model's favored side in each slot.")
+        }
+        if (diff_count == 0) {
+            return("Alternate bracket that mirrors Candidate 1.")
+        }
+        if (late_round_diff_count > 0) {
+            return("Alternate bracket that keeps the early path close but changes the later title route.")
+        }
+        sprintf(
+            "Alternate bracket with %s changed slot%s.",
+            diff_count,
+            ifelse(diff_count == 1L, "", "s")
+        )
+    }
+
+    candidate_summary_rows <- purrr::map_dfr(candidates, function(candidate) {
+        if (nrow(total_points_summary) > 0 && "candidate_id" %in% names(total_points_summary)) {
+            tiebreaker_row <- total_points_summary %>%
+                dplyr::filter(candidate_id == candidate$candidate_id)
+        } else {
+            tiebreaker_row <- tibble::tibble()
+        }
+        path_summary <- summarize_candidate_path(candidate$matchups)
+        candidate_diff_count <- if (candidate$candidate_id == 1L) {
+            diff_count
+        } else {
+            diff_count
+        }
+        tibble::tibble(
+            candidate_id = candidate$candidate_id,
+            candidate_type = candidate$type %||% "unknown",
+            champion = first_or_default(candidate$champion, NA_character_),
+            final_four = first_or_default(candidate$final_four, NA_character_),
+            bracket_log_probability = first_or_default(candidate$bracket_log_prob, NA_real_),
+            mean_picked_game_probability = first_or_default(candidate$mean_game_prob, NA_real_),
+            title_path_mean_prob = first_or_default(candidate$title_path_mean_prob, first_or_default(path_summary$title_path_mean_prob, NA_real_)),
+            title_path_min_prob = first_or_default(candidate$title_path_min_prob, first_or_default(path_summary$title_path_min_prob, NA_real_)),
+            championship_matchup = first_or_default_from_df(tiebreaker_row, "championship_matchup", NA_character_),
+            recommended_tiebreaker_points = first_or_default_from_df(tiebreaker_row, "recommended_tiebreaker_points", NA_integer_),
+            predicted_total_median = first_or_default_from_df(tiebreaker_row, "predicted_total_median", NA_real_),
+            predicted_total_80_lower = first_or_default_from_df(tiebreaker_row, "predicted_total_80_lower", NA_real_),
+            predicted_total_80_upper = first_or_default_from_df(tiebreaker_row, "predicted_total_80_upper", NA_real_),
+            diff_count = candidate_diff_count,
+            late_round_diff_count = late_round_diff_count,
+            identity_text = build_identity_text(candidate, diff_count = candidate_diff_count, late_round_diff_count = late_round_diff_count),
+            path_link = sprintf("#candidate-path-%s", candidate$candidate_id),
+            evidence_link = "#evidence"
+        )
+    })
+
+    list(
+        matchup_context_rows = matchup_context_rows,
+        candidate_delta_rows = candidate_delta_rows,
+        watchlist_rows = watchlist_rows,
+        candidate_summary_rows = candidate_summary_rows,
+        play_in_resolution = play_in_resolution %||% tibble::tibble(),
+        team_lookup = team_lookup
+    )
+}
+
 #' Summarize path-level details for a bracket candidate
 #'
 #' @param matchups A candidate matchup table.
@@ -1511,10 +1883,17 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
 #' @return A list of decision-artifact file paths and the in-memory decision
 #'   sheet.
 #' @export
-save_decision_outputs <- function(bracket_year, candidates, output_dir = default_runtime_output_root(), backtest = NULL, model_overview = NULL, quality_signature = NULL, play_in_resolution = NULL, total_points_predictions = NULL, live_performance = NULL, model_comparison = NULL) {
+save_decision_outputs <- function(bracket_year, candidates, output_dir = default_runtime_output_root(), current_teams = NULL, backtest = NULL, model_overview = NULL, quality_signature = NULL, play_in_resolution = NULL, total_points_predictions = NULL, live_performance = NULL, model_comparison = NULL) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- build_decision_sheet(candidates)
+    dashboard_context <- build_bracket_dashboard_context(
+        current_teams = current_teams,
+        decision_sheet = decision_sheet,
+        candidates = candidates,
+        total_points_predictions = total_points_predictions,
+        play_in_resolution = play_in_resolution
+    )
     model_overview <- normalize_model_overview(model_overview)
     model_quality_context <- resolve_model_quality_context(
         backtest = backtest,
@@ -1529,12 +1908,14 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
     dashboard_path <- file.path(output_dir, "bracket_dashboard.html")
     technical_dashboard_path <- file.path(output_dir, "technical_dashboard.html")
     comparison_dashboard_path <- file.path(output_dir, "model_comparison_dashboard.html")
+    matchup_context_path <- file.path(output_dir, "bracket_matchup_context.csv")
     tiebreaker_summary_path <- file.path(output_dir, "championship_tiebreaker_summary.csv")
     championship_distribution_path <- file.path(output_dir, "championship_tiebreaker_distribution.csv")
     matchup_totals_path <- file.path(output_dir, "candidate_matchup_total_points.csv")
 
     saveRDS(candidates, rds_path)
     utils::write.csv(decision_sheet, decision_sheet_path, row.names = FALSE)
+    utils::write.csv(dashboard_context$matchup_context_rows, matchup_context_path, row.names = FALSE)
 
     if (!is.null(total_points_predictions)) {
         utils::write.csv(total_points_predictions$candidate_summaries, tiebreaker_summary_path, row.names = FALSE)
@@ -1565,15 +1946,23 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         cat(sprintf("Mean picked-game probability: %.4f\n", candidate$mean_game_prob))
         cat(sprintf("Title path mean probability: %.4f\n", candidate$title_path_mean_prob %||% NA_real_))
         if (!is.null(total_points_predictions) && nrow(total_points_predictions$candidate_summaries) > 0) {
-            tiebreaker_row <- total_points_predictions$candidate_summaries %>%
-                dplyr::filter(candidate_id == candidate$candidate_id)
+            if ("candidate_id" %in% names(total_points_predictions$candidate_summaries)) {
+                tiebreaker_row <- total_points_predictions$candidate_summaries %>%
+                    dplyr::filter(candidate_id == candidate$candidate_id)
+            } else {
+                tiebreaker_row <- tibble::tibble()
+            }
             if (nrow(tiebreaker_row) == 1L) {
-                cat(sprintf("Championship matchup: %s\n", tiebreaker_row$championship_matchup[[1]]))
-                cat(sprintf("Recommended tiebreaker: %s\n", tiebreaker_row$recommended_tiebreaker_points[[1]]))
+                champ_matchup <- if ("championship_matchup" %in% names(tiebreaker_row)) tiebreaker_row$championship_matchup[[1]] else NA_character_
+                tiebreaker_points <- if ("recommended_tiebreaker_points" %in% names(tiebreaker_row)) tiebreaker_row$recommended_tiebreaker_points[[1]] else NA_integer_
+                total_lower <- if ("predicted_total_80_lower" %in% names(tiebreaker_row)) tiebreaker_row$predicted_total_80_lower[[1]] else NA_real_
+                total_upper <- if ("predicted_total_80_upper" %in% names(tiebreaker_row)) tiebreaker_row$predicted_total_80_upper[[1]] else NA_real_
+                cat(sprintf("Championship matchup: %s\n", champ_matchup))
+                cat(sprintf("Recommended tiebreaker: %s\n", tiebreaker_points))
                 cat(sprintf(
                     "Championship total 80%% interval: %.1f to %.1f\n",
-                    tiebreaker_row$predicted_total_80_lower[[1]],
-                    tiebreaker_row$predicted_total_80_upper[[1]]
+                    total_lower,
+                    total_upper
                 ))
             }
         }
@@ -1592,6 +1981,8 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
             bracket_year = bracket_year,
             decision_sheet = decision_sheet,
             candidates = candidates,
+            current_teams = current_teams,
+            dashboard_context = dashboard_context,
             backtest = backtest,
             play_in_resolution = play_in_resolution,
             total_points_predictions = total_points_predictions,
@@ -1623,6 +2014,7 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         dashboard = dashboard_path,
         technical_dashboard = technical_dashboard_path,
         model_comparison_dashboard = comparison_dashboard_path,
+        matchup_context = matchup_context_path,
         candidates_rds = rds_path,
         candidate_summary = summary_path,
         candidate_csvs = unname(candidate_csv_paths),
@@ -1685,6 +2077,7 @@ save_results <- function(results, output_config) {
             bracket_year = results$bracket_year,
             candidates = results$candidates,
             output_dir = output_dir,
+            current_teams = results$data$current_teams,
             backtest = results$backtest,
             model_overview = model_overview,
             quality_signature = quality_signature,
@@ -1715,6 +2108,7 @@ save_results <- function(results, output_config) {
     decision_dashboard_path <- if (!is.null(decision_outputs)) decision_outputs$dashboard %||% NULL else NULL
     decision_technical_dashboard_path <- if (!is.null(decision_outputs)) decision_outputs$technical_dashboard %||% NULL else NULL
     decision_sheet_path <- if (!is.null(decision_outputs)) decision_outputs$decision_sheet_path %||% NULL else NULL
+    decision_matchup_context_path <- if (!is.null(decision_outputs)) decision_outputs$matchup_context %||% NULL else NULL
     decision_csv_paths <- if (!is.null(decision_outputs)) decision_outputs$candidate_csvs %||% NULL else NULL
     decision_rds_path <- if (!is.null(decision_outputs)) decision_outputs$candidates_rds %||% NULL else NULL
 
@@ -1727,6 +2121,7 @@ save_results <- function(results, output_config) {
         technical_dashboard = decision_technical_dashboard_path,
         model_comparison_dashboard = if (!is.null(decision_outputs)) decision_outputs$model_comparison_dashboard %||% NULL else NULL,
         decision_sheet = decision_sheet_path,
+        matchup_context = decision_matchup_context_path,
         candidate_csvs = decision_csv_paths,
         candidates_rds = decision_rds_path,
         model_quality_archive = model_quality_archive_path,
