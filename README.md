@@ -20,19 +20,14 @@ An R-based NCAA tournament bracket lab. Turns pre-tournament team data, historic
 
 This repo is meant to produce bracket-entry materials you can review quickly in a browser or spreadsheet. The main artifact is a one-page bracket-building decision workspace:
 
-[Open the bracket dashboard](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/bracket_dashboard.html)
-[Open the technical dashboard](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/technical_dashboard.html)
-[Open the model comparison dashboard](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/model_comparison_dashboard.html)
-
-If you are browsing the repository on GitHub, the HTML files are easier to open through [html-preview.github.io](https://html-preview.github.io/):
-
-- [Bracket dashboard preview](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/bracket_dashboard.html)
-- [Technical dashboard preview](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/technical_dashboard.html)
-- [Model comparison preview](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/model_comparison_dashboard.html)
+[Open the GitHub Pages dashboard hub](https://nicholas-camarda.github.io/mmBayes/)
+[Open the bracket dashboard](https://nicholas-camarda.github.io/mmBayes/output/bracket_dashboard.html)
+[Open the technical dashboard](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html)
+[Open the model comparison dashboard](https://nicholas-camarda.github.io/mmBayes/output/model_comparison_dashboard.html)
 
 The main review loop usually looks like this:
 
-1. open [output/bracket_dashboard.html](output/bracket_dashboard.html) to build the two entries and review the evidence trail
+1. open the GitHub Pages hub or [output/bracket_dashboard.html](output/bracket_dashboard.html) to build the two entries and review the evidence trail
 2. scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) for the hardest decisions first
 3. use [output/bracket_candidate_1.csv](output/bracket_candidate_1.csv) and [output/bracket_candidate_2.csv](output/bracket_candidate_2.csv) if you want the underlying pick paths
 4. check the status banner to see whether First Four slots are still simulated or already final
@@ -76,9 +71,9 @@ After a pipeline run the following files are generated in the runtime output dir
 
 | File | Description |
 |------|-------------|
-| [bracket_dashboard.html](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/bracket_dashboard.html) | Main bracket-building decision workspace |
-| [technical_dashboard.html](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/technical_dashboard.html) | Secondary model diagnostics and simulation detail |
-| [model_comparison_dashboard.html](https://html-preview.github.io/?url=https://github.com/nicholas-camarda/mmBayes/blob/master/output/model_comparison_dashboard.html) | Engine comparison and calibration appendix |
+| [bracket_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/bracket_dashboard.html) | Main bracket-building decision workspace |
+| [technical_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) | Secondary model diagnostics and simulation detail |
+| [model_comparison_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/model_comparison_dashboard.html) | Engine comparison and calibration appendix |
 
 ### Decision Artifacts (CSV)
 

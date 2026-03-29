@@ -355,6 +355,8 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(dashboard_html, "Technical Appendix")
     expect_match(dashboard_html, "Need more diagnostics?")
     expect_match(dashboard_html, "Open technical_dashboard.html")
+    expect_match(dashboard_html, "href='technical_dashboard.html'")
+    expect_match(dashboard_html, "href='model_comparison_dashboard.html'")
     if (isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
         expect_match(dashboard_html, "Status: Simulated bracket path")
         expect_match(dashboard_html, "generated brackets assume simulated First Four winners")

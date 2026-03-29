@@ -116,18 +116,20 @@ html_escape <- function(x) {
     gsub("\"", "&quot;", x, fixed = TRUE)
 }
 
-#' Build a GitHub-preview URL for a dashboard file
+#' Build a dashboard href for local or hosted use
 #'
 #' @param filename Dashboard filename inside `output/`.
 #'
-#' @return A preview-service URL that opens the GitHub blob through
-#'   `html-preview.github.io`.
+#' @return A relative file path by default, or an absolute URL when
+#'   `MMBAYES_DASHBOARD_BASE_URL` is set.
 #' @keywords internal
 dashboard_preview_url <- function(filename) {
-    repo_url <- Sys.getenv("MMBAYES_GITHUB_REPO_URL", unset = "https://github.com/nicholas-camarda/mmBayes")
-    branch <- Sys.getenv("MMBAYES_GITHUB_BRANCH", unset = "master")
-    blob_url <- sprintf("%s/blob/%s/output/%s", sub("/+$", "", repo_url), branch, filename)
-    sprintf("https://html-preview.github.io/?url=%s", utils::URLencode(blob_url, reserved = TRUE))
+    base_url <- Sys.getenv("MMBAYES_DASHBOARD_BASE_URL", unset = "")
+    base_url <- sub("/+$", "", base_url)
+    if (nzchar(base_url)) {
+        return(sprintf("%s/%s", base_url, filename))
+    }
+    filename
 }
 
 #' Format probabilities for dashboard display

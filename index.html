@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mmBayes Dashboard Hub</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1ea;
+      --panel: rgba(255, 255, 255, 0.9);
+      --panel-border: #e5dfd5;
+      --ink: #101827;
+      --muted: #5c6676;
+      --accent: #0f766e;
+      --accent-2: #1d4ed8;
+      --shadow: 0 18px 45px rgba(16, 24, 39, 0.08);
+    }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(29, 78, 216, 0.12), transparent 30%),
+        radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), transparent 28%),
+        linear-gradient(180deg, #faf7f1 0%, #f4f1ea 100%);
+      color: var(--ink);
+    }
+    .page {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 48px 22px 56px;
+    }
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      padding: 28px;
+    }
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+    h1 {
+      font-size: clamp(32px, 5vw, 52px);
+      line-height: 0.98;
+      margin: 0 0 16px;
+    }
+    .lede {
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.6;
+      margin: 0 0 22px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 0 0 24px;
+    }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 16px;
+      border-radius: 999px;
+      border: 1px solid #d4d4d8;
+      background: #fff;
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+    }
+    .button:hover {
+      transform: translateY(-1px);
+      border-color: #bfc6d3;
+      box-shadow: 0 10px 24px rgba(16, 24, 39, 0.08);
+      text-decoration: none;
+    }
+    .button.primary {
+      background: linear-gradient(135deg, var(--accent-2), var(--accent));
+      color: #fff;
+      border-color: transparent;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+      margin-top: 10px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid #e8e1d8;
+      border-radius: 20px;
+      padding: 16px;
+    }
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 14px;
+    }
+    .footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="eyebrow">mmBayes GitHub Pages</p>
+      <h1>Bracket-building decision workspace</h1>
+      <p class="lede">
+        Start here for the generated bracket bundle. The main dashboard is the entry
+        point, and the technical and model-comparison pages stay one click away for
+        calibration and diagnostics.
+      </p>
+      <div class="actions">
+        <a class="button primary" href="output/bracket_dashboard.html">Open bracket dashboard</a>
+        <a class="button" href="output/technical_dashboard.html">Open technical dashboard</a>
+        <a class="button" href="output/model_comparison_dashboard.html">Open model comparison dashboard</a>
+        <a class="button" href="README.md">Read the repository guide</a>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h2>Build</h2>
+          <p>Use <code>bracket_dashboard.html</code> to review Candidate 1, Candidate 2, and the evidence for the slots that matter.</p>
+        </div>
+        <div class="card">
+          <h2>Diagnostics</h2>
+          <p>The technical dashboard keeps calibration, backtest, and engine detail separate from the entry workflow.</p>
+        </div>
+        <div class="card">
+          <h2>Appendix</h2>
+          <p>The model-comparison page stays available as a secondary calibration and engine-comparison reference.</p>
+        </div>
+      </div>
+      <p class="footer">
+        If GitHub Pages is not enabled yet for this repository, open the same files directly
+        from the repo or enable Pages from the repository root.
+      </p>
+    </section>
+  </main>
+</body>
+</html>
