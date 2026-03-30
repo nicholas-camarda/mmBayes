@@ -15,7 +15,8 @@ test_that("model quality artifacts save and resolve from the latest snapshot", {
             mean_predicted = c(0.25, 0.50, 0.75),
             empirical_rate = c(0.28, 0.48, 0.73),
             n_games = c(10L, 12L, 8L)
-        )
+        ),
+        yearly_metrics = tibble::tibble(year = c(2018L, 2019L, 2020L))
     )
 
     first_artifact <- save_model_quality_artifact(
@@ -39,6 +40,9 @@ test_that("model quality artifacts save and resolve from the latest snapshot", {
     expect_true(model_quality_has_backtest(resolved$backtest))
     expect_equal(resolved$backtest$summary$mean_log_loss[[1]], fake_backtest$summary$mean_log_loss[[1]])
     expect_equal(resolved$quality_signature, quality_signature)
+
+    diagnostics <- summarize_backtest_diagnostics(fake_backtest)
+    expect_equal(diagnostics$backtest_years, "2018, 2019, 2020 (3 seasons)")
 
     updated_backtest <- fake_backtest
     updated_backtest$summary$mean_log_loss <- 0.331

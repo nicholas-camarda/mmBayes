@@ -296,6 +296,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     )
     expect_true(isTRUE(resolved_quality$used_cached_quality))
     expect_match(resolved_quality$source_label, "Cached identical validation snapshot")
+    resolved_quality$backtest$yearly_metrics <- tibble::tibble(year = c(2018L, 2019L, 2020L))
 
     live_team_data <- make_fixture_team_features(current_year = 2025, history_years = 2022:2024)
     live_current_results <- make_fixture_current_year_completed_results(live_team_data, current_year = 2025)
@@ -463,7 +464,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
             mean_predicted = c(0.35, 0.55, 0.75),
             empirical_rate = c(0.30, 0.58, 0.78),
             n_games = c(12L, 16L, 10L)
-        )),
+        ), yearly_metrics = tibble::tibble(year = c(2018L, 2019L, 2020L))),
         total_points_predictions = total_predictions,
         play_in_resolution = play_in_resolution,
         model_quality_context = resolved_quality,
@@ -484,8 +485,15 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(technical_html, "Accuracy")
     expect_match(technical_html, "Doing well")
     expect_match(technical_html, "Needs attention")
+    expect_match(technical_html, "The backtest is the historical baseline")
+    expect_match(technical_html, "Rolling holdout years")
+    expect_match(technical_html, "2018, 2019, 2020")
+    expect_match(technical_html, "How to read this chart")
     expect_match(technical_html, "Observed win rate")
     expect_match(technical_html, "Observed by bin")
+    expect_match(technical_html, "Perfect line")
+    expect_match(technical_html, "too optimistic")
+    expect_match(technical_html, "too pessimistic")
     expect_match(technical_html, "quality-grid")
     expect_match(technical_html, "What this means")
     expect_match(technical_html, "Backtest Summary")

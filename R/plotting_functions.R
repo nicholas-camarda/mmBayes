@@ -1134,6 +1134,15 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
 
     diagnostics <- summarize_backtest_diagnostics(quality_backtest)
     summary_tbl <- quality_backtest$summary %>% dplyr::slice_head(n = 1)
+    backtest_years_note <- if (!is.null(diagnostics$backtest_years) && nzchar(diagnostics$backtest_years)) {
+        paste0(
+            "<p class='summary-note backtest-window-note'><strong>Rolling holdout years:</strong> ",
+            html_escape(diagnostics$backtest_years),
+            "</p>"
+        )
+    } else {
+        ""
+    }
     calibration_summary <- summary_tbl %>%
         dplyr::transmute(
             `Log loss` = sprintf("%.3f", mean_log_loss),
@@ -1176,15 +1185,16 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
 
     paste0(
         if (!is.null(quality_source_label)) paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>") else "",
+        "<p class='quality-intro'>The backtest is the historical baseline, so you can judge the live performance panel that follows against seasons the model has already seen.</p>",
         "<div class='quality-grid'>",
-        "<div class='quality-card'><h3>Backtest Summary</h3>", render_html_table(calibration_summary), "</div>",
+        "<div class='quality-card'><h3>Backtest Summary</h3>", backtest_years_note, render_html_table(calibration_summary), "</div>",
         "<div class='quality-card'><h3>What this means</h3>",
         "<div class='diagnostic-callout'><strong>Doing well</strong><ul>", if (nzchar(strength_lines)) strength_lines else "<li>No strengths identified.</li>", "</ul></div>",
         "<div class='diagnostic-callout'><strong>Needs attention</strong><ul>", if (nzchar(weakness_lines)) weakness_lines else "<li>No weaknesses identified.</li>", "</ul></div>",
         "</div>",
         "</div>",
         "<div class='quality-grid'>",
-        "<div class='quality-card'><h3>Backtest Calibration Curve</h3>", render_calibration_svg(quality_backtest$calibration %||% tibble::tibble()), "</div>",
+        "<div class='quality-card'><h3>Backtest Calibration Curve</h3>", render_calibration_svg(quality_backtest$calibration %||% tibble::tibble()), render_calibration_help_html(), "</div>",
         "<div class='quality-card'><h3>Backtest By Round</h3>",
         "<table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Log loss</th><th>Brier</th><th>Empirical rate</th></tr></thead><tbody>", round_rows, "</tbody></table>",
         "</div>",
@@ -1227,7 +1237,7 @@ render_model_comparison_link_html <- function(model_comparison) {
         "<div class='overview-grid'>",
         "<div class='summary-card'><div class='summary-label'>Current engine</div><div class='summary-value'>", html_escape(current_label), "</div><p class='summary-note'>Primary run used for the bracket and live dashboard.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Alternate engine</div><div class='summary-value'>", html_escape(alternate_label), "</div><p class='summary-note'>The compare page shows the alternate fit alongside the current run.</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value'>", html_escape(if (is.character(summary_text)) truncate_dashboard_label(summary_text, width = 22L) else "See comparison"), "</div><p class='summary-note'>Backtest winner summary from the comparison bundle.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(if (is.character(summary_text)) summary_text else "See comparison"), "</div><p class='summary-note'>Backtest winner summary from the comparison bundle.</p></div>",
         "</div>",
         "<p class='comparison-link-copy'><a href='", dashboard_preview_url("model_comparison_dashboard.html"), "'>Open the full model comparison dashboard</a></p>",
         "</div>"
@@ -1287,8 +1297,8 @@ render_model_comparison_summary_html <- function(model_comparison) {
             "</div>"
         ) else "",
         "<div class='overview-grid'>",
-        "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value'>", html_escape(backtest_summary$text), "</div><p class='summary-note'>Cross-validation style metrics from completed historical games.</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Live takeaway</div><div class='summary-value'>", html_escape(live_summary$text), "</div><p class='summary-note'>Current-year games already completed in the live dashboard.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(backtest_summary$text), "</div><p class='summary-note'>Cross-validation style metrics from completed historical games.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Live takeaway</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(live_summary$text), "</div><p class='summary-note'>Current-year games already completed in the live dashboard.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Engine tabs</div><div class='summary-value'>3</div><p class='summary-note'>Compare, current engine, and alternate engine.</p></div>",
         "</div>",
         "<div class='comparison-tab-bar' role='group' aria-label='Model comparison view'>",
@@ -1366,7 +1376,9 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         ".quality-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;}",
         ".summary-card{background:white;border:1px solid #d6d3d1;border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(15,23,42,0.04);}",
         ".summary-label{text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#6b7280;margin-bottom:8px;}",
-        ".summary-value{font-size:24px;font-weight:700;line-height:1.1;color:#111827;}",
+        ".summary-value{font-size:24px;font-weight:700;line-height:1.1;color:#111827;overflow-wrap:anywhere;}",
+        ".summary-value--wrap{font-size:18px;line-height:1.2;}",
+        ".summary-value--wrap.summary-value--tight{font-size:16px;line-height:1.15;}",
         ".summary-note{font-size:13px;color:#4b5563;margin:8px 0 0 0;}",
         ".comparison-note-card{margin-bottom:16px;}",
         ".note-list{margin:0;padding-left:18px;color:#374151;}",
@@ -2405,6 +2417,15 @@ render_model_diagnostics_html_legacy <- function(quality_backtest, quality_sourc
     strengths <- diagnostics$strengths %||% character()
     weaknesses <- diagnostics$weaknesses %||% character()
     calibration_notes <- diagnostics$calibration_notes %||% character()
+    backtest_years_note <- if (!is.null(diagnostics$backtest_years) && nzchar(diagnostics$backtest_years)) {
+        paste0(
+            "<p class='summary-note backtest-window-note'><strong>Rolling holdout years:</strong> ",
+            html_escape(diagnostics$backtest_years),
+            "</p>"
+        )
+    } else {
+        ""
+    }
     notes_html <- paste(
         c(
             if (length(strengths) > 0) sprintf("<li>%s</li>", html_escape(strengths)) else NULL,
@@ -2440,6 +2461,7 @@ render_model_diagnostics_html_legacy <- function(quality_backtest, quality_sourc
     }
 
     calibration_svg <- render_calibration_svg(quality_backtest$calibration %||% tibble::tibble())
+    calibration_help <- render_calibration_help_html()
     round_svg <- render_round_performance_svg(round_summary)
     source_text <- if (!is.null(quality_source_label) && nzchar(quality_source_label)) {
         paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>")
@@ -2451,13 +2473,14 @@ render_model_diagnostics_html_legacy <- function(quality_backtest, quality_sourc
         "<div class='panel'>",
         "<h2>Model Diagnostics</h2>",
         source_text,
+        "<p class='quality-intro'>The backtest is the historical baseline, so you can judge the live performance panel that follows against seasons the model has already seen.</p>",
         metric_cards,
         "<div class='quality-grid'>",
         "<div class='quality-card'><h3>Why it looks good or bad</h3><ul class='diagnostic-bullets'>", notes_html, "</ul></div>",
         "<div class='quality-card'><h3>Round Performance</h3>", round_svg, "</div>",
         "</div>",
         "<div class='quality-grid'>",
-        "<div class='quality-card'><h3>Calibration Curve</h3>", calibration_svg, "</div>",
+        "<div class='quality-card'><h3>Calibration Curve</h3>", backtest_years_note, calibration_svg, calibration_help, "</div>",
         "<div class='quality-card'><h3>Round Breakdown</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Log loss</th><th>Brier</th><th>Mean predicted</th><th>Empirical rate</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
         "</div>",
         "</div>"
@@ -2694,11 +2717,21 @@ render_calibration_svg <- function(calibration_tbl) {
         "<text x='", margin_left + plot_width, "' y='", height - 8, "' text-anchor='end' font-size='11' fill='#6b7280'>100%</text>",
         "<text x='", margin_left + (plot_width / 2), "' y='", height - 8, "' text-anchor='middle' font-size='11' fill='#6b7280'>Predicted probability</text>",
         "<text x='18' y='", 36 + (plot_height / 2), "' font-size='11' fill='#6b7280' transform='rotate(-90 18 ", 36 + (plot_height / 2), ")'>Observed win rate</text>",
-        "<circle cx='", width - 194, "' cy='16' r='5' fill='#1d4ed8'/>",
-        "<text x='", width - 182, "' y='20' font-size='11' fill='#6b7280'>Observed by bin (win rate)</text>",
-        "<line x1='", width - 92, "' y1='16' x2='", width - 64, "' y2='16' stroke='#d6d3d1' stroke-dasharray='4 4' stroke-width='1.5'/>",
-        "<text x='", width - 58, "' y='20' font-size='11' fill='#6b7280'>Perfect line</text>",
         "</svg>"
+    )
+}
+
+#' Render a calibration explainer block for the dashboard
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_calibration_help_html <- function() {
+    paste0(
+        "<div class='legend-row'>",
+        "<div class='legend-chip'><span class='legend-swatch' style='background:#457b9d;'></span>Observed by bin (win rate)</div>",
+        "<div class='legend-chip'><span class='legend-swatch' style='background:transparent;border:1px dashed #d6d3d1;box-sizing:border-box;'></span>Perfect line</div>",
+        "</div>",
+        "<p class='legend-copy calibration-note'><strong>How to read this chart:</strong> the x-axis is the model's average predicted win rate in each probability bin, and the y-axis is the observed win rate in that bin. Points close to the dashed line are well calibrated. Points below the line mean the model was too optimistic; points above the line mean the model was too pessimistic.</p>"
     )
 }
 
@@ -3129,7 +3162,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         "<div class='summary-card'><div class='summary-label'>Toss-up games</div><div class='summary-value'>", get_tier_count("Toss-up"), "</div><p class='summary-note'>Primary manual-review slots.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Volatile games</div><div class='summary-value'>", get_tier_count("Volatile"), "</div><p class='summary-note'>Wide intervals with unstable outcomes.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Candidate differences</div><div class='summary-value'>", sum(decision_sheet$candidate_diff_flag, na.rm = TRUE), "</div><p class='summary-note'>Slots where the alternate path diverges.</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Top leverage upset</div><div class='summary-value'>", html_escape(truncate_dashboard_label(leverage_text, width = 22L)), "</div><p class='summary-note'>Highest underdog payoff under current scoring.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Top leverage upset</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(leverage_text), "</div><p class='summary-note'>Highest underdog payoff under current scoring.</p></div>",
         "</div>",
         "<div class='toggle-bar' role='group' aria-label='Candidate dashboard view'>",
         "<button type='button' class='toggle-button is-active' data-view-target='compare' aria-pressed='true'>Compare</button>",

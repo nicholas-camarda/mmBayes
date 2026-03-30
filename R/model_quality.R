@@ -321,6 +321,59 @@ format_calibration_bin <- function(bin_value) {
     label
 }
 
+#' Extract the rolling holdout years used in a backtest
+#'
+#' @param backtest A backtest bundle returned by [run_rolling_backtest()].
+#'
+#' @return An integer vector of unique holdout years in ascending order.
+#' @keywords internal
+extract_backtest_years <- function(backtest) {
+    if (is.null(backtest) || !is.list(backtest)) {
+        return(integer())
+    }
+
+    years <- c()
+
+    if (inherits(backtest$yearly_metrics, "data.frame") && "year" %in% names(backtest$yearly_metrics)) {
+        years <- c(years, backtest$yearly_metrics$year)
+    }
+    if (inherits(backtest$predictions, "data.frame")) {
+        if ("holdout_year" %in% names(backtest$predictions)) {
+            years <- c(years, backtest$predictions$holdout_year)
+        }
+        if ("year" %in% names(backtest$predictions)) {
+            years <- c(years, backtest$predictions$year)
+        }
+    }
+
+    years <- suppressWarnings(as.integer(as.character(years)))
+    years <- stats::na.omit(years)
+    sort(unique(years))
+}
+
+#' Format rolling backtest years for display
+#'
+#' @param years Integer vector of backtest years.
+#'
+#' @return A human-readable year list, or `NULL` when no years are available.
+#' @keywords internal
+format_backtest_years <- function(years) {
+    years <- suppressWarnings(as.integer(years))
+    years <- stats::na.omit(years)
+    years <- sort(unique(years))
+
+    if (length(years) == 0L) {
+        return(NULL)
+    }
+
+    year_list <- paste(years, collapse = ", ")
+    if (length(years) == 1L) {
+        return(year_list)
+    }
+
+    sprintf("%s (%d seasons)", year_list, length(years))
+}
+
 #' Summarize backtest performance for diagnostics
 #'
 #' @param backtest A backtest bundle returned by [run_rolling_backtest()].
@@ -335,6 +388,7 @@ summarize_backtest_diagnostics <- function(backtest) {
             strengths = character(),
             weaknesses = character(),
             calibration_notes = character(),
+            backtest_years = NULL,
             best_round = NULL,
             worst_round = NULL,
             best_bin = NULL,
@@ -363,6 +417,7 @@ summarize_backtest_diagnostics <- function(backtest) {
     strengths <- character()
     weaknesses <- character()
     calibration_notes <- character()
+    backtest_years <- format_backtest_years(extract_backtest_years(backtest))
     best_round <- NULL
     worst_round <- NULL
     best_bin <- NULL
@@ -449,6 +504,7 @@ summarize_backtest_diagnostics <- function(backtest) {
         strengths = strengths,
         weaknesses = weaknesses,
         calibration_notes = calibration_notes,
+        backtest_years = backtest_years,
         best_round = best_round,
         worst_round = worst_round,
         best_bin = best_bin,
