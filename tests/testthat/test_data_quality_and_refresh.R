@@ -133,6 +133,30 @@ test_that("quality gates allow current-year completed results without weakening 
     )
 })
 
+test_that("quality gates reject impossible current-year round layouts", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024)
+    impossible_current_result <- tibble::tibble(
+        Year = "2025",
+        region = "East",
+        round = "Championship",
+        game_index = 3L,
+        teamA = "East_01_2025",
+        teamB = "East_16_2025",
+        teamA_seed = 1L,
+        teamB_seed = 16L,
+        teamA_score = 84L,
+        teamB_score = 66L,
+        total_points = 150L,
+        winner = "East_01_2025"
+    )
+
+    expect_error(
+        assert_canonical_data_quality(team_data, dplyr::bind_rows(results_data, impossible_current_result)),
+        regexp = "impossible region/round combinations|exceed tournament round maxima|impossible game-index assignments"
+    )
+})
+
 test_that("quality gates still fail on incomplete historical data", {
     team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
     results_data <- make_fixture_game_results(team_data, history_years = 2024) %>%

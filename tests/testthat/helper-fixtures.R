@@ -274,7 +274,7 @@ make_fixture_current_year_completed_results <- function(team_features, current_y
     current_teams <- team_features %>%
         dplyr::filter(Year == as.character(current_year))
 
-    build_result_row <- function(team_a, team_b, round_name, region_name, game_index) {
+    build_result_row <- function(team_a, team_b, round_name, region_name, game_index, completed_at) {
         winner <- pick_fixture_winner(team_a, team_b, current_year, round_name, region_name, game_index)
         matchup_scores <- make_fixture_matchup_scores(team_a, team_b, winner, round_name, game_index)
 
@@ -290,7 +290,9 @@ make_fixture_current_year_completed_results <- function(team_features, current_y
             teamA_score = matchup_scores$teamA_score,
             teamB_score = matchup_scores$teamB_score,
             total_points = matchup_scores$total_points,
-            winner = winner$Team[1]
+            winner = winner$Team[1],
+            completed_at = as.character(completed_at),
+            source = "fixture_live_results"
         )
     }
 
@@ -314,9 +316,9 @@ make_fixture_current_year_completed_results <- function(team_features, current_y
         dplyr::slice(1)
 
     dplyr::bind_rows(
-        build_result_row(first_four_team_a, first_four_team_b, "First Four", "First Four", 1L),
-        build_result_row(round64_team_a, round64_team_b, "Round of 64", "East", 1L),
-        build_result_row(round32_team_a, round32_team_b, "Round of 32", "East", 1L)
+        build_result_row(first_four_team_a, first_four_team_b, "First Four", "First Four", 1L, sprintf("%s-03-18T18:00:00Z", current_year)),
+        build_result_row(round64_team_a, round64_team_b, "Round of 64", "East", 1L, sprintf("%s-03-20T18:00:00Z", current_year)),
+        build_result_row(round32_team_a, round32_team_b, "Round of 32", "East", 1L, sprintf("%s-03-22T18:00:00Z", current_year))
     )
 }
 

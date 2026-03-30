@@ -120,6 +120,45 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
     current_year_non_play_in <- current_year_results %>%
         dplyr::filter(round != "First Four")
 
+    current_year_round_scope_issues <- current_year_completed_results %>%
+        dplyr::filter(
+            (region %in% bracket_region_levels() & round %in% c("Final Four", "Championship")) |
+                (region == "National" & round %in% c("Round of 64", "Round of 32", "Sweet 16", "Elite 8")) |
+                (region == "First Four" & round != "First Four") |
+                (round == "First Four" & region != "First Four")
+        ) %>%
+        dplyr::arrange(round, region, game_index)
+
+    current_year_round_count_issues <- current_year_completed_results %>%
+        dplyr::count(round, name = "games") %>%
+        dplyr::mutate(
+            expected_games = unname(expected_completed_round_counts()[round]),
+            exceeds_expected = !is.na(expected_games) & games > expected_games
+        ) %>%
+        dplyr::filter(exceeds_expected)
+
+    current_year_game_index_limits <- tibble::tibble(
+        region = c(rep(bracket_region_levels(), each = 4L), "National", "National", "First Four"),
+        round = c(
+            rep(c("Round of 64", "Round of 32", "Sweet 16", "Elite 8"), times = length(bracket_region_levels())),
+            "Final Four",
+            "Championship",
+            "First Four"
+        ),
+        max_game_index = c(rep(c(8L, 4L, 2L, 1L), times = length(bracket_region_levels())), 2L, 1L, 4L)
+    )
+
+    current_year_game_index_issues <- current_year_completed_results %>%
+        dplyr::left_join(current_year_game_index_limits, by = c("region", "round")) %>%
+        dplyr::filter(
+            is.na(max_game_index) |
+                is.na(game_index) |
+                game_index < 1L |
+                game_index > max_game_index
+        ) %>%
+        dplyr::select(Year, region, round, game_index, teamA, teamB, max_game_index) %>%
+        dplyr::arrange(round, region, game_index)
+
     invalid_current_play_in <- current_play_in_results %>%
         dplyr::filter(
             is.na(play_in_region) |
@@ -170,6 +209,9 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         bad_round_rows = nrow(round_count_issues),
         current_year_completed_rows = nrow(current_year_completed_results),
         current_year_non_play_in_rows = nrow(current_year_non_play_in),
+        current_year_round_scope_issue_rows = nrow(current_year_round_scope_issues),
+        current_year_round_count_issue_rows = nrow(current_year_round_count_issues),
+        current_year_game_index_issue_rows = nrow(current_year_game_index_issues),
         invalid_current_play_in_rows = nrow(invalid_current_play_in),
         unmatched_current_slot_rows = nrow(unmatched_current_slots),
         duplicate_current_slot_rows = nrow(duplicate_current_slots),
@@ -178,6 +220,9 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         unresolved_team_rows = nrow(unresolved_teams),
         passed = all(games_per_year$ok) &&
             nrow(round_count_issues) == 0 &&
+            nrow(current_year_round_scope_issues) == 0 &&
+            nrow(current_year_round_count_issues) == 0 &&
+            nrow(current_year_game_index_issues) == 0 &&
             nrow(invalid_current_play_in) == 0 &&
             nrow(unmatched_current_slots) == 0 &&
             nrow(duplicate_current_slots) == 0 &&
@@ -193,6 +238,9 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         round_count_issues = round_count_issues,
         current_year_completed_results = current_year_completed_results,
         current_year_non_play_in = current_year_non_play_in,
+        current_year_round_scope_issues = current_year_round_scope_issues,
+        current_year_round_count_issues = current_year_round_count_issues,
+        current_year_game_index_issues = current_year_game_index_issues,
         current_play_in_results = current_play_in_results,
         invalid_current_play_in = invalid_current_play_in,
         unmatched_current_slots = unmatched_current_slots,
@@ -234,6 +282,36 @@ assert_canonical_data_quality <- function(team_features, game_results) {
         issues <- c(
             issues,
             paste("Unexpected per-year round counts:", paste(round_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$current_year_round_scope_issues) > 0) {
+        current_text <- report$current_year_round_scope_issues %>%
+            dplyr::mutate(text = sprintf("%s %s %s vs %s (%s)", Year, region, teamA, teamB, round)) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Current-year completed rows include impossible region/round combinations:", paste(current_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$current_year_round_count_issues) > 0) {
+        current_round_text <- report$current_year_round_count_issues %>%
+            dplyr::mutate(text = sprintf("%s=%s (expected at most %s)", round, games, expected_games)) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Current-year completed rows exceed tournament round maxima:", paste(current_round_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$current_year_game_index_issues) > 0) {
+        current_game_index_text <- report$current_year_game_index_issues %>%
+            dplyr::mutate(text = sprintf("%s %s #%s (max %s) %s vs %s", region, round, game_index, max_game_index, teamA, teamB)) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Current-year completed rows contain impossible game-index assignments:", paste(current_game_index_text, collapse = "; "))
         )
     }
 

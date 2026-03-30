@@ -319,12 +319,16 @@ resolve_play_in_games <- function(region_teams, model_results, draws, actual_pla
 #'   results used to replace simulated duplicate-seed outcomes when available.
 #' @param deterministic Whether regional games are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
+#' @param log_stage_progress Whether to emit region and round progress lines.
 #'
 #' @return A list containing regional round results and the region champion.
 #' @export
-simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE) {
+simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL) {
     region_name <- unique(region_teams$Region)[1]
-    if (!isTRUE(log_matchups)) {
+    if (is.null(log_stage_progress)) {
+        log_stage_progress <- !isTRUE(log_matchups)
+    }
+    if (isTRUE(log_stage_progress)) {
         logger::log_info("Simulating {region_name} region")
     }
     play_in <- resolve_play_in_games(
@@ -353,7 +357,7 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, 
     remaining <- ordered_teams
 
     for (round_name in rounds) {
-        if (!isTRUE(log_matchups)) {
+        if (isTRUE(log_stage_progress)) {
             logger::log_info("Simulating {round_name} in {region_name}")
         }
         simulated_round <- simulate_round(remaining, round_name, model_results, draws, deterministic = deterministic, log_matchups = log_matchups)
@@ -375,11 +379,15 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, 
 #' @param draws Number of posterior draws to use.
 #' @param deterministic Whether national games are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
+#' @param log_stage_progress Whether to emit Final Four progress lines.
 #'
 #' @return A list containing semifinal, championship, and champion results.
 #' @export
-simulate_final_four <- function(region_champions, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE) {
-    if (!isTRUE(log_matchups)) {
+simulate_final_four <- function(region_champions, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL) {
+    if (is.null(log_stage_progress)) {
+        log_stage_progress <- !isTRUE(log_matchups)
+    }
+    if (isTRUE(log_stage_progress)) {
         logger::log_info("Simulating Final Four and championship")
     }
     semifinal1 <- simulate_matchup(
@@ -448,12 +456,16 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
 #'   results used to replace simulated duplicate-seed outcomes when available.
 #' @param deterministic Whether all matchups are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
+#' @param log_stage_progress Whether to emit region and Final Four progress lines.
 #'
 #' @return A list containing regional results and Final Four results.
 #' @export
-simulate_full_bracket <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE) {
+simulate_full_bracket <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL) {
     regions <- c("East", "West", "South", "Midwest")
     region_counts <- table(all_teams$Region)
+    if (is.null(log_stage_progress)) {
+        log_stage_progress <- !isTRUE(log_matchups)
+    }
 
     for (region in regions) {
         if (region_counts[[region]] %||% 0 == 0) {
@@ -470,13 +482,21 @@ simulate_full_bracket <- function(all_teams, model_results, draws = 1000, actual
                 draws = draws,
                 actual_play_in_results = actual_play_in_results,
                 deterministic = deterministic,
-                log_matchups = log_matchups
+                log_matchups = log_matchups,
+                log_stage_progress = log_stage_progress
             )
         }
     )
 
     champions <- purrr::map(region_results, "champion")
-    final_four <- simulate_final_four(champions, model_results, draws, deterministic = deterministic, log_matchups = log_matchups)
+    final_four <- simulate_final_four(
+        champions,
+        model_results,
+        draws,
+        deterministic = deterministic,
+        log_matchups = log_matchups,
+        log_stage_progress = log_stage_progress
+    )
 
     list(
         region_results = region_results,

@@ -464,7 +464,9 @@ empty_game_results_table <- function() {
         teamA_score = integer(),
         teamB_score = integer(),
         total_points = integer(),
-        winner = character()
+        winner = character(),
+        completed_at = character(),
+        source = character()
     )
 }
 
@@ -1743,13 +1745,15 @@ predict_candidate_total_points <- function(candidates, current_teams, total_poin
 #' @return A list with candidate metadata and flattened matchup tables.
 #' @export
 generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, n_candidates = 2L, n_simulations = 250L, random_seed = 123) {
+    logger::log_info("Building deterministic reference bracket")
     deterministic_bracket <- simulate_full_bracket(
         all_teams = all_teams,
         model_results = model_results,
         draws = draws,
         actual_play_in_results = actual_play_in_results,
         deterministic = TRUE,
-        log_matchups = FALSE
+        log_matchups = FALSE,
+        log_stage_progress = FALSE
     )
     deterministic_flat <- augment_matchup_decisions(flatten_matchup_results(deterministic_bracket))
     deterministic_summary <- summarize_bracket_probability(deterministic_flat)
@@ -1778,7 +1782,9 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
     }
 
     set.seed(random_seed)
+    logger::log_info("Exploring {n_simulations} stochastic bracket simulations")
     simulated_rows <- vector("list", n_simulations)
+    progress_points <- sort(unique(pmax(1L, as.integer(round(seq(0.2, 1, by = 0.2) * n_simulations)))))
     for (index in seq_len(n_simulations)) {
         bracket <- simulate_full_bracket(
             all_teams = all_teams,
@@ -1786,7 +1792,8 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             draws = draws,
             actual_play_in_results = actual_play_in_results,
             deterministic = FALSE,
-            log_matchups = FALSE
+            log_matchups = FALSE,
+            log_stage_progress = FALSE
         )
         flattened <- flatten_matchup_results(bracket)
         summary_row <- summarize_bracket_probability(flattened)
@@ -1799,8 +1806,12 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             simulation = list(bracket),
             matchups = list(augment_matchup_decisions(flattened))
         )
+        if (index %in% progress_points) {
+            logger::log_info("Candidate simulations complete: {index}/{n_simulations}")
+        }
     }
 
+    logger::log_info("Collapsing simulations into unique bracket paths")
     ranked_candidates <- dplyr::bind_rows(simulated_rows) %>%
         dplyr::group_by(bracket_key) %>%
         dplyr::summarise(
@@ -1814,6 +1825,8 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             .groups = "drop"
         ) %>%
         dplyr::arrange(dplyr::desc(frequency), dplyr::desc(bracket_log_prob))
+
+    logger::log_info("Found {nrow(ranked_candidates)} unique bracket paths")
 
     alternate_candidates <- purrr::map_dfr(seq_len(nrow(ranked_candidates)), function(index) {
         row <- ranked_candidates[index, , drop = FALSE]

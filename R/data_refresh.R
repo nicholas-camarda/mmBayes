@@ -761,12 +761,12 @@ extract_espn_tournament_round <- function(headline, event_name = "", short_name 
 
     round_patterns <- list(
         "First Four" = c("First Four", "Play-In"),
-        "Round of 64" = c("Round of 64", "Round 1", "First Round"),
-        "Round of 32" = c("Round of 32", "Round 2"),
+        "Round of 64" = c("Round of 64", "Round 1", "1st Round", "First Round"),
+        "Round of 32" = c("Round of 32", "Round 2", "2nd Round", "Second Round"),
         "Sweet 16" = c("Sweet 16", "Regional Semifinal"),
         "Elite 8" = c("Elite 8", "Elite Eight", "Regional Final"),
         "Final Four" = c("Final Four", "National Semifinal", "Semifinal"),
-        "Championship" = c("Championship", "National Championship", "Title Game")
+        "Championship" = c("National Championship", "Championship Game", "Title Game")
     )
 
     for (round_name in names(round_patterns)) {
@@ -831,6 +831,35 @@ scrape_espn_tournament_results <- function(bracket_year, team_features, date_val
         return(empty_game_results_table())
     }
 
+    coerce_espn_events <- function(events, scoreboard_date) {
+        if (is.null(events) || length(events) == 0) {
+            return(tibble::tibble())
+        }
+
+        if (inherits(events, "data.frame")) {
+            return(
+                tibble::as_tibble(events) %>%
+                    dplyr::mutate(scoreboard_date = scoreboard_date)
+            )
+        }
+
+        if (is.list(events)) {
+            return(
+                purrr::map_dfr(events, function(event) {
+                    tibble::tibble(
+                        competitions = list(event$competitions %||% list()),
+                        name = as.character(event$name %||% NA_character_),
+                        shortName = as.character(event$shortName %||% NA_character_),
+                        date = as.character(event$date %||% NA_character_),
+                        scoreboard_date = scoreboard_date
+                    )
+                })
+            )
+        }
+
+        tibble::tibble()
+    }
+
     events <- purrr::map_dfr(date_values, function(date_value) {
         url <- sprintf(
             "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=%s&seasontype=3",
@@ -847,7 +876,7 @@ scrape_espn_tournament_results <- function(bracket_year, team_features, date_val
         if (is.null(payload) || is.null(payload$events)) {
             return(tibble::tibble())
         }
-        payload$events
+        coerce_espn_events(payload$events, scoreboard_date = date_value)
     })
 
     if (nrow(events) == 0) {
@@ -921,9 +950,15 @@ scrape_espn_tournament_results <- function(bracket_year, team_features, date_val
             }
         }
 
+        output_region <- if (identical(round_label, "First Four")) {
+            "First Four"
+        } else {
+            region_value %||% ifelse(round_label %in% c("Final Four", "Championship"), "National", team_a_lookup$lookup_region[[1]])
+        }
+
         tibble::tibble(
             Year = as.character(bracket_year),
-            region = region_value %||% ifelse(round_label %in% c("Final Four", "Championship"), "National", team_a_lookup$lookup_region[[1]]),
+            region = output_region,
             round = round_label,
             game_index = NA_integer_,
             teamA = team_a_name,
@@ -934,6 +969,8 @@ scrape_espn_tournament_results <- function(bracket_year, team_features, date_val
             teamB_score = team_b_score,
             total_points = as.integer(team_a_score + team_b_score),
             winner = ifelse(team_a_score > team_b_score, team_a_name, team_b_name),
+            completed_at = as.character(competition$date[[1]] %||% events$date[[index]] %||% NA_character_),
+            source = "espn_scoreboard",
             play_in_region = dplyr::coalesce(region_value, team_a_lookup$lookup_region[[1]], team_b_lookup$lookup_region[[1]]),
             slot_seed = dplyr::coalesce(as.integer(team_a_lookup$lookup_seed[[1]]), as.integer(team_b_lookup$lookup_seed[[1]]))
         )
@@ -947,9 +984,9 @@ scrape_espn_tournament_results <- function(bracket_year, team_features, date_val
         dplyr::filter(!is.na(round), !is.na(region)) %>%
         dplyr::mutate(
             round = factor(round, levels = round_levels()),
-            region = factor(region, levels = c(bracket_region_levels(), "National"))
+            region = factor(region, levels = c(bracket_region_levels(), "National", "First Four"))
         ) %>%
-        dplyr::arrange(round, region, teamA, teamB) %>%
+        dplyr::arrange(completed_at, round, region, teamA, teamB) %>%
         dplyr::group_by(Year, region, round) %>%
         dplyr::mutate(game_index = dplyr::row_number()) %>%
         dplyr::ungroup() %>%
@@ -965,7 +1002,9 @@ scrape_espn_tournament_results <- function(bracket_year, team_features, date_val
             teamA_score,
             teamB_score,
             total_points,
-            winner
+            winner,
+            completed_at,
+            source
         )
 }
 
@@ -1007,12 +1046,25 @@ merge_current_year_tournament_results <- function(game_results, team_features, b
     current_teams <- team_features %>%
         dplyr::filter(Year == bracket_year)
 
+    normalize_monitoring_columns <- function(tbl) {
+        if (!"completed_at" %in% names(tbl)) {
+            tbl <- tbl %>%
+                dplyr::mutate(completed_at = NA_character_)
+        }
+        if (!"source" %in% names(tbl)) {
+            tbl <- tbl %>%
+                dplyr::mutate(source = NA_character_)
+        }
+        tbl
+    }
+
     if (nrow(current_teams) == 0) {
         return(game_results)
     }
 
     current_results <- game_results %>%
-        dplyr::filter(Year == bracket_year)
+        dplyr::filter(Year == bracket_year) %>%
+        normalize_monitoring_columns()
     if (!is.null(round_filter)) {
         current_results <- current_results %>%
             dplyr::filter(round %in% round_filter)
@@ -1028,7 +1080,8 @@ merge_current_year_tournament_results <- function(game_results, team_features, b
             logger::log_warn("Skipping ESPN scoreboard fallback for {bracket_year}: {err$message}")
             empty_game_results_table()
         }
-    )
+    ) %>%
+        normalize_monitoring_columns()
     if (!is.null(round_filter)) {
         fallback_results <- fallback_results %>%
             dplyr::filter(round %in% round_filter)
@@ -1084,13 +1137,15 @@ merge_current_year_tournament_results <- function(game_results, team_features, b
             slot_seed = team_lookup$lookup_seed[match(normalize_team_key(teamA), team_lookup$team_key)]
         )
 
-    merged_current <- dplyr::bind_rows(existing_with_slot, fallback_with_slot) %>%
+        merged_current <- dplyr::bind_rows(existing_with_slot, fallback_with_slot) %>%
         dplyr::filter(!is.na(region), !is.na(round), !is.na(teamA), !is.na(teamB)) %>%
         dplyr::mutate(
             region = as.character(region),
-            round = as.character(round)
+            round = as.character(round),
+            completed_at = dplyr::coalesce(as.character(completed_at), NA_character_),
+            source = dplyr::coalesce(as.character(source), "unknown")
         ) %>%
-        dplyr::arrange(source_priority, round, region, teamA, teamB) %>%
+        dplyr::arrange(source_priority, completed_at, round, region, teamA, teamB) %>%
         dplyr::group_by(Year, round, game_pair_key) %>%
         dplyr::slice(1) %>%
         dplyr::ungroup() %>%
@@ -1110,7 +1165,9 @@ merge_current_year_tournament_results <- function(game_results, team_features, b
             teamA_score,
             teamB_score,
             total_points,
-            winner
+            winner,
+            completed_at,
+            source
         )
 
     historical_results <- game_results %>%
@@ -1194,8 +1251,8 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
         scrape_tournament_results(year)
     })
 
-    logger::log_info("Refreshing current-year results for {bracket_year} when available")
-    current_year_results <- scrape_tournament_results(bracket_year, allow_empty = TRUE)
+    logger::log_info("Refreshing current-year results for {bracket_year} from the scoreboard monitoring feed")
+    current_year_results <- empty_game_results_table()
     current_year_fallback <- tryCatch(
         scrape_espn_tournament_results(bracket_year, team_features),
         error = function(err) {

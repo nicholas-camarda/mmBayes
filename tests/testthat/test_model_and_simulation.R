@@ -335,8 +335,13 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(nrow(live_performance$summary) == 1)
     expect_true(nrow(live_performance$main_bracket_summary) == 1)
     expect_true(live_performance$main_bracket_games_played > 0)
-    expect_match(render_live_performance_html(live_performance), "Main-bracket live performance")
-    expect_match(render_live_performance_html(live_performance), "Monitoring only")
+    expect_identical(as.character(live_performance$games$round[[1]]), "Round of 32")
+    expect_match(live_performance$recent_games_title, "Recent Games")
+    expect_match(render_live_performance_html(live_performance, model_label = "Stan GLM"), "Live Tournament Performance - Stan GLM")
+    expect_match(render_live_performance_html(live_performance, model_label = "Stan GLM"), "Main-bracket live performance")
+    expect_match(render_live_performance_html(live_performance, model_label = "Stan GLM"), "Monitoring only")
+    expect_match(render_live_performance_html(live_performance, model_label = "Stan GLM"), "Live By Round")
+    expect_match(render_live_performance_html(live_performance, model_label = "Stan GLM"), "Ordered by recorded completion time")
     expect_true(file.exists(file.path(output_dir, "model_quality", "latest_model_quality.rds")))
     expect_equal(length(list.files(file.path(output_dir, "model_quality"), pattern = "^model_quality_.*_pid.*\\.rds$")), 0L)
     expect_true(isTRUE(decision_outputs$model_quality_used_cached_quality))
@@ -359,6 +364,21 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_equal(first_four_only_performance$main_bracket_games_played, 0L)
     expect_match(render_live_performance_html(first_four_only_performance), "early read")
     expect_match(render_live_performance_html(first_four_only_performance), "No Round of 64\\+ games have completed yet")
+
+    live_without_timestamps <- live_current_results %>%
+        dplyr::select(-completed_at)
+    no_timestamp_performance <- summarize_live_tournament_performance(
+        data = list(
+            bracket_year = 2025L,
+            current_completed_results = live_without_timestamps,
+            current_teams = live_team_data %>% dplyr::filter(Year == "2025"),
+            historical_betting_features = tibble::tibble()
+        ),
+        model_results = model_results,
+        draws = 25L
+    )
+    expect_match(no_timestamp_performance$recent_games_title, "Latest Available Games")
+    expect_match(render_live_performance_html(no_timestamp_performance), "Latest Available Games")
 
     no_game_performance <- summarize_live_tournament_performance(
         data = list(
@@ -453,9 +473,9 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(technical_html, "How To Use This Dashboard")
     expect_match(technical_html, "Model Overview")
     expect_match(technical_html, "What this means")
-    expect_match(technical_html, "Calibration curve")
-    expect_match(technical_html, "By round")
-    expect_match(technical_html, "Live Tournament Performance")
+    expect_match(technical_html, "Backtest Calibration Curve")
+    expect_match(technical_html, "Backtest By Round")
+    expect_match(technical_html, "Live Tournament Performance - Stan GLM")
     expect_match(technical_html, "Recent Games")
     expect_match(technical_html, "review-priority queue")
     expect_match(technical_html, "Cached identical validation snapshot")
@@ -468,7 +488,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(technical_html, "Observed by bin")
     expect_match(technical_html, "quality-grid")
     expect_match(technical_html, "What this means")
-    expect_match(technical_html, "Current summary")
+    expect_match(technical_html, "Backtest Summary")
     expect_false(grepl("Backtest unavailable", technical_html, fixed = TRUE))
     expect_match(technical_html, "Ranked Decision Board")
     expect_match(technical_html, "review priority = round weight x \\(underdog win probability \\+ interval width\\)")
@@ -636,8 +656,10 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(comparison_html, "Compare")
     expect_match(comparison_html, "Stan GLM")
     expect_match(comparison_html, "BART")
-    expect_match(comparison_html, "Backtest metrics")
-    expect_match(comparison_html, "Current-year live metrics")
+    expect_match(comparison_html, "Historical Backtest Metrics")
+    expect_match(comparison_html, "Current-Year Live Metrics")
+    expect_match(comparison_html, "Live Tournament Performance - Stan GLM")
+    expect_match(comparison_html, "Live Tournament Performance - BART")
     expect_match(render_model_comparison_link_html(comparison_bundle), "Open the full model comparison dashboard")
 
     html_without_quality <- create_technical_dashboard_html(

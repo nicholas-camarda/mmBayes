@@ -24,3 +24,5 @@ tests/testthat/*.log
 .lintr
 .env
 
+CLAUDE.md
+AGENTS.md

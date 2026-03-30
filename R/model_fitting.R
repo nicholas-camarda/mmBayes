@@ -1377,7 +1377,8 @@ run_rolling_backtest <- function(historical_teams,
             all_teams = holdout_teams,
             model_results = model_results,
             draws = draws,
-            log_matchups = FALSE
+            log_matchups = FALSE,
+            log_stage_progress = FALSE
         )
         predicted_matchups <- flatten_matchup_results(simulated_bracket)
         actual_lookup <- holdout_results %>%

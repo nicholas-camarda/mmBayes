@@ -209,13 +209,16 @@ build_model_metric_comparison_table <- function(current_summary,
             current_label
         }
 
-        tibble::tibble(
+        row <- tibble::tibble(
             Metric = metric,
             `Current` = format_metric_value(current_value, digits, percent),
             `Alternate` = format_metric_value(alternate_value, digits, percent),
             Delta = format_metric_delta(delta, digits, percent),
             Winner = winner
         )
+        names(row)[names(row) == "Current"] <- current_label
+        names(row)[names(row) == "Alternate"] <- alternate_label
+        row
     })
 }
 
@@ -299,6 +302,25 @@ summarize_prediction_round_performance <- function(predictions) {
         dplyr::mutate(round = as.character(round))
 }
 
+format_calibration_bin <- function(bin_value) {
+    label <- as.character(bin_value %||% "")
+    if (!nzchar(label)) {
+        return("unknown bin")
+    }
+
+    match <- regexec("^\\(?([0-9.]+),([0-9.]+)\\]?$", label)
+    parts <- regmatches(label, match)[[1]]
+    if (length(parts) == 3) {
+        lower <- safe_numeric(parts[2], default = NA_real_) * 100
+        upper <- safe_numeric(parts[3], default = NA_real_) * 100
+        if (is.finite(lower) && is.finite(upper)) {
+            return(sprintf("%.0f%% to %.0f%%", lower, upper))
+        }
+    }
+
+    label
+}
+
 #' Summarize backtest performance for diagnostics
 #'
 #' @param backtest A backtest bundle returned by [run_rolling_backtest()].
@@ -326,6 +348,13 @@ summarize_backtest_diagnostics <- function(backtest) {
     calibration <- backtest$calibration %||% tibble::tibble()
     calibration <- if (nrow(calibration) > 0 && all(c("mean_predicted", "empirical_rate") %in% names(calibration))) {
         calibration %>%
+            dplyr::mutate(
+                bin = if ("bin" %in% names(.)) {
+                    as.character(bin)
+                } else {
+                    sprintf("%.0f%% bucket", 100 * safe_numeric(mean_predicted, default = NA_real_))
+                }
+            ) %>%
             dplyr::mutate(calibration_gap = abs(safe_numeric(empirical_rate, default = NA_real_) - safe_numeric(mean_predicted, default = NA_real_)))
     } else {
         tibble::tibble()
@@ -383,10 +412,12 @@ summarize_backtest_diagnostics <- function(backtest) {
             strengths <- c(
                 strengths,
                 sprintf(
-                    "Most calibrated bin: predicted %.0f%% to %.0f%% with gap %.3f.",
+                    "Most calibrated bin: the %s bucket had a mean predicted win rate of %.0f%% and an observed win rate of %.0f%%, so the gap was %.3f (%.1f percentage points). Smaller gaps mean better calibration.",
+                    format_calibration_bin(best_bin$bin[[1]]),
                     100 * safe_numeric(best_bin$mean_predicted[[1]], default = NA_real_),
                     100 * safe_numeric(best_bin$empirical_rate[[1]], default = NA_real_),
-                    safe_numeric(best_bin$calibration_gap[[1]], default = NA_real_)
+                    safe_numeric(best_bin$calibration_gap[[1]], default = NA_real_),
+                    100 * safe_numeric(best_bin$calibration_gap[[1]], default = NA_real_)
                 )
             )
         }
@@ -394,10 +425,12 @@ summarize_backtest_diagnostics <- function(backtest) {
             weaknesses <- c(
                 weaknesses,
                 sprintf(
-                    "Least calibrated bin: predicted %.0f%% to %.0f%% with gap %.3f.",
+                    "Least calibrated bin: the %s bucket had a mean predicted win rate of %.0f%% and an observed win rate of %.0f%%, so the gap was %.3f (%.1f percentage points). Larger gaps mean the model is less calibrated in that range.",
+                    format_calibration_bin(worst_bin$bin[[1]]),
                     100 * safe_numeric(worst_bin$mean_predicted[[1]], default = NA_real_),
                     100 * safe_numeric(worst_bin$empirical_rate[[1]], default = NA_real_),
-                    safe_numeric(worst_bin$calibration_gap[[1]], default = NA_real_)
+                    safe_numeric(worst_bin$calibration_gap[[1]], default = NA_real_),
+                    100 * safe_numeric(worst_bin$calibration_gap[[1]], default = NA_real_)
                 )
             )
         }
@@ -751,11 +784,11 @@ summarize_model_quality <- function(backtest) {
         max_gap <- max(gaps, na.rm = TRUE)
         mean_gap <- mean(gaps, na.rm = TRUE)
         calibration_text <- if (is.finite(max_gap) && max_gap <= 0.03) {
-            sprintf("The calibration curve hugs the diagonal closely. Each point shows the observed win rate, or empirical rate, in a probability bin, and the mean bin gap is %.3f.", mean_gap)
+            sprintf("The calibration curve hugs the diagonal closely. Each point is a probability bin: the x-axis is the model's average predicted win rate in that bin, the y-axis is the observed win rate, and the mean bin gap is %.3f.", mean_gap)
         } else if (is.finite(max_gap) && max_gap <= 0.06) {
-            sprintf("The calibration curve stays fairly close to the diagonal. Each point shows the observed win rate, or empirical rate, in a probability bin, and the mean bin gap is %.3f.", mean_gap)
+            sprintf("The calibration curve stays fairly close to the diagonal. Each point is a probability bin: the x-axis is the model's average predicted win rate in that bin, the y-axis is the observed win rate, and the mean bin gap is %.3f.", mean_gap)
         } else {
-            sprintf("The calibration curve shows a noticeable wobble. Each point shows the observed win rate, or empirical rate, in a probability bin, and the mean bin gap is %.3f.", mean_gap)
+            sprintf("The calibration curve shows a noticeable wobble. Each point is a probability bin: the x-axis is the model's average predicted win rate in that bin, the y-axis is the observed win rate, and the mean bin gap is %.3f.", mean_gap)
         }
     } else {
         calibration_text <- "A bin-level calibration chart is not available for this snapshot."
@@ -834,7 +867,21 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
 
     prediction_draws <- predict_matchup_rows(matchup_rows, model_results, draws = draws)
     predicted_prob <- colMeans(prediction_draws)
+    recency_lookup <- current_completed_results %>%
+        dplyr::transmute(
+            Year = as.character(Year),
+            region = as.character(region),
+            round = as.character(round),
+            game_index = as.integer(game_index),
+            teamA = as.character(teamA),
+            teamB = as.character(teamB),
+            completed_at = if ("completed_at" %in% names(current_completed_results)) as.character(completed_at) else NA_character_
+        )
     scored_games <- matchup_rows %>%
+        dplyr::left_join(
+            recency_lookup,
+            by = c("Year", "region", "round", "game_index", "teamA", "teamB")
+        ) %>%
         dplyr::mutate(
             predicted_prob = predicted_prob,
             model_pick = dplyr::if_else(predicted_prob >= 0.5, teamA, teamB),
@@ -886,6 +933,26 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
         coverage_text
     )
 
+    recent_games_have_timestamps <- any(!is.na(scored_games$completed_at) & nzchar(scored_games$completed_at))
+    recent_games_title <- if (recent_games_have_timestamps) {
+        "Recent Games"
+    } else {
+        "Latest Available Games"
+    }
+    recent_games_note <- if (recent_games_have_timestamps) {
+        "Ordered by recorded completion time."
+    } else {
+        "Ordered by the best available bracket progression metadata because completion timestamps were not supplied."
+    }
+    recent_games_tbl <- if (recent_games_have_timestamps) {
+        scored_games %>%
+            dplyr::mutate(completed_at_sort = suppressWarnings(as.POSIXct(completed_at, tz = "UTC"))) %>%
+            dplyr::arrange(dplyr::desc(completed_at_sort), dplyr::desc(game_index), region)
+    } else {
+        scored_games %>%
+            dplyr::arrange(dplyr::desc(round), dplyr::desc(game_index), region)
+    }
+
     list(
         status = status,
         monitoring_note = "Monitoring only: current-year outcomes are for evaluation and commentary. They do not retrain the current tournament model or alter pre-tournament matchup features.",
@@ -903,7 +970,7 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
             accuracy = main_bracket_metrics$accuracy[[1]]
         ),
         round_summary = round_summary,
-        games = scored_games %>%
+        games = recent_games_tbl %>%
             dplyr::mutate(
                 actual_winner = winner,
                 model_pick = model_pick,
@@ -911,9 +978,11 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
             ) %>%
             dplyr::select(
                 Year, region, round, game_index, teamA, teamB, actual_winner, model_pick,
-                predicted_prob, model_pick_note, actual_outcome
+                predicted_prob, model_pick_note, actual_outcome, completed_at
             ) %>%
-            dplyr::slice_tail(n = 8L),
+            dplyr::slice_head(n = 8L),
+        recent_games_title = recent_games_title,
+        recent_games_note = recent_games_note,
         games_played = nrow(scored_games),
         main_bracket_games_played = nrow(main_bracket_games),
         rounds_played = unique(as.character(scored_games$round))

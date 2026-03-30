@@ -499,6 +499,7 @@ load_tournament_data <- function(config, include_betting_history = TRUE) {
     current_completed_results <- game_results %>%
         dplyr::filter(
             Year == bracket_year,
+            !is.na(winner),
             !is.na(teamA_score),
             !is.na(teamB_score)
         )

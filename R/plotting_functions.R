@@ -1118,15 +1118,15 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
             paste0(
                 if (!is.null(quality_source_label)) paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>") else "",
                 "<div class='quality-grid'>",
-                "<div class='quality-card'><h3>Current summary</h3><p class='empty-state'>Backtest not computed in this run.</p></div>",
+                "<div class='quality-card'><h3>Backtest Summary</h3><p class='empty-state'>Backtest not computed in this run.</p></div>",
                 "<div class='quality-card'><h3>What this means</h3>",
                 "<div class='diagnostic-callout'><strong>Doing well</strong><ul><li>No backtest snapshot was supplied for this run.</li></ul></div>",
                 "<div class='diagnostic-callout'><strong>Needs attention</strong><ul><li>Run the full simulation pipeline if you want calibration and round-level diagnostics here.</li></ul></div>",
                 "</div>",
                 "</div>",
                 "<div class='quality-grid'>",
-                "<div class='quality-card'><h3>Calibration curve</h3><p class='empty-state'>Backtest calibration was not available for this run.</p></div>",
-                "<div class='quality-card'><h3>By round</h3><p class='empty-state'>Round-level diagnostics were not available for this run.</p></div>",
+                "<div class='quality-card'><h3>Backtest Calibration Curve</h3><p class='empty-state'>Backtest calibration was not available for this run.</p></div>",
+                "<div class='quality-card'><h3>Backtest By Round</h3><p class='empty-state'>Round-level diagnostics were not available for this run.</p></div>",
                 "</div>"
             )
         )
@@ -1177,15 +1177,15 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
     paste0(
         if (!is.null(quality_source_label)) paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>") else "",
         "<div class='quality-grid'>",
-        "<div class='quality-card'><h3>Current summary</h3>", render_html_table(calibration_summary), "</div>",
+        "<div class='quality-card'><h3>Backtest Summary</h3>", render_html_table(calibration_summary), "</div>",
         "<div class='quality-card'><h3>What this means</h3>",
         "<div class='diagnostic-callout'><strong>Doing well</strong><ul>", if (nzchar(strength_lines)) strength_lines else "<li>No strengths identified.</li>", "</ul></div>",
         "<div class='diagnostic-callout'><strong>Needs attention</strong><ul>", if (nzchar(weakness_lines)) weakness_lines else "<li>No weaknesses identified.</li>", "</ul></div>",
         "</div>",
         "</div>",
         "<div class='quality-grid'>",
-        "<div class='quality-card'><h3>Calibration curve</h3>", render_calibration_svg(quality_backtest$calibration %||% tibble::tibble()), "</div>",
-        "<div class='quality-card'><h3>By round</h3>",
+        "<div class='quality-card'><h3>Backtest Calibration Curve</h3>", render_calibration_svg(quality_backtest$calibration %||% tibble::tibble()), "</div>",
+        "<div class='quality-card'><h3>Backtest By Round</h3>",
         "<table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Log loss</th><th>Brier</th><th>Empirical rate</th></tr></thead><tbody>", round_rows, "</tbody></table>",
         "</div>",
         "</div>",
@@ -1261,6 +1261,10 @@ render_model_comparison_summary_html <- function(model_comparison) {
     backtest_table <- model_comparison$backtest_comparison %||% tibble::tibble()
     live_table <- model_comparison$live_comparison %||% tibble::tibble()
     modeling_notes <- model_comparison$notes %||% character()
+    current_live_model <- normalize_model_overview(model_comparison$current$model_overview %||% list())
+    alternate_live_model <- normalize_model_overview(model_comparison$alternate$model_overview %||% list())
+    current_live_model_label <- current_live_model$engine_label %||% current_live_model$engine %||% current_label
+    alternate_live_model_label <- alternate_live_model$engine_label %||% alternate_live_model$engine %||% alternate_label
     backtest_summary <- summarize_model_metric_comparison(backtest_table, current_label, alternate_label)
     live_summary <- summarize_model_metric_comparison(live_table, current_label, alternate_label)
     notes_html <- if (length(modeling_notes) > 0L) {
@@ -1294,19 +1298,19 @@ render_model_comparison_summary_html <- function(model_comparison) {
         "</div>",
         "<div class='toggle-panel is-active' data-model-view-panel='compare'>",
         "<div class='quality-grid'>",
-        "<div class='quality-card'><h3>Backtest metrics</h3>", render_html_table(backtest_table), "</div>",
-        "<div class='quality-card'><h3>Current-year live metrics</h3>", render_html_table(live_table), "</div>",
+        "<div class='quality-card'><h3>Historical Backtest Metrics</h3><p class='panel-caption'>Held-out tournament summaries across completed historical seasons.</p>", render_html_table(backtest_table), "</div>",
+        "<div class='quality-card'><h3>Current-Year Live Metrics</h3><p class='panel-caption'>Columns are labeled by engine. These metrics are from completed current-year games only.</p>", render_html_table(live_table), "</div>",
         "</div>",
         "</div>",
         "<div class='toggle-panel' data-model-view-panel='current'>",
         render_model_overview_html(model_comparison$current$model_overview %||% list()),
         render_model_diagnostics_html(model_comparison$current$backtest %||% NULL, quality_source_label = paste(current_label, "backtest")),
-        render_live_performance_html(model_comparison$current$live_performance %||% NULL),
+        render_live_performance_html(model_comparison$current$live_performance %||% NULL, model_label = current_live_model_label),
         "</div>",
         "<div class='toggle-panel' data-model-view-panel='alternate'>",
         render_model_overview_html(model_comparison$alternate$model_overview %||% list()),
         render_model_diagnostics_html(model_comparison$alternate$backtest %||% NULL, quality_source_label = paste(alternate_label, "backtest")),
-        render_live_performance_html(model_comparison$alternate$live_performance %||% NULL),
+        render_live_performance_html(model_comparison$alternate$live_performance %||% NULL, model_label = alternate_live_model_label),
         "</div>",
         "<script>",
         "(function(){",
@@ -2096,13 +2100,31 @@ render_candidate_divergence_svg <- function(decision_sheet) {
 #'
 #' @param live_performance A live performance summary returned by
 #'   [summarize_live_tournament_performance()].
+#' @param model_label Optional human-readable model label for the panel.
 #'
 #' @return A scalar character string containing HTML markup.
 #' @keywords internal
-render_live_performance_html <- function(live_performance) {
+render_live_performance_html <- function(live_performance, model_label = NULL) {
+    format_live_round_label <- function(round_name) {
+        if (identical(round_name, "Championship")) {
+            return("National Championship")
+        }
+        round_name
+    }
+    model_label <- if (!is.null(model_label) && nzchar(as.character(model_label)[[1]])) {
+        as.character(model_label)[[1]]
+    } else {
+        NULL
+    }
+    panel_title <- if (!is.null(model_label)) {
+        paste0("Live Tournament Performance - ", model_label)
+    } else {
+        "Live Tournament Performance"
+    }
+
     if (is.null(live_performance)) {
         return(
-            "<div class='panel'><h2>Live Tournament Performance</h2><p class='empty-state'>No completed current-year games have been recorded yet.</p></div>"
+            paste0("<div class='panel'><h2>", html_escape(panel_title), "</h2><p class='empty-state'>No completed current-year games have been recorded yet.</p></div>")
         )
     }
 
@@ -2110,7 +2132,7 @@ render_live_performance_html <- function(live_performance) {
     if (nrow(summary_tbl) == 0) {
         return(
             paste0(
-                "<div class='panel'><h2>Live Tournament Performance</h2>",
+                "<div class='panel'><h2>", html_escape(panel_title), "</h2>",
                 "<p class='empty-state'>", html_escape(live_performance$status %||% "No completed current-year games have been recorded yet."), "</p>",
                 "</div>"
             )
@@ -2120,6 +2142,8 @@ render_live_performance_html <- function(live_performance) {
     main_bracket_tbl <- live_performance$main_bracket_summary %||% tibble::tibble()
     round_tbl <- live_performance$round_summary %||% tibble::tibble()
     recent_games <- live_performance$games %||% tibble::tibble()
+    recent_games_title <- live_performance$recent_games_title %||% "Recent Games"
+    recent_games_note <- live_performance$recent_games_note %||% "Ordered by the best available monitoring metadata."
     monitoring_note <- live_performance$monitoring_note %||% "Monitoring only: current-year results are for evaluation and commentary."
     interpretive_status <- live_performance$interpretive_status %||% "early read"
     main_bracket_games_played <- safe_numeric(live_performance$main_bracket_games_played %||% 0, default = 0)
@@ -2185,7 +2209,7 @@ render_live_performance_html <- function(live_performance) {
                 row <- round_tbl[index, , drop = FALSE]
                 paste0(
                     "<tr>",
-                    "<td>", html_escape(row$round[[1]]), "</td>",
+                    "<td>", html_escape(format_live_round_label(row$round[[1]])), "</td>",
                     "<td>", html_escape(as.character(row$games[[1]])), "</td>",
                     "<td>", html_escape(format_probability(row$accuracy[[1]])), "</td>",
                     "<td>", html_escape(format_probability(row$mean_predicted_prob[[1]])), "</td>",
@@ -2204,7 +2228,7 @@ render_live_performance_html <- function(live_performance) {
                 row <- recent_games[index, , drop = FALSE]
                 paste0(
                     "<tr>",
-                    "<td>", html_escape(as.character(row$round[[1]])), "</td>",
+                    "<td>", html_escape(format_live_round_label(as.character(row$round[[1]]))), "</td>",
                     "<td>", html_escape(row$teamA[[1]]), " vs ", html_escape(row$teamB[[1]]), "</td>",
                     "<td>", html_escape(row$actual_winner[[1]]), "</td>",
                     "<td>", html_escape(row$model_pick[[1]]), "</td>",
@@ -2221,14 +2245,19 @@ render_live_performance_html <- function(live_performance) {
 
     paste0(
         "<div class='panel'>",
-        "<h2>Live Tournament Performance</h2>",
+        "<h2>", html_escape(panel_title), "</h2>",
+        if (!is.null(model_label)) {
+            paste0("<p class='panel-caption'><strong>Model:</strong> ", html_escape(model_label), "</p>")
+        } else {
+            ""
+        },
         "<p class='panel-caption'>", html_escape(live_performance$status %||% "Current-year results update here when the refresh job runs again."), "</p>",
         "<p class='quality-note'><strong>Interpretive status:</strong> ", html_escape(interpretive_status), "</p>",
         "<p class='quality-note'>", html_escape(monitoring_note), "</p>",
         overview_cards,
         "<div class='two-column'>",
-        "<div class='quality-card'><h3>By Round</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Mean predicted</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
-        "<div class='quality-card'><h3>Recent Games</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Matchup</th><th>Winner</th><th>Model pick</th><th>Model P(win)</th><th>Status</th></tr></thead><tbody>", recent_rows, "</tbody></table></div>",
+        "<div class='quality-card'><h3>Live By Round</h3><p class='panel-caption'>Current-year completed games grouped by tournament round.</p><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Mean predicted</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
+        "<div class='quality-card'><h3>", html_escape(recent_games_title), "</h3><p class='panel-caption'>", html_escape(recent_games_note), "</p><table class='dashboard-table'><thead><tr><th>Round</th><th>Matchup</th><th>Winner</th><th>Model pick</th><th>Model P(win)</th><th>Status</th></tr></thead><tbody>", recent_rows, "</tbody></table></div>",
         "</div>",
         "</div>"
     )
@@ -2666,7 +2695,7 @@ render_calibration_svg <- function(calibration_tbl) {
         "<text x='", margin_left + (plot_width / 2), "' y='", height - 8, "' text-anchor='middle' font-size='11' fill='#6b7280'>Predicted probability</text>",
         "<text x='18' y='", 36 + (plot_height / 2), "' font-size='11' fill='#6b7280' transform='rotate(-90 18 ", 36 + (plot_height / 2), ")'>Observed win rate</text>",
         "<circle cx='", width - 194, "' cy='16' r='5' fill='#1d4ed8'/>",
-        "<text x='", width - 182, "' y='20' font-size='11' fill='#6b7280'>Observed by bin</text>",
+        "<text x='", width - 182, "' y='20' font-size='11' fill='#6b7280'>Observed by bin (win rate)</text>",
         "<line x1='", width - 92, "' y1='16' x2='", width - 64, "' y2='16' stroke='#d6d3d1' stroke-dasharray='4 4' stroke-width='1.5'/>",
         "<text x='", width - 58, "' y='20' font-size='11' fill='#6b7280'>Perfect line</text>",
         "</svg>"
@@ -2820,6 +2849,8 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
     }
     quality_backtest <- quality_context$backtest %||% backtest
     quality_source_label <- quality_context$source_label %||% "Current run backtest"
+    live_model <- normalize_model_overview(model_overview)
+    live_model_label <- live_model$engine_label %||% live_model$engine %||% if (!is.null(live_performance)) "Stan GLM" else NULL
     overview_panel <- render_model_overview_html(model_overview)
     comparison_panel <- render_model_comparison_link_html(model_comparison)
     diagnostics_panel <- render_model_diagnostics_html(quality_backtest, quality_source_label = quality_source_label)
@@ -3080,7 +3111,10 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         overview_panel,
         comparison_panel,
         diagnostics_panel,
-        render_live_performance_html(live_performance),
+        render_live_performance_html(
+            live_performance,
+            model_label = live_model_label
+        ),
         "<div class='panel'>",
         "<h2>How To Use This Dashboard</h2>",
         "<div class='guide-grid'>",
