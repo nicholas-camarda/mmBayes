@@ -298,11 +298,11 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(resolved_quality$source_label, "Cached identical validation snapshot")
 
     live_team_data <- make_fixture_team_features(current_year = 2025, history_years = 2022:2024)
-    live_results_data <- make_fixture_game_results(live_team_data, history_years = 2022:2025)
+    live_current_results <- make_fixture_current_year_completed_results(live_team_data, current_year = 2025)
     live_performance <- summarize_live_tournament_performance(
         data = list(
             bracket_year = 2025L,
-            game_results = live_results_data,
+            current_completed_results = live_current_results,
             current_teams = live_team_data %>% dplyr::filter(Year == "2025"),
             historical_betting_features = tibble::tibble()
         ),
@@ -330,11 +330,48 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(file.exists(decision_outputs$matchup_context))
     expect_true(file.exists(decision_outputs$technical_dashboard))
     expect_match(paste(readLines(decision_outputs$technical_dashboard, warn = FALSE), collapse = "\n"), "Live Tournament Performance")
+    expect_match(live_performance$status, "Monitoring only")
+    expect_match(live_performance$status, "Live tournament performance through")
+    expect_true(nrow(live_performance$summary) == 1)
+    expect_true(nrow(live_performance$main_bracket_summary) == 1)
+    expect_true(live_performance$main_bracket_games_played > 0)
+    expect_match(render_live_performance_html(live_performance), "Main-bracket live performance")
+    expect_match(render_live_performance_html(live_performance), "Monitoring only")
     expect_true(file.exists(file.path(output_dir, "model_quality", "latest_model_quality.rds")))
     expect_equal(length(list.files(file.path(output_dir, "model_quality"), pattern = "^model_quality_.*_pid.*\\.rds$")), 0L)
     expect_true(isTRUE(decision_outputs$model_quality_used_cached_quality))
     expect_match(decision_outputs$model_quality_source_label, "Cached identical validation snapshot")
     expect_true(all(c("inspection_flag", "inspection_level", "predicted_total_median") %in% names(saved_matchup_totals)))
+
+    first_four_only_results <- live_current_results %>%
+        dplyr::filter(round == "First Four")
+    first_four_only_performance <- summarize_live_tournament_performance(
+        data = list(
+            bracket_year = 2025L,
+            current_completed_results = first_four_only_results,
+            current_teams = live_team_data %>% dplyr::filter(Year == "2025"),
+            historical_betting_features = tibble::tibble()
+        ),
+        model_results = model_results,
+        draws = 25L
+    )
+    expect_match(first_four_only_performance$status, "Only First Four games have completed so far")
+    expect_equal(first_four_only_performance$main_bracket_games_played, 0L)
+    expect_match(render_live_performance_html(first_four_only_performance), "early read")
+    expect_match(render_live_performance_html(first_four_only_performance), "No Round of 64\\+ games have completed yet")
+
+    no_game_performance <- summarize_live_tournament_performance(
+        data = list(
+            bracket_year = 2025L,
+            current_completed_results = tibble::tibble(),
+            current_teams = live_team_data %>% dplyr::filter(Year == "2025"),
+            historical_betting_features = tibble::tibble()
+        ),
+        model_results = model_results,
+        draws = 25L
+    )
+    expect_equal(nrow(no_game_performance$summary), 0L)
+    expect_match(render_live_performance_html(no_game_performance), "No completed current-year games have been recorded yet")
 
     dashboard_html <- create_bracket_dashboard_html(
         bracket_year = 2026L,

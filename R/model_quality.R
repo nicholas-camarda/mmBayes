@@ -784,26 +784,33 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
     }
 
     bracket_year <- data$bracket_year %||% NA_integer_
-    current_year_games <- data$game_results %>%
-        dplyr::filter(
-            Year == as.character(bracket_year),
-            !is.na(winner),
-            !is.na(teamA_score),
-            !is.na(teamB_score)
-        )
+    current_completed_results <- data$current_completed_results %||% tibble::tibble()
+    if (nrow(current_completed_results) == 0 && !is.null(data$game_results)) {
+        current_completed_results <- data$game_results %>%
+            dplyr::filter(
+                Year == as.character(bracket_year),
+                !is.na(winner),
+                !is.na(teamA_score),
+                !is.na(teamB_score)
+            )
+    }
 
-    if (nrow(current_year_games) == 0) {
+    if (nrow(current_completed_results) == 0) {
         return(list(
             status = "No completed current-year games have been recorded yet.",
+            monitoring_note = "Monitoring only: current-year results are reported for evaluation and commentary, not for model refits.",
+            interpretive_status = "no completed games",
             summary = tibble::tibble(),
+            main_bracket_summary = tibble::tibble(),
             round_summary = tibble::tibble(),
             games = tibble::tibble(),
             games_played = 0L,
+            main_bracket_games_played = 0L,
             rounds_played = character()
         ))
     }
 
-    current_reference <- build_actual_game_reference(data$current_teams, current_year_games)
+    current_reference <- build_actual_game_reference(data$current_teams, current_completed_results)
     matchup_rows <- actual_results_to_matchup_rows(
         current_reference,
         historical_betting_features = data$historical_betting_features %||% tibble::tibble(),
@@ -813,10 +820,14 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
     if (nrow(matchup_rows) == 0) {
         return(list(
             status = "Current-year games exist, but no matchup rows could be constructed for live scoring.",
+            monitoring_note = "Monitoring only: current-year results are reported for evaluation and commentary, not for model refits.",
+            interpretive_status = "no scored live rows",
             summary = tibble::tibble(),
+            main_bracket_summary = tibble::tibble(),
             round_summary = tibble::tibble(),
             games = tibble::tibble(),
             games_played = 0L,
+            main_bracket_games_played = 0L,
             rounds_played = character()
         ))
     }
@@ -833,6 +844,17 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
         dplyr::arrange(round, region, game_index)
 
     overall_metrics <- compute_binary_metrics(scored_games$predicted_prob, scored_games$actual_outcome)
+    main_bracket_games <- scored_games %>%
+        dplyr::filter(round != "First Four")
+    main_bracket_metrics <- if (nrow(main_bracket_games) > 0) {
+        compute_binary_metrics(main_bracket_games$predicted_prob, main_bracket_games$actual_outcome)
+    } else {
+        tibble::tibble(
+            log_loss = NA_real_,
+            brier = NA_real_,
+            accuracy = NA_real_
+        )
+    }
     round_summary <- scored_games %>%
         dplyr::group_by(round) %>%
         dplyr::summarise(
@@ -843,19 +865,42 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
         ) %>%
         dplyr::mutate(round = as.character(round))
 
+    interpretive_status <- dplyr::case_when(
+        nrow(main_bracket_games) == 0 ~ "early read",
+        nrow(main_bracket_games) < 8L ~ "main-bracket underway",
+        nrow(main_bracket_games) < 24L ~ "meaningful live sample still limited",
+        TRUE ~ "meaningful live sample"
+    )
+    coverage_text <- if (any(scored_games$round == "First Four") && nrow(main_bracket_games) == 0) {
+        "Only First Four games have completed so far."
+    } else if (any(scored_games$round == "First Four") && nrow(main_bracket_games) > 0) {
+        "Live sample includes First Four and main-bracket games."
+    } else {
+        "Live sample reflects main-bracket games."
+    }
+
     status <- sprintf(
-        "Live tournament performance through %s completed games across %s.",
+        "Live tournament performance through %s completed games across %s. %s Monitoring only: current-year outcomes are not fed back into the bracket model.",
         nrow(scored_games),
-        paste(unique(as.character(scored_games$round)), collapse = ", ")
+        paste(unique(as.character(scored_games$round)), collapse = ", "),
+        coverage_text
     )
 
     list(
         status = status,
+        monitoring_note = "Monitoring only: current-year outcomes are for evaluation and commentary. They do not retrain the current tournament model or alter pre-tournament matchup features.",
+        interpretive_status = interpretive_status,
         summary = tibble::tibble(
             games_played = nrow(scored_games),
             log_loss = overall_metrics$log_loss[[1]],
             brier = overall_metrics$brier[[1]],
             accuracy = overall_metrics$accuracy[[1]]
+        ),
+        main_bracket_summary = tibble::tibble(
+            games_played = nrow(main_bracket_games),
+            log_loss = main_bracket_metrics$log_loss[[1]],
+            brier = main_bracket_metrics$brier[[1]],
+            accuracy = main_bracket_metrics$accuracy[[1]]
         ),
         round_summary = round_summary,
         games = scored_games %>%
@@ -870,6 +915,7 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
             ) %>%
             dplyr::slice_tail(n = 8L),
         games_played = nrow(scored_games),
+        main_bracket_games_played = nrow(main_bracket_games),
         rounds_played = unique(as.character(scored_games$round))
     )
 }

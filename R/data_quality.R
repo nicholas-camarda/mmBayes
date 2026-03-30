@@ -78,6 +78,8 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         dplyr::filter(Year != current_year)
     current_year_results <- game_results %>%
         dplyr::filter(Year == current_year)
+    current_year_completed_results <- current_year_results %>%
+        dplyr::filter(!is.na(teamA_score), !is.na(teamB_score))
 
     years <- sort(unique(as.character(historical_results$Year)))
     games_per_year <- historical_results %>%
@@ -166,6 +168,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         years = paste(sort(unique(as.character(game_results$Year))), collapse = ","),
         bad_game_years = sum(!games_per_year$ok),
         bad_round_rows = nrow(round_count_issues),
+        current_year_completed_rows = nrow(current_year_completed_results),
         current_year_non_play_in_rows = nrow(current_year_non_play_in),
         invalid_current_play_in_rows = nrow(invalid_current_play_in),
         unmatched_current_slot_rows = nrow(unmatched_current_slots),
@@ -175,7 +178,6 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         unresolved_team_rows = nrow(unresolved_teams),
         passed = all(games_per_year$ok) &&
             nrow(round_count_issues) == 0 &&
-            nrow(current_year_non_play_in) == 0 &&
             nrow(invalid_current_play_in) == 0 &&
             nrow(unmatched_current_slots) == 0 &&
             nrow(duplicate_current_slots) == 0 &&
@@ -189,6 +191,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         games_per_year = games_per_year,
         round_counts = round_counts,
         round_count_issues = round_count_issues,
+        current_year_completed_results = current_year_completed_results,
         current_year_non_play_in = current_year_non_play_in,
         current_play_in_results = current_play_in_results,
         invalid_current_play_in = invalid_current_play_in,
@@ -231,16 +234,6 @@ assert_canonical_data_quality <- function(team_features, game_results) {
         issues <- c(
             issues,
             paste("Unexpected per-year round counts:", paste(round_text, collapse = "; "))
-        )
-    }
-
-    if (nrow(report$current_year_non_play_in) > 0) {
-        current_text <- report$current_year_non_play_in %>%
-            dplyr::mutate(text = sprintf("%s %s vs %s (%s)", Year, teamA, teamB, round)) %>%
-            dplyr::pull(text)
-        issues <- c(
-            issues,
-            paste("Current-year partial results may only include First Four games:", paste(current_text, collapse = "; "))
         )
     }
 

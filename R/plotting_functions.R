@@ -2117,15 +2117,65 @@ render_live_performance_html <- function(live_performance) {
         )
     }
 
+    main_bracket_tbl <- live_performance$main_bracket_summary %||% tibble::tibble()
     round_tbl <- live_performance$round_summary %||% tibble::tibble()
     recent_games <- live_performance$games %||% tibble::tibble()
+    monitoring_note <- live_performance$monitoring_note %||% "Monitoring only: current-year results are for evaluation and commentary."
+    interpretive_status <- live_performance$interpretive_status %||% "early read"
+    main_bracket_games_played <- safe_numeric(live_performance$main_bracket_games_played %||% 0, default = 0)
 
-    metric_cards <- paste0(
-        "<div class='overview-grid'>",
-        "<div class='summary-card'><div class='summary-label'>Games played</div><div class='summary-value'>", summary_tbl$games_played[[1]], "</div><p class='summary-note'>Current-year games completed so far.</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Accuracy</div><div class='summary-value'>", format_probability(summary_tbl$accuracy[[1]]), "</div><p class='summary-note'>Share of current-year games the model picked correctly.</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Log loss</div><div class='summary-value'>", sprintf("%.3f", summary_tbl$log_loss[[1]]), "</div><p class='summary-note'>Lower means the probabilities are more honest.</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Brier score</div><div class='summary-value'>", sprintf("%.3f", summary_tbl$brier[[1]]), "</div><p class='summary-note'>Lower means tighter probability estimates.</p></div>",
+    format_metric_value <- function(value, digits = 3L, percent = FALSE) {
+        value <- safe_numeric(value, default = NA_real_)
+        if (!is.finite(value)) {
+            return("n/a")
+        }
+        if (isTRUE(percent)) {
+            return(format_probability(value))
+        }
+        sprintf(paste0("%.", digits, "f"), value)
+    }
+
+    render_summary_card <- function(title, summary_row, note_text) {
+        if (nrow(summary_row) == 0) {
+            return(
+                paste0(
+                    "<div class='quality-card'>",
+                    "<h3>", html_escape(title), "</h3>",
+                    "<p class='empty-state'>No live summary is available for this view yet.</p>",
+                    "</div>"
+                )
+            )
+        }
+
+        paste0(
+            "<div class='quality-card'>",
+            "<h3>", html_escape(title), "</h3>",
+            "<div class='overview-grid' style='margin-top:0;'>",
+            "<div class='summary-card'><div class='summary-label'>Games played</div><div class='summary-value'>", html_escape(as.character(safe_numeric(summary_row$games_played[[1]], default = 0))), "</div><p class='summary-note'>", html_escape(note_text), "</p></div>",
+            "<div class='summary-card'><div class='summary-label'>Accuracy</div><div class='summary-value'>", html_escape(format_metric_value(summary_row$accuracy[[1]], percent = TRUE)), "</div><p class='summary-note'>Share of scored games the model picked correctly.</p></div>",
+            "<div class='summary-card'><div class='summary-label'>Log loss</div><div class='summary-value'>", html_escape(format_metric_value(summary_row$log_loss[[1]], digits = 3L)), "</div><p class='summary-note'>Lower means the probabilities are more honest.</p></div>",
+            "<div class='summary-card'><div class='summary-label'>Brier score</div><div class='summary-value'>", html_escape(format_metric_value(summary_row$brier[[1]], digits = 3L)), "</div><p class='summary-note'>Lower means tighter probability estimates.</p></div>",
+            "</div>",
+            "</div>"
+        )
+    }
+
+    overview_cards <- paste0(
+        "<div class='quality-grid'>",
+        render_summary_card(
+            "Overall live performance",
+            summary_tbl,
+            "All completed current-year games, including First Four."
+        ),
+        render_summary_card(
+            "Main-bracket live performance",
+            main_bracket_tbl,
+            if (main_bracket_games_played == 0) {
+                "No Round of 64+ games have completed yet."
+            } else {
+                "Excludes First Four so play-in games do not dominate the signal."
+            }
+        ),
         "</div>"
     )
 
@@ -2173,7 +2223,9 @@ render_live_performance_html <- function(live_performance) {
         "<div class='panel'>",
         "<h2>Live Tournament Performance</h2>",
         "<p class='panel-caption'>", html_escape(live_performance$status %||% "Current-year results update here when the refresh job runs again."), "</p>",
-        metric_cards,
+        "<p class='quality-note'><strong>Interpretive status:</strong> ", html_escape(interpretive_status), "</p>",
+        "<p class='quality-note'>", html_escape(monitoring_note), "</p>",
+        overview_cards,
         "<div class='two-column'>",
         "<div class='quality-card'><h3>By Round</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Mean predicted</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
         "<div class='quality-card'><h3>Recent Games</h3><table class='dashboard-table'><thead><tr><th>Round</th><th>Matchup</th><th>Winner</th><th>Model pick</th><th>Model P(win)</th><th>Status</th></tr></thead><tbody>", recent_rows, "</tbody></table></div>",

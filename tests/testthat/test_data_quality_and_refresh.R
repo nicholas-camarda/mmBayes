@@ -3,7 +3,10 @@ test_that("team name canonicalization reconciles known source aliases", {
         "UNC",
         "UConn",
         "Pitt",
+        "California Baptist",
         "UCSB",
+        "Queens (NC)",
+        "Tennessee State",
         "St. John's (NY)",
         "St. Peter's",
         "North Carolina St.",
@@ -20,7 +23,10 @@ test_that("team name canonicalization reconciles known source aliases", {
             "North Carolina",
             "Connecticut",
             "Pittsburgh",
+            "Cal Baptist",
             "UC Santa Barbara",
+            "Queens",
+            "Tennessee St.",
             "Saint John's",
             "Saint Peter's",
             "NC State",
@@ -90,7 +96,7 @@ test_that("loader succeeds when result teams use aliased source names", {
     expect_true(all(c("historical_matchups", "historical_teams", "current_teams") %in% names(loaded)))
 })
 
-test_that("quality gates allow current-year First Four results without weakening historical checks", {
+test_that("quality gates allow current-year completed results without weakening historical checks", {
     team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
     results_data <- make_fixture_game_results(team_data, history_years = 2024)
     current_play_in_result <- tibble::tibble(
@@ -102,23 +108,39 @@ test_that("quality gates allow current-year First Four results without weakening
         teamB = "East_11_2025_playin",
         teamA_seed = 11L,
         teamB_seed = 11L,
+        teamA_score = 71L,
+        teamB_score = 68L,
+        total_points = 139L,
         winner = "East_11_2025"
+    )
+    current_round64_result <- tibble::tibble(
+        Year = "2025",
+        region = "East",
+        round = "Round of 64",
+        game_index = 1L,
+        teamA = "East_01_2025",
+        teamB = "East_16_2025",
+        teamA_seed = 1L,
+        teamB_seed = 16L,
+        teamA_score = 84L,
+        teamB_score = 66L,
+        total_points = 150L,
+        winner = "East_01_2025"
     )
 
     expect_no_error(
-        assert_canonical_data_quality(team_data, dplyr::bind_rows(results_data, current_play_in_result))
+        assert_canonical_data_quality(team_data, dplyr::bind_rows(results_data, current_play_in_result, current_round64_result))
     )
+})
+
+test_that("quality gates still fail on incomplete historical data", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024) %>%
+        dplyr::filter(!(Year == "2024" & round == "Championship"))
 
     expect_error(
-        assert_canonical_data_quality(
-            team_data,
-            dplyr::bind_rows(
-                results_data,
-                current_play_in_result %>%
-                    dplyr::mutate(round = "Round of 64", region = "East")
-            )
-        ),
-        regexp = "Current-year partial results may only include First Four games"
+        assert_canonical_data_quality(team_data, results_data),
+        regexp = "Unexpected per-year round counts"
     )
 })
 
@@ -236,7 +258,7 @@ test_that("current-year First Four fallback fills unresolved slots from a second
     )
     fallback_results <- tibble::tibble(
         Year = "2025",
-        region = "First Four",
+        region = "Midwest",
         round = "First Four",
         game_index = 99L,
         teamA = "Midwest_16_2025",
@@ -261,6 +283,7 @@ test_that("current-year First Four fallback fills unresolved slots from a second
         dplyr::arrange(game_index)
 
     expect_equal(nrow(current_play_in), 2L)
+    expect_false(any(duplicated(dplyr::select(current_play_in, teamA, teamB))))
     expect_true(any(current_play_in$winner == "East_11_2025"))
     expect_true(any(current_play_in$winner == "Midwest_16_2025"))
     expect_true(all(current_play_in$total_points == current_play_in$teamA_score + current_play_in$teamB_score))

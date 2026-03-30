@@ -270,6 +270,56 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
     purrr::map_dfr(history_years, build_year_results)
 }
 
+make_fixture_current_year_completed_results <- function(team_features, current_year = 2025) {
+    current_teams <- team_features %>%
+        dplyr::filter(Year == as.character(current_year))
+
+    build_result_row <- function(team_a, team_b, round_name, region_name, game_index) {
+        winner <- pick_fixture_winner(team_a, team_b, current_year, round_name, region_name, game_index)
+        matchup_scores <- make_fixture_matchup_scores(team_a, team_b, winner, round_name, game_index)
+
+        tibble::tibble(
+            Year = as.character(current_year),
+            region = region_name,
+            round = round_name,
+            game_index = as.integer(game_index),
+            teamA = team_a$Team[1],
+            teamB = team_b$Team[1],
+            teamA_seed = team_a$Seed[1],
+            teamB_seed = team_b$Seed[1],
+            teamA_score = matchup_scores$teamA_score,
+            teamB_score = matchup_scores$teamB_score,
+            total_points = matchup_scores$total_points,
+            winner = winner$Team[1]
+        )
+    }
+
+    first_four_team_a <- current_teams %>%
+        dplyr::filter(Region == "East", Seed == 11L, !stringr::str_detect(Team, "_playin$")) %>%
+        dplyr::slice(1)
+    first_four_team_b <- current_teams %>%
+        dplyr::filter(Region == "East", Seed == 11L, stringr::str_detect(Team, "_playin$")) %>%
+        dplyr::slice(1)
+    round64_team_a <- current_teams %>%
+        dplyr::filter(Region == "East", Seed == 1L, !stringr::str_detect(Team, "_playin$")) %>%
+        dplyr::slice(1)
+    round64_team_b <- current_teams %>%
+        dplyr::filter(Region == "East", Seed == 16L, !stringr::str_detect(Team, "_playin$")) %>%
+        dplyr::slice(1)
+    round32_team_a <- current_teams %>%
+        dplyr::filter(Region == "East", Seed == 1L, !stringr::str_detect(Team, "_playin$")) %>%
+        dplyr::slice(1)
+    round32_team_b <- current_teams %>%
+        dplyr::filter(Region == "East", Seed == 8L, !stringr::str_detect(Team, "_playin$")) %>%
+        dplyr::slice(1)
+
+    dplyr::bind_rows(
+        build_result_row(first_four_team_a, first_four_team_b, "First Four", "First Four", 1L),
+        build_result_row(round64_team_a, round64_team_b, "Round of 64", "East", 1L),
+        build_result_row(round32_team_a, round32_team_b, "Round of 32", "East", 1L)
+    )
+}
+
 write_fixture_data_files <- function(team_path, results_path, team_data = NULL, results_data = NULL) {
     team_data <- team_data %||% make_fixture_team_features()
     results_data <- results_data %||% make_fixture_game_results(team_data)

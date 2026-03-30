@@ -42,6 +42,7 @@ The main review loop usually looks like this:
 4. check the status banner to see whether First Four slots are still simulated or already final
 
 The main dashboard is designed to answer three jobs fast: what Candidate 1 and Candidate 2 are, which evidence drives the key decisions, and which matchups deserve another look before you trust the entries.
+Live tournament commentary is separate from the prediction-time inputs: First Four results can resolve the bracket path, while completed Round of 64+ games are tracked for monitoring and dashboard commentary only.
 
 Optional diagnostics:
 
@@ -162,8 +163,10 @@ The model estimates game-by-game win probabilities rather than predicting the wh
 
 Data sources:
 
-- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` - pre-tournament season metrics per team
-- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` - historical tournament game results
+- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` - Bart Torvik pre-tournament season metrics and tournament-field construction
+- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` - historical tournament game results plus current-year monitoring rows
+
+Current-year monitoring rows are not used to retrain the bracket model or alter the pre-tournament matchup features. They exist so the live performance panels can report how the model is doing as the tournament unfolds.
 
 The default configuration uses the eight most recent completed tournaments, skips 2020, and backtests on rolling held-out years.
 The core winner model and championship total-points model do not require betting inputs; betting is handled separately as an archive/evaluation sidecar.

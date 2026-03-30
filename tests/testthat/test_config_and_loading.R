@@ -26,7 +26,12 @@ test_that("config loader merges matchup-model defaults with yaml values", {
 test_that("load_tournament_data returns matchup history and current teams", {
     team_file <- tempfile(fileext = ".xlsx")
     results_file <- tempfile(fileext = ".xlsx")
-    fixture_paths <- write_fixture_data_files(team_file, results_file)
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2022:2024)
+    results_data <- dplyr::bind_rows(
+        make_fixture_game_results(team_data, history_years = 2022:2024),
+        make_fixture_current_year_completed_results(team_data, current_year = 2025)
+    )
+    fixture_paths <- write_fixture_data_files(team_file, results_file, team_data = team_data, results_data = results_data)
 
     config <- default_project_config()
     config$data$team_features_path <- fixture_paths$team_path
@@ -36,13 +41,16 @@ test_that("load_tournament_data returns matchup history and current teams", {
     loaded <- load_tournament_data(config)
 
     expect_equal(loaded$bracket_year, "2025")
-    expect_true(all(c("historical_matchups", "historical_teams", "historical_games", "current_teams", "historical_actual_results", "current_play_in_results") %in% names(loaded)))
+    expect_true(all(c("historical_matchups", "historical_teams", "historical_games", "current_teams", "historical_actual_results", "current_play_in_results", "current_completed_results") %in% names(loaded)))
     expect_gt(nrow(loaded$historical_matchups), 0)
     expect_gt(nrow(loaded$historical_games), 0)
     expect_true(all(config$model$required_predictors %in% names(loaded$historical_matchups)))
     expect_false(any(leakage_columns() %in% names(loaded$historical_teams)))
     expect_true(all(c("teamA_score", "teamB_score", "total_points") %in% names(loaded$historical_games)))
     expect_true(all(c("teamA_score", "teamB_score", "total_points") %in% names(loaded$historical_actual_results)))
+    expect_true(all(loaded$current_play_in_results$round == "First Four"))
+    expect_gt(nrow(loaded$current_completed_results), 0)
+    expect_true(any(loaded$current_completed_results$round != "First Four"))
     expect_false(any(is.na(loaded$historical_games$total_points)))
 })
 

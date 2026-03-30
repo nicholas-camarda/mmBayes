@@ -35,10 +35,12 @@ At a high level, the workflow is:
 8. optionally blend model probabilities with line-implied probabilities for configured rounds
 9. simulate the bracket forward round by round
 10. rank and export bracket candidates plus review artifacts
+11. score any completed current-year games for live monitoring only, without feeding those outcomes back into model fitting or bracket generation
 
 The project is matchup-based. It does not fit a team-level "who wins the title?" target directly. Instead, it estimates game-level probabilities and then propagates them through the bracket.
 
 The core winner model and championship total-points model do not require betting inputs. Betting is handled as a separate archive/evaluation sidecar so the production bracket path stays betting-free.
+Current-year monitoring outcomes are deliberately separated from prediction-time inputs: only First Four results affect bracket-path resolution, while completed Round of 64+ games are used for live evaluation and commentary only.
 
 ## Betting-Line Integration (Optional)
 
@@ -101,7 +103,9 @@ The canonical data refresh in `update_tournament_data()` pulls from these source
 | `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` | `scrape_bart_data()` | Bart Torvik season ratings | `https://barttorvik.com/?year={year}&...` | Pre-tournament team metrics |
 | `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` | `scrape_conf_assignments()` | Bart Torvik Tourney Time | `https://barttorvik.com/tourneytime.php?year={year}&sort=7&conlimit=All` | Tournament field, seeds, regions, conferences |
 | `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` | `scrape_tournament_results()` | Sports-Reference NCAA bracket page | `https://www.sports-reference.com/cbb/postseason/men/{year}-ncaa.html` | Historical completed tournament game results and scores |
-| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` | `scrape_espn_first_four_results()` | ESPN scoreboard API | `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?...` | Current-year First Four fallback when Sports-Reference is incomplete |
+| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` | `scrape_espn_tournament_results()` | ESPN scoreboard API | `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?...` | Current-year completed-game fallback when Sports-Reference is incomplete |
+
+Bart Torvik remains the pre-tournament source for team features and tournament-field construction. Completed current-year tournament outcomes are allowed in the canonical results workbook for live monitoring, but they are not fed back into the current bracket fit or the pre-tournament matchup features. Only current-year First Four results affect bracket-path resolution.
 
 ### What gets written to disk
 
@@ -148,6 +152,7 @@ This alias layer is important because every historical result row must join back
 - score columns must be both present or both missing
 - `total_points` must equal `teamA_score + teamB_score` when scores exist
 - the listed winner must match the higher score when scores exist
+- current-year completed rows are allowed in any round as long as they pass the same score-integrity and team-resolution checks
 
 ### Leakage control
 

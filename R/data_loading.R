@@ -496,6 +496,12 @@ load_tournament_data <- function(config, include_betting_history = TRUE) {
         dplyr::filter(Year %in% historical_years)
     current_teams <- prepare_current_teams(team_features, bracket_year)
     current_play_in_results <- prepare_current_play_in_results(team_features, game_results, bracket_year)
+    current_completed_results <- game_results %>%
+        dplyr::filter(
+            Year == bracket_year,
+            !is.na(teamA_score),
+            !is.na(teamB_score)
+        )
     historical_games <- game_results %>%
         dplyr::filter(Year %in% historical_years)
 
@@ -520,6 +526,7 @@ load_tournament_data <- function(config, include_betting_history = TRUE) {
         historical_betting_features = historical_betting_features,
         current_teams = current_teams,
         current_play_in_results = current_play_in_results,
+        current_completed_results = current_completed_results,
         game_results = game_results
     )
 }
