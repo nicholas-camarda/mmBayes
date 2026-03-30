@@ -58,6 +58,23 @@ resolve_bart_config <- function(bart_config = NULL) {
     merged
 }
 
+#' Capture BART stdout while returning the evaluated result
+#'
+#' The BART package prints progress directly from C/C++ code, which bypasses
+#' the usual R message/warning handlers. This helper swallows that stdout while
+#' preserving the actual return value.
+#'
+#' @param expr An expression that may emit BART console output.
+#'
+#' @return The value produced by `expr`.
+#' @keywords internal
+capture_bart_output <- function(expr) {
+    expr <- substitute(expr)
+    result <- NULL
+    utils::capture.output(result <- eval(expr, parent.frame()))
+    result
+}
+
 #' Validate unsupported options for the BART engine
 #'
 #' @param interaction_terms Optional interaction terms.
@@ -568,16 +585,19 @@ fit_tournament_model_bart <- function(historical_matchups,
     )
     set.seed(random_seed)
 
-    model <- BART::pbart(
-        x.train = x_train,
-        y.train = y_train,
-        ntree = bart_config$n_trees,
-        nskip = bart_config$n_burn,
-        ndpost = bart_config$n_post,
-        k = bart_config$k,
-        power = bart_config$power,
-        printevery = 1000L
+    model <- capture_bart_output(
+        BART::pbart(
+            x.train = x_train,
+            y.train = y_train,
+            ntree = bart_config$n_trees,
+            nskip = bart_config$n_burn,
+            ndpost = bart_config$n_post,
+            k = bart_config$k,
+            power = bart_config$power,
+            printevery = 1000L
+        )
     )
+    logger::log_info("Finished matchup-level BART model fitting")
 
     fit_result <- list(
         engine = "bart",
@@ -933,16 +953,19 @@ fit_total_points_model_bart <- function(historical_total_points,
     )
     set.seed(random_seed)
 
-    model <- BART::wbart(
-        x.train = x_train,
-        y.train = y_train,
-        ntree = bart_config$n_trees,
-        nskip = bart_config$n_burn,
-        ndpost = bart_config$n_post,
-        k = bart_config$k,
-        power = bart_config$power,
-        printevery = 1000L
+    model <- capture_bart_output(
+        BART::wbart(
+            x.train = x_train,
+            y.train = y_train,
+            ntree = bart_config$n_trees,
+            nskip = bart_config$n_burn,
+            ndpost = bart_config$n_post,
+            k = bart_config$k,
+            power = bart_config$power,
+            printevery = 1000L
+        )
     )
+    logger::log_info("Finished total-points BART model fitting")
 
     fit_result <- list(
         engine = "bart",
@@ -1095,7 +1118,7 @@ predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
             stop_with_message("Prediction rows contain missing values after model-matrix encoding")
         }
 
-        pred <- stats::predict(model_results$model, newdata = x_test)
+        pred <- capture_bart_output(stats::predict(model_results$model, newdata = x_test))
         draw_matrix <- if (is.matrix(pred)) {
             pred
         } else if (is.list(pred) && !is.null(pred$prob.test)) {
@@ -1192,7 +1215,7 @@ predict_total_points_rows <- function(matchup_rows, model_results, draws = 1000)
             stop_with_message("Total-points prediction rows contain missing values after model-matrix encoding")
         }
 
-        pred <- stats::predict(model_results$model, newdata = x_test)
+        pred <- capture_bart_output(stats::predict(model_results$model, newdata = x_test))
         draw_matrix <- as.matrix(pred)
         storage.mode(draw_matrix) <- "double"
 

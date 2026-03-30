@@ -24,17 +24,25 @@ test_that("BART engine fits matchup and total-points models and returns draw mat
         power = 2
     )
 
-    model_results <- fit_tournament_model(
-        historical_matchups = loaded$historical_matchups,
-        predictor_columns = config$model$required_predictors,
-        engine = "bart",
-        bart_config = bart_config,
-        random_seed = 123,
-        include_diagnostics = FALSE,
-        use_cache = FALSE
+    fit_stdout <- capture.output(
+        model_results <- fit_tournament_model(
+            historical_matchups = loaded$historical_matchups,
+            predictor_columns = config$model$required_predictors,
+            engine = "bart",
+            bart_config = bart_config,
+            random_seed = 123,
+            include_diagnostics = FALSE,
+            use_cache = FALSE
+        )
     )
 
     expect_equal(model_results$engine, "bart")
+    expect_false(any(grepl("In main of C\\+\\+|Into main of|MCMC|done ", fit_stdout)))
+
+    pred_stdout <- capture.output(
+        predict_matchup_rows(loaded$historical_matchups[1:6, , drop = FALSE], model_results, draws = 20)
+    )
+    expect_false(any(grepl("In main of C\\+\\+ for bart prediction", pred_stdout)))
 
     prob_draws <- predict_matchup_rows(loaded$historical_matchups[1:6, , drop = FALSE], model_results, draws = 20)
     expect_true(is.matrix(prob_draws))
@@ -43,17 +51,26 @@ test_that("BART engine fits matchup and total-points models and returns draw mat
     expect_true(all(is.finite(prob_draws)))
     expect_true(all(prob_draws >= 0 & prob_draws <= 1))
 
-    total_points_model <- fit_total_points_model(
-        historical_total_points = build_total_points_training_rows(loaded$historical_actual_results),
-        engine = "bart",
-        bart_config = bart_config,
-        random_seed = 123,
-        include_diagnostics = FALSE,
-        use_cache = FALSE
+    total_fit_stdout <- capture.output(
+        total_points_model <- fit_total_points_model(
+            historical_total_points = build_total_points_training_rows(loaded$historical_actual_results),
+            engine = "bart",
+            bart_config = bart_config,
+            random_seed = 123,
+            include_diagnostics = FALSE,
+            use_cache = FALSE
+        )
     )
 
     expect_equal(total_points_model$engine, "bart")
+    expect_false(any(grepl("In main of C\\+\\+|Into main of|MCMC|done ", total_fit_stdout)))
+
     total_training <- build_total_points_training_rows(loaded$historical_actual_results)
+    total_pred_stdout <- capture.output(
+        predict_total_points_rows(total_training[1:6, , drop = FALSE], total_points_model, draws = 20)
+    )
+    expect_false(any(grepl("In main of C\\+\\+ for bart prediction", total_pred_stdout)))
+
     total_draws <- predict_total_points_rows(total_training[1:6, , drop = FALSE], total_points_model, draws = 20)
     expect_true(is.matrix(total_draws))
     expect_equal(nrow(total_draws), 20)

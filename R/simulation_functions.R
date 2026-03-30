@@ -324,6 +324,9 @@ resolve_play_in_games <- function(region_teams, model_results, draws, actual_pla
 #' @export
 simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE) {
     region_name <- unique(region_teams$Region)[1]
+    if (!isTRUE(log_matchups)) {
+        logger::log_info("Simulating {region_name} region")
+    }
     play_in <- resolve_play_in_games(
         region_teams,
         model_results,
@@ -350,6 +353,9 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, 
     remaining <- ordered_teams
 
     for (round_name in rounds) {
+        if (!isTRUE(log_matchups)) {
+            logger::log_info("Simulating {round_name} in {region_name}")
+        }
         simulated_round <- simulate_round(remaining, round_name, model_results, draws, deterministic = deterministic, log_matchups = log_matchups)
         round_results[[round_name]] <- simulated_round$results
         remaining <- simulated_round$winners
@@ -373,6 +379,9 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, 
 #' @return A list containing semifinal, championship, and champion results.
 #' @export
 simulate_final_four <- function(region_champions, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE) {
+    if (!isTRUE(log_matchups)) {
+        logger::log_info("Simulating Final Four and championship")
+    }
     semifinal1 <- simulate_matchup(
         region_champions$South,
         region_champions$West,
