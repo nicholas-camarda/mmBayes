@@ -36,31 +36,47 @@ test("bracket tree hover/click/toggles work without console errors", async ({ pa
 
   await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "domcontentloaded" });
 
-  await expect(page.locator("#btree-svg")).toBeVisible();
-  await expect(page.locator("g.btree-node")).toHaveCount(63);
+  await expect(page.locator("#btree-svg-1")).toBeVisible();
+  await expect(page.locator("svg.btree-svg")).toHaveCount(2);
+  await expect(page.locator(".btree-toggle", { hasText: "Both candidates" })).toHaveCount(0);
 
-  const matchupNode = page.locator('g.btree-node[data-tip-matchup*="St. John"]').first();
+  const specialCharNode = page
+    .locator("[data-btree-panel='candidate-1'] g.btree-node[data-tip-matchup*=\"St. John\"]")
+    .first();
 
-  await expect(matchupNode).toBeVisible();
-  await matchupNode.hover();
+  await expect(specialCharNode).toBeVisible();
+  await specialCharNode.hover();
   await expect(page.locator("#btree-tooltip")).toHaveClass(/is-visible/);
   await expect(page.locator("#btree-tooltip")).toContainText("St. John's");
   await expect(page.locator("#btree-tooltip")).toContainText("Texas A&M");
 
-  const evidenceId = await matchupNode.getAttribute("data-open-evidence");
+  const evidenceId = await specialCharNode.getAttribute("data-open-evidence");
   expect(evidenceId).toBeTruthy();
 
-  await matchupNode.click();
+  await specialCharNode.click();
   await page.waitForFunction((id) => {
     const el = document.getElementById(id);
     return !!el && el.open === true;
   }, evidenceId);
 
-  await page.locator(".btree-toggle[data-btree-view='c1']").click();
-  await expect(page.locator("#btree-svg")).toHaveClass(/btree-view-c1/);
+  const candidateOneEastNode = page.locator(
+    "[data-btree-panel='candidate-1'] g.btree-node[data-slot='East|Round of 32|3']",
+  );
+  await candidateOneEastNode.hover();
+  await expect(page.locator("#btree-tooltip")).toContainText("Louisville vs Michigan State");
+  await expect(page.locator("#btree-tooltip")).toContainText("Candidate 1: Louisville");
 
-  await page.locator(".btree-toggle[data-btree-view='c2']").click();
-  await expect(page.locator("#btree-svg")).toHaveClass(/btree-view-c2/);
+  await page.locator(".btree-toggle[data-btree-target='candidate-2']").click();
+  await expect(page.locator("[data-btree-panel='candidate-1']")).toBeHidden();
+  await expect(page.locator("[data-btree-panel='candidate-2']")).toBeVisible();
+
+  const candidateTwoEastNode = page.locator(
+    "[data-btree-panel='candidate-2'] g.btree-node[data-slot='East|Round of 32|3']",
+  );
+  await candidateTwoEastNode.hover();
+  await expect(page.locator("#btree-tooltip")).toContainText("South Florida vs Michigan State");
+  await expect(page.locator("#btree-tooltip")).toContainText("Candidate 2: Michigan State");
+  await expect(page.locator("#btree-tooltip")).not.toContainText("Candidate 1: Louisville");
 
   expect(errors).toEqual([]);
 });

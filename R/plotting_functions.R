@@ -2112,23 +2112,21 @@ render_candidate_divergence_svg <- function(decision_sheet) {
 #' Render the interactive bracket tree SVG section
 #'
 #' Converts the output of [build_bracket_tree_data()] into a self-contained
-#' HTML snippet containing an SVG bracket tree, candidate toggle controls, a
-#' tier/candidate legend, and a floating tooltip element driven by vanilla JS
+#' HTML snippet containing one SVG bracket tree per candidate, candidate tab
+#' controls, a tier legend, and a floating tooltip element driven by vanilla JS
 #' in the parent dashboard.
 #'
-#' @param tree_data The list returned by [build_bracket_tree_data()], with
-#'   `$nodes` and `$edges` tibbles.
+#' @param tree_data The list returned by [build_bracket_tree_data()], with a
+#'   `trees` entry containing candidate-specific tree objects.
 #'
 #' @return A scalar character string containing HTML markup ready to embed in
 #'   the bracket dashboard.
 #' @keywords internal
 render_bracket_tree_svg <- function(tree_data) {
-    if (is.null(tree_data) || is.null(tree_data$nodes) || nrow(tree_data$nodes) == 0L) {
+    tree_entries <- tree_data$trees %||% list()
+    if (length(tree_entries) == 0L) {
         return("<p class='empty-state'>Bracket tree data not available.</p>")
     }
-
-    nodes <- tree_data$nodes
-    edges <- tree_data$edges %||% tibble::tibble()
 
     SVG_WIDTH     <- 1400L
     SVG_HEIGHT    <- 1070L
@@ -2155,17 +2153,6 @@ render_bracket_tree_svg <- function(tree_data) {
     )
 
     region_row_index <- c("East" = 0L, "South" = 1L, "Midwest" = 2L, "West" = 3L)
-
-    # Add display columns
-    nodes$tier_color <- dashboard_tier_color(as.character(nodes$confidence_tier))
-    nodes$label_a <- paste0(
-        ifelse(!is.na(nodes$teamA_seed), paste0("(", nodes$teamA_seed, ") "), ""),
-        truncate_dashboard_label(nodes$teamA, width = 9L)
-    )
-    nodes$label_b <- paste0(
-        ifelse(!is.na(nodes$teamB_seed), paste0("(", nodes$teamB_seed, ") "), ""),
-        truncate_dashboard_label(nodes$teamB, width = 9L)
-    )
 
     # --- Round column labels ---
     col_labels_html <- paste(
@@ -2203,153 +2190,165 @@ render_bracket_tree_svg <- function(tree_data) {
         collapse = "\n"
     )
 
-    # --- Edges ---
-    edges_html <- if (nrow(edges) > 0L) {
-        paste(
-            vapply(seq_len(nrow(edges)), function(i) {
-                e    <- edges[i, ]
-                x1   <- as.integer(round(e$x1[[1L]]))
-                y1   <- as.integer(round(e$y1[[1L]]))
-                x2   <- as.integer(round(e$x2[[1L]]))
-                y2   <- as.integer(round(e$y2[[1L]]))
-                same <- isTRUE(e$c1_same_as_c2[[1L]])
+    clean_attr <- function(value) {
+        value <- as.character(value %||% "")
+        value <- gsub("[\r\n\t]+", " ", value)
+        html_escape(value)
+    }
 
-                # Elbow connector: leave right edge of source, enter left edge of target
-                sx   <- x1 + NODE_W %/% 2L
-                tx   <- x2 - NODE_W %/% 2L
-                mid  <- (sx + tx) %/% 2L
+    render_tree_panel <- function(tree, is_active = FALSE) {
+        nodes <- tree$nodes %||% tibble::tibble()
+        edges <- tree$edges %||% tibble::tibble()
+        panel_key <- sprintf("candidate-%s", tree$candidate_id %||% 1L)
 
-                if (same) {
+        if (nrow(nodes) == 0L) {
+            return("")
+        }
+
+        nodes$tier_color <- dashboard_tier_color(as.character(nodes$confidence_tier))
+        nodes$label_a <- paste0(
+            ifelse(!is.na(nodes$teamA_seed), paste0("(", nodes$teamA_seed, ") "), ""),
+            truncate_dashboard_label(nodes$teamA, width = 9L)
+        )
+        nodes$label_b <- paste0(
+            ifelse(!is.na(nodes$teamB_seed), paste0("(", nodes$teamB_seed, ") "), ""),
+            truncate_dashboard_label(nodes$teamB, width = 9L)
+        )
+
+        edges_html <- if (nrow(edges) > 0L) {
+            paste(
+                vapply(seq_len(nrow(edges)), function(i) {
+                    edge_row <- edges[i, ]
+                    x1 <- as.integer(round(edge_row$x1[[1L]]))
+                    y1 <- as.integer(round(edge_row$y1[[1L]]))
+                    x2 <- as.integer(round(edge_row$x2[[1L]]))
+                    y2 <- as.integer(round(edge_row$y2[[1L]]))
+                    sx <- x1 + NODE_W %/% 2L
+                    tx <- x2 - NODE_W %/% 2L
+                    mid <- (sx + tx) %/% 2L
+
                     sprintf(
-                        "<path d='M%d,%d L%d,%d L%d,%d L%d,%d' fill='none' stroke='#94a3b8' stroke-width='1.5' class='btree-edge-shared'/>",
+                        "<path d='M%d,%d L%d,%d L%d,%d L%d,%d' fill='none' stroke='#94a3b8' stroke-width='1.5' class='btree-edge'/>",
                         sx, y1, mid, y1, mid, y2, tx, y2
                     )
-                } else {
-                    paste0(
-                        sprintf(
-                            "<path d='M%d,%d L%d,%d L%d,%d L%d,%d' fill='none' stroke='#1d4ed8' stroke-width='2' opacity='0.75' class='btree-edge-c1'/>",
-                            sx, y1 - 2L, mid, y1 - 2L, mid, y2 - 2L, tx, y2 - 2L
-                        ),
-                        sprintf(
-                            "<path d='M%d,%d L%d,%d L%d,%d L%d,%d' fill='none' stroke='#d97706' stroke-width='2' opacity='0.75' stroke-dasharray='4 3' class='btree-edge-c2'/>",
-                            sx, y1 + 2L, mid, y1 + 2L, mid, y2 + 2L, tx, y2 + 2L
-                        )
-                    )
+                }, character(1L)),
+                collapse = "\n"
+            )
+        } else {
+            ""
+        }
+
+        nodes_html <- paste(
+            vapply(seq_len(nrow(nodes)), function(i) {
+                node_row <- nodes[i, ]
+                x <- node_row$node_x[[1L]]
+                y <- node_row$node_y[[1L]]
+                if (is.na(x) || is.na(y)) {
+                    return("")
                 }
+
+                x <- as.integer(round(x))
+                y <- as.integer(round(y))
+                tier <- as.character(node_row$confidence_tier[[1L]] %||% "")
+                text_color <- if (tier %in% c("Toss-up", "Volatile")) "#0f172a" else "#ffffff"
+                rx <- x - NODE_W %/% 2L
+                ry <- y - NODE_H %/% 2L
+                pick_value <- as.character(node_row$candidate_pick[[1L]] %||% node_row$winner[[1L]] %||% "")
+                prob_val <- node_row$win_prob_favorite[[1L]]
+                prob_str <- if (!is.null(prob_val) && length(prob_val) == 1L && !is.na(prob_val)) {
+                    sprintf("%.0f%%", 100 * prob_val)
+                } else {
+                    "n/a"
+                }
+
+                paste0(
+                    sprintf(paste0(
+                        "<g class=\"btree-node\"",
+                        " data-slot=\"%s\"",
+                        " data-open-evidence=\"%s\"",
+                        " data-tip-candidate=\"%s\"",
+                        " data-tip-matchup=\"%s\"",
+                        " data-tip-round=\"%s\"",
+                        " data-tip-region=\"%s\"",
+                        " data-tip-pick=\"%s\"",
+                        " data-tip-fav=\"%s\"",
+                        " data-tip-prob=\"%s\"",
+                        " data-tip-tier=\"%s\"",
+                        " data-tip-rationale=\"%s\"",
+                        ">"
+                    ),
+                    clean_attr(as.character(node_row$slot_key[[1L]])),
+                    clean_attr(as.character(node_row$evidence_id[[1L]])),
+                    clean_attr(as.character(tree$candidate_label %||% paste("Candidate", tree$candidate_id %||% 1L))),
+                    clean_attr(paste0(as.character(node_row$teamA[[1L]] %||% ""), " vs ", as.character(node_row$teamB[[1L]] %||% ""))),
+                    clean_attr(as.character(node_row$round[[1L]] %||% "")),
+                    clean_attr(as.character(node_row$region[[1L]] %||% "")),
+                    clean_attr(pick_value),
+                    clean_attr(as.character(node_row$posterior_favorite[[1L]] %||% "")),
+                    clean_attr(prob_str),
+                    clean_attr(tier),
+                    clean_attr(as.character(node_row$rationale_short[[1L]] %||% ""))
+                    ),
+                    sprintf(
+                        "<rect x='%d' y='%d' width='%d' height='%d' rx='4' fill='%s'/>",
+                        rx, ry, NODE_W, NODE_H, as.character(node_row$tier_color[[1L]])
+                    ),
+                    sprintf(
+                        "<text x='%d' y='%d' text-anchor='middle' font-size='9' fill='%s' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
+                        x, y - 7L, text_color, html_escape(as.character(node_row$label_a[[1L]]))
+                    ),
+                    sprintf(
+                        "<text x='%d' y='%d' text-anchor='middle' font-size='9' fill='%s' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
+                        x, y + 7L, text_color, html_escape(as.character(node_row$label_b[[1L]]))
+                    ),
+                    if (isTRUE(node_row$upset[[1L]])) sprintf(
+                        "<text x='%d' y='%d' font-size='8' font-weight='800' fill='#e76f51' font-family='system-ui,sans-serif' class='btree-upset-badge'>U</text>",
+                        rx + NODE_W - 10L, ry + 2L
+                    ) else "",
+                    "</g>"
+                )
             }, character(1L)),
             collapse = "\n"
         )
-    } else ""
 
-    # --- Nodes ---
-    nodes_html <- paste(
-        vapply(seq_len(nrow(nodes)), function(i) {
-            n <- nodes[i, ]
-            x <- n$node_x[[1L]]
-            y <- n$node_y[[1L]]
-            if (is.na(x) || is.na(y)) return("")
+        paste0(
+            "<div class='btree-panel", if (is_active) " is-active" else "", "' data-btree-panel='", panel_key, "'",
+            if (!is_active) " hidden" else "", ">",
+            "<div class='bracket-tree-container'>",
+            sprintf(
+                "<svg id='btree-svg-%s' class='btree-svg' viewBox='0 0 %d %d' width='100%%' style='min-width:%dpx;display:block;'>",
+                tree$candidate_id %||% 1L, SVG_WIDTH, SVG_HEIGHT, SVG_WIDTH
+            ),
+            "<g class='btree-bg'>", region_bands_html, "</g>",
+            "<g class='btree-col-labels'>", col_labels_html, "</g>",
+            "<g class='btree-edges'>", edges_html, "</g>",
+            "<g class='btree-nodes'>", nodes_html, "</g>",
+            "</svg>",
+            "</div>",
+            "</div>"
+        )
+    }
 
-            x <- as.integer(round(x))
-            y <- as.integer(round(y))
-
-            tier        <- as.character(n$confidence_tier[[1L]] %||% "")
-            tier_color  <- as.character(n$tier_color[[1L]])
-            label_a     <- html_escape(as.character(n$label_a[[1L]]))
-            label_b     <- html_escape(as.character(n$label_b[[1L]]))
-            evidence_id <- as.character(n$evidence_id[[1L]])
-            slot_key    <- as.character(n$slot_key[[1L]])
-            c1_pick     <- html_escape(as.character(n$candidate_1_pick[[1L]] %||% ""))
-            c2_pick     <- html_escape(as.character(n$candidate_2_pick[[1L]] %||% ""))
-            fav         <- html_escape(as.character(n$posterior_favorite[[1L]] %||% ""))
-            prob_val    <- n$win_prob_favorite[[1L]]
-            prob_str    <- if (!is.null(prob_val) && length(prob_val) == 1L && !is.na(prob_val)) {
-                sprintf("%.0f%%", 100 * prob_val)
-            } else "n/a"
-            rationale   <- html_escape(as.character(n$rationale_short[[1L]] %||% ""))
-            round_lbl   <- html_escape(as.character(n$round[[1L]]))
-            region_lbl  <- html_escape(as.character(n$region[[1L]]))
-            is_div      <- isTRUE(n$is_divergence[[1L]])
-            c1_upset    <- isTRUE(n$candidate_1_upset[[1L]])
-            c2_upset    <- isTRUE(n$candidate_2_upset[[1L]])
-
-            clean_attr <- function(s) {
-                s <- as.character(s %||% "")
-                s <- gsub("[\r\n\t]+", " ", s)
-                html_escape(s)
-            }
-
-            matchup_tip <- clean_attr(paste0(as.character(n$teamA[[1L]] %||% ""), " vs ", as.character(n$teamB[[1L]] %||% "")))
-            round_tip <- clean_attr(as.character(n$round[[1L]] %||% ""))
-            region_tip <- clean_attr(as.character(n$region[[1L]] %||% ""))
-            fav_tip <- clean_attr(as.character(n$posterior_favorite[[1L]] %||% ""))
-            prob_tip <- clean_attr(prob_str)
-            tier_tip <- clean_attr(tier)
-            c1_tip <- clean_attr(as.character(n$candidate_1_pick[[1L]] %||% ""))
-            c2_tip <- clean_attr(as.character(n$candidate_2_pick[[1L]] %||% ""))
-            rationale_tip <- clean_attr(as.character(n$rationale_short[[1L]] %||% ""))
-
-            # Text color: dark on yellow/red tiers, white on green/blue
-            text_color <- if (tier %in% c("Toss-up", "Volatile")) "#0f172a" else "#ffffff"
-
-            rx <- x - NODE_W %/% 2L
-            ry <- y - NODE_H %/% 2L
-
-            paste0(
-                sprintf(paste0(
-                    "<g class=\"btree-node\"",
-                    " data-slot=\"%s\"",
-                    " data-open-evidence=\"%s\"",
-                    " data-tip-matchup=\"%s\"",
-                    " data-tip-round=\"%s\"",
-                    " data-tip-region=\"%s\"",
-                    " data-tip-fav=\"%s\"",
-                    " data-tip-prob=\"%s\"",
-                    " data-tip-tier=\"%s\"",
-                    " data-tip-c1=\"%s\"",
-                    " data-tip-c2=\"%s\"",
-                    " data-tip-rationale=\"%s\"",
-                    ">"
-                ),
-                clean_attr(slot_key),
-                clean_attr(evidence_id),
-                matchup_tip,
-                round_tip,
-                region_tip,
-                fav_tip,
-                prob_tip,
-                tier_tip,
-                c1_tip,
-                c2_tip,
-                rationale_tip
-                ),
-                if (is_div) sprintf(
-                    "<rect x='%d' y='%d' width='%d' height='%d' rx='6' fill='none' stroke='#f59e0b' stroke-width='3' class='btree-divergence-ring'/>",
-                    rx - 3L, ry - 3L, NODE_W + 6L, NODE_H + 6L
-                ) else "",
-                sprintf("<rect x='%d' y='%d' width='%d' height='%d' rx='4' fill='%s'/>",
-                    rx, ry, NODE_W, NODE_H, tier_color),
-                sprintf("<text x='%d' y='%d' text-anchor='middle' font-size='9' fill='%s' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
-                    x, y - 7L, text_color, label_a),
-                sprintf("<text x='%d' y='%d' text-anchor='middle' font-size='9' fill='%s' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
-                    x, y + 7L, text_color, label_b),
-                if (c1_upset || c2_upset) sprintf(
-                    "<text x='%d' y='%d' font-size='8' font-weight='800' fill='#e76f51' font-family='system-ui,sans-serif' class='btree-upset-badge'>U</text>",
-                    rx + NODE_W - 10L, ry + 2L
-                ) else "",
-                "</g>"
-            )
-        }, character(1L)),
-        collapse = "\n"
-    )
-
-    # --- Toggle controls ---
-    controls_html <- paste0(
-        "<div class='bracket-tree-controls'>",
-        "<button class='btree-toggle is-active' data-btree-view='both'>Both candidates</button>",
-        "<button class='btree-toggle' data-btree-view='c1'>Candidate 1 only</button>",
-        "<button class='btree-toggle' data-btree-view='c2'>Candidate 2 only</button>",
-        "</div>"
-    )
+    controls_html <- if (length(tree_entries) > 1L) {
+        paste0(
+            "<div class='bracket-tree-controls'>",
+            paste(
+                vapply(seq_along(tree_entries), function(index) {
+                    tree <- tree_entries[[index]]
+                    sprintf(
+                        "<button class='btree-toggle%s' data-btree-target='candidate-%s'>%s</button>",
+                        if (index == 1L) " is-active" else "",
+                        tree$candidate_id %||% index,
+                        html_escape(as.character(tree$candidate_label %||% sprintf("Candidate %d", index)))
+                    )
+                }, character(1L)),
+                collapse = ""
+            ),
+            "</div>"
+        )
+    } else {
+        ""
+    }
 
     # --- Legend ---
     tier_palette <- dashboard_tier_palette()
@@ -2363,9 +2362,6 @@ render_bracket_tree_svg <- function(tree_data) {
     legend_html <- paste0(
         "<div class='btree-legend'>",
         legend_items,
-        "<span class='btree-legend-item'><span class='btree-legend-ring'></span>Diverges between candidates</span>",
-        "<span class='btree-legend-item'><span class='btree-legend-edge btree-legend-edge-c1'></span>Candidate 1 path</span>",
-        "<span class='btree-legend-item'><span class='btree-legend-edge btree-legend-edge-c2'></span>Candidate 2 path</span>",
         "<span class='btree-legend-item'><span style='font-weight:800;color:#e76f51;font-size:11px;'>U</span> Upset pick</span>",
         "</div>"
     )
@@ -2373,15 +2369,12 @@ render_bracket_tree_svg <- function(tree_data) {
     paste0(
         controls_html,
         legend_html,
-        "<div class='bracket-tree-container'>",
-        sprintf("<svg id='btree-svg' viewBox='0 0 %d %d' width='100%%' style='min-width:%dpx;display:block;'>",
-            SVG_WIDTH, SVG_HEIGHT, SVG_WIDTH),
-        "<g id='btree-bg'>", region_bands_html, "</g>",
-        "<g id='btree-col-labels'>", col_labels_html, "</g>",
-        "<g id='btree-edges'>", edges_html, "</g>",
-        "<g id='btree-nodes'>", nodes_html, "</g>",
-        "</svg>",
-        "</div>",
+        paste(
+            vapply(seq_along(tree_entries), function(index) {
+                render_tree_panel(tree_entries[[index]], is_active = index == 1L)
+            }, character(1L)),
+            collapse = ""
+        ),
         "<div id='btree-tooltip'></div>"
     )
 }
@@ -4208,21 +4201,15 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".bracket-tree-controls{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;}",
         ".btree-toggle{border:1px solid #d6d3d1;background:#fff;border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;}",
         ".btree-toggle.is-active{background:#101827;color:#fff;border-color:#101827;}",
+        ".btree-panel[hidden]{display:none !important;}",
         ".btree-node{cursor:pointer;}",
         ".btree-node:hover rect:first-of-type{filter:brightness(0.85);}",
-        ".btree-divergence-ring{pointer-events:none;}",
         ".btree-upset-badge{pointer-events:none;}",
         "#btree-tooltip{position:fixed;background:#0f172a;color:#f8fafc;border-radius:12px;padding:12px 14px;font-size:13px;max-width:280px;z-index:999;pointer-events:none;opacity:0;transition:opacity 0.12s;line-height:1.6;box-shadow:0 8px 24px rgba(0,0,0,0.3);}",
         "#btree-tooltip.is-visible{opacity:1;}",
-        "#btree-svg.btree-view-c1 .btree-edge-c2{opacity:0.06;}",
-        "#btree-svg.btree-view-c2 .btree-edge-c1{opacity:0.06;}",
         ".btree-legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;align-items:center;}",
         ".btree-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#334155;}",
         ".btree-legend-swatch{display:inline-block;width:14px;height:14px;border-radius:3px;flex-shrink:0;}",
-        ".btree-legend-ring{display:inline-block;width:14px;height:14px;border-radius:3px;border:2px solid #f59e0b;flex-shrink:0;}",
-        ".btree-legend-edge{display:inline-block;width:24px;height:3px;border-radius:2px;flex-shrink:0;}",
-        ".btree-legend-edge-c1{background:#1d4ed8;}",
-        ".btree-legend-edge-c2{background:repeating-linear-gradient(to right,#d97706 0,#d97706 4px,transparent 4px,transparent 7px);}",
         "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.dashboard-table{min-width:820px;}.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid{grid-template-columns:1fr;}}"
     )
 
@@ -4259,20 +4246,24 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "if(btreeTip){",
         "var setTip=function(node){",
         "btreeTip.textContent='';",
+        "var candidate=node.getAttribute('data-tip-candidate')||'';",
         "var matchup=node.getAttribute('data-tip-matchup')||'';",
         "var round=node.getAttribute('data-tip-round')||'';",
         "var region=node.getAttribute('data-tip-region')||'';",
+        "var pick=node.getAttribute('data-tip-pick')||'';",
         "var fav=node.getAttribute('data-tip-fav')||'';",
         "var prob=node.getAttribute('data-tip-prob')||'';",
         "var tier=node.getAttribute('data-tip-tier')||'';",
-        "var c1=node.getAttribute('data-tip-c1')||'';",
-        "var c2=node.getAttribute('data-tip-c2')||'';",
         "var rationale=node.getAttribute('data-tip-rationale')||'';",
         "var strong=document.createElement('strong');",
         "strong.textContent=matchup;",
         "btreeTip.appendChild(strong);",
         "btreeTip.appendChild(document.createElement('br'));",
         "btreeTip.appendChild(document.createTextNode(round+' · '+region));",
+        "if(candidate || pick){",
+        "btreeTip.appendChild(document.createElement('br'));",
+        "btreeTip.appendChild(document.createTextNode(candidate+': '+pick));",
+        "}",
         "btreeTip.appendChild(document.createElement('br'));",
         "btreeTip.appendChild(document.createTextNode('Fav: '));",
         "var favStrong=document.createElement('strong');",
@@ -4281,8 +4272,6 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "btreeTip.appendChild(document.createTextNode(' ('+prob+')'));",
         "btreeTip.appendChild(document.createElement('br'));",
         "btreeTip.appendChild(document.createTextNode('Tier: '+tier));",
-        "btreeTip.appendChild(document.createElement('br'));",
-        "btreeTip.appendChild(document.createTextNode('C1: '+c1+'   C2: '+c2));",
         "if(rationale){",
         "btreeTip.appendChild(document.createElement('br'));",
         "var em=document.createElement('em');",
@@ -4299,16 +4288,16 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "node.addEventListener('mouseleave',function(){btreeTip.classList.remove('is-visible');});",
         "});",
         "}",
-        "var btreeSvg=document.getElementById('btree-svg');",
-        "if(btreeSvg){",
-        "Array.from(document.querySelectorAll('.btree-toggle')).forEach(function(b){",
-        "b.addEventListener('click',function(){",
-        "Array.from(document.querySelectorAll('.btree-toggle')).forEach(function(x){x.classList.remove('is-active');});",
-        "b.classList.add('is-active');",
-        "['btree-view-both','btree-view-c1','btree-view-c2'].forEach(function(c){btreeSvg.classList.remove(c);});",
-        "btreeSvg.classList.add('btree-view-'+b.getAttribute('data-btree-view'));",
-        "});",
-        "});",
+        "var btreeButtons=Array.from(document.querySelectorAll('.btree-toggle[data-btree-target]'));",
+        "var btreePanels=Array.from(document.querySelectorAll('[data-btree-panel]'));",
+        "if(btreeButtons.length>0 && btreePanels.length>0){",
+        "var setTree=function(target){",
+        "btreeButtons.forEach(function(button){button.classList.toggle('is-active', button.getAttribute('data-btree-target')===target);});",
+        "btreePanels.forEach(function(panel){var active=panel.getAttribute('data-btree-panel')===target;panel.hidden=!active;panel.classList.toggle('is-active', active);});",
+        "if(btreeTip){btreeTip.classList.remove('is-visible');}",
+        "};",
+        "btreeButtons.forEach(function(button){button.addEventListener('click',function(){setTree(button.getAttribute('data-btree-target'));});});",
+        "setTree(btreeButtons[0].getAttribute('data-btree-target'));",
         "}",
         "})();",
         "</script>"
@@ -4345,7 +4334,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "</section>",
         "<section class='section' id='bracket-tree'>",
         "<h2>Bracket Tree</h2>",
-        "<p class='section-note'>Each node is a game. Color shows confidence tier. Click any game to open its evidence drawer. Hover for probabilities and candidate picks. Use the buttons to highlight each bracket path.</p>",
+        "<p class='section-note'>Each node is a game in the selected candidate's actual bracket path. Color shows confidence tier. Click any game to open its evidence drawer. Hover for the active candidate's matchup, pick, and probabilities.</p>",
         render_bracket_tree_svg(bracket_tree_data),
         "</section>",
         "<section class='section' id='delta'>",

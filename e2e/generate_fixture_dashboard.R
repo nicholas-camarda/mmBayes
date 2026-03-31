@@ -6,6 +6,122 @@ pkgload::load_all(".")
 
 source(file.path("tests", "testthat", "helper-fixtures.R"))
 
+override_candidate_matchup <- function(matchups, slot_key, values) {
+    row_index <- which(as.character(matchups$slot_key) == slot_key)
+    if (length(row_index) != 1L) {
+        stop(sprintf("Expected exactly one matchup row for slot %s", slot_key))
+    }
+
+    for (field_name in names(values)) {
+        matchups[[field_name]][[row_index]] <- values[[field_name]]
+    }
+
+    win_prob_a <- safe_numeric(matchups$win_prob_A[[row_index]], default = NA_real_)
+    if (is.na(win_prob_a)) {
+        win_prob_a <- 0.5
+        matchups$win_prob_A[[row_index]] <- win_prob_a
+    }
+
+    if (win_prob_a >= 0.5) {
+        matchups$posterior_favorite[[row_index]] <- matchups$teamA[[row_index]]
+        matchups$favorite_seed[[row_index]] <- matchups$teamA_seed[[row_index]]
+        matchups$underdog[[row_index]] <- matchups$teamB[[row_index]]
+        matchups$underdog_seed[[row_index]] <- matchups$teamB_seed[[row_index]]
+        matchups$win_prob_favorite[[row_index]] <- win_prob_a
+        matchups$win_prob_underdog[[row_index]] <- 1 - win_prob_a
+    } else {
+        matchups$posterior_favorite[[row_index]] <- matchups$teamB[[row_index]]
+        matchups$favorite_seed[[row_index]] <- matchups$teamB_seed[[row_index]]
+        matchups$underdog[[row_index]] <- matchups$teamA[[row_index]]
+        matchups$underdog_seed[[row_index]] <- matchups$teamA_seed[[row_index]]
+        matchups$win_prob_favorite[[row_index]] <- 1 - win_prob_a
+        matchups$win_prob_underdog[[row_index]] <- win_prob_a
+    }
+
+    matchups$upset[[row_index]] <- identical(
+        as.character(matchups$winner[[row_index]]),
+        as.character(matchups$underdog[[row_index]])
+    )
+
+    matchups
+}
+
+prepare_bracket_tree_fixture_candidates <- function(candidates) {
+    for (candidate_index in seq_along(candidates)) {
+        matchups <- candidates[[candidate_index]]$matchups
+        first_main_game <- which(as.character(matchups$round) != "First Four")[[1]]
+        matchups <- override_candidate_matchup(matchups, as.character(matchups$slot_key[[first_main_game]]), list(
+            teamA = "St. John's",
+            teamB = "Texas A&M",
+            teamA_seed = 5L,
+            teamB_seed = 12L,
+            winner = "St. John's",
+            win_prob_A = 0.62,
+            rationale_short = "Don't break HTML attributes."
+        ))
+        candidates[[candidate_index]]$matchups <- matchups
+    }
+
+    candidates[[1]]$matchups <- override_candidate_matchup(candidates[[1]]$matchups, "East|Round of 64|5", list(
+        teamA = "Louisville",
+        teamB = "South Florida",
+        teamA_seed = 6L,
+        teamB_seed = 11L,
+        winner = "Louisville",
+        win_prob_A = 0.757,
+        confidence_tier = "Lean"
+    ))
+    candidates[[2]]$matchups <- override_candidate_matchup(candidates[[2]]$matchups, "East|Round of 64|5", list(
+        teamA = "Louisville",
+        teamB = "South Florida",
+        teamA_seed = 6L,
+        teamB_seed = 11L,
+        winner = "South Florida",
+        win_prob_A = 0.757,
+        confidence_tier = "Lean"
+    ))
+
+    candidates[[1]]$matchups <- override_candidate_matchup(candidates[[1]]$matchups, "East|Round of 32|3", list(
+        teamA = "Louisville",
+        teamB = "Michigan State",
+        teamA_seed = 6L,
+        teamB_seed = 3L,
+        winner = "Louisville",
+        win_prob_A = 0.56,
+        confidence_tier = "Toss-up"
+    ))
+    candidates[[2]]$matchups <- override_candidate_matchup(candidates[[2]]$matchups, "East|Round of 32|3", list(
+        teamA = "South Florida",
+        teamB = "Michigan State",
+        teamA_seed = 11L,
+        teamB_seed = 3L,
+        winner = "Michigan State",
+        win_prob_A = 0.44,
+        confidence_tier = "Toss-up"
+    ))
+
+    candidates[[1]]$matchups <- override_candidate_matchup(candidates[[1]]$matchups, "East|Sweet 16|2", list(
+        teamA = "Louisville",
+        teamB = "Connecticut",
+        teamA_seed = 6L,
+        teamB_seed = 2L,
+        winner = "Connecticut",
+        win_prob_A = 0.38,
+        confidence_tier = "Toss-up"
+    ))
+    candidates[[2]]$matchups <- override_candidate_matchup(candidates[[2]]$matchups, "East|Sweet 16|2", list(
+        teamA = "Michigan State",
+        teamB = "Connecticut",
+        teamA_seed = 3L,
+        teamB_seed = 2L,
+        winner = "Connecticut",
+        win_prob_A = 0.38,
+        confidence_tier = "Toss-up"
+    ))
+
+    candidates
+}
+
 args <- commandArgs(trailingOnly = TRUE)
 output_dir <- if (length(args) >= 1 && nzchar(args[[1]])) args[[1]] else tempdir()
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -42,17 +158,9 @@ candidates <- generate_bracket_candidates(
     n_simulations = 8L,
     random_seed = 123
 )
+candidates <- prepare_bracket_tree_fixture_candidates(candidates)
 
 decision_sheet <- build_decision_sheet(candidates)
-if (nrow(decision_sheet) > 0) {
-    main_bracket_indices <- which(as.character(decision_sheet$round) != "First Four")
-    if (length(main_bracket_indices) > 0) {
-        main_bracket_index <- main_bracket_indices[[1]]
-        decision_sheet$teamA[[main_bracket_index]] <- "St. John's"
-        decision_sheet$teamB[[main_bracket_index]] <- "Texas A&M"
-        decision_sheet$rationale_short[[main_bracket_index]] <- "Don't break HTML attributes."
-    }
-}
 
 play_in_resolution <- summarize_play_in_resolution(
     current_teams = loaded$current_teams,

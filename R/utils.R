@@ -1402,39 +1402,34 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
         candidate_summary_rows = candidate_summary_rows,
         play_in_resolution = play_in_resolution %||% tibble::tibble(),
         team_lookup = team_lookup,
-        bracket_tree_data = build_bracket_tree_data(decision_sheet, candidates)
+        bracket_tree_data = build_bracket_tree_data(candidates)
     )
 }
 
 #' Build node and edge data for the interactive bracket tree visualization
 #'
-#' Computes SVG layout coordinates for each game node and edges connecting
-#' parent/child games in the tournament bracket tree. The visualization uses a
-#' stacked-region layout where each of the four regions occupies one horizontal
-#' band and rounds progress left-to-right.
+#' Computes SVG layout coordinates for each game's actual path within a single
+#' candidate bracket. The visualization uses a stacked-region layout where each
+#' of the four regions occupies one horizontal band and rounds progress
+#' left-to-right.
 #'
-#' @param decision_sheet The augmented decision sheet tibble (output of
-#'   [augment_matchup_decisions()] or [build_decision_sheet()]).
-#' @param candidates A list of bracket candidate result objects. Used to
-#'   determine which games have diverging picks between candidates.
+#' @param candidates A list of bracket candidate result objects. Each candidate
+#'   must supply a `matchups` table representing its actual bracket path.
 #' @param ff_region_pairs A list of two-element character vectors naming the
 #'   regional pairs that meet in the Final Four, in matchup order.
 #'
-#' @return A list with two tibbles:
+#' @return A list with one element, `trees`, containing one entry per candidate:
 #'   \describe{
-#'     \item{nodes}{One row per game (63 rows) with added columns `node_x`,
-#'       `node_y`, `evidence_id`, and `is_divergence`.}
-#'     \item{edges}{One row per parent-child game connection with columns
-#'       `from_slot`, `to_slot`, `x1`, `y1`, `x2`, `y2`, `c1_same_as_c2`.}
+#'     \item{trees}{A list of candidate tree objects. Each object has
+#'       `candidate_id`, `candidate_label`, `nodes`, and `edges`.}
 #'   }
 #' @keywords internal
 build_bracket_tree_data <- function(
-    decision_sheet,
     candidates = list(),
     ff_region_pairs = list(c("South", "West"), c("East", "Midwest"))
 ) {
-    if (is.null(decision_sheet) || nrow(decision_sheet) == 0) {
-        return(list(nodes = tibble::tibble(), edges = tibble::tibble()))
+    if (length(candidates) == 0) {
+        return(list(trees = list()))
     }
 
     TOP_MARGIN    <- 55L
@@ -1473,112 +1468,140 @@ build_bracket_tree_data <- function(
 
     champ_y <- mean(ff_y)
 
-    ds <- decision_sheet[!(as.character(decision_sheet$round) %in% "First Four"), , drop = FALSE]
-    ds$round  <- as.character(ds$round)
-    ds$region <- as.character(ds$region)
+    build_edges <- function(nodes) {
+        parent_round_map <- c(
+            "Round of 64" = "Round of 32",
+            "Round of 32" = "Sweet 16",
+            "Sweet 16"    = "Elite 8"
+        )
 
-    ds$node_x <- unname(round_x[ds$round])
+        child_rounds <- regional_rounds[seq_len(length(regional_rounds) - 1L)]
+        child_nodes <- nodes[nodes$round %in% child_rounds, , drop = FALSE]
 
-    ds$node_y <- vapply(seq_len(nrow(ds)), function(i) {
-        r <- ds$round[[i]]
-        if (r %in% regional_rounds) {
-            regional_game_y(ds$region[[i]], r, ds$matchup_number[[i]])
-        } else if (r == "Final Four") {
-            ff_y[[as.integer(ds$matchup_number[[i]])]]
-        } else if (r == "Championship") {
-            champ_y
+        regional_edges <- lapply(seq_len(nrow(child_nodes)), function(i) {
+            child <- child_nodes[i, ]
+            parent_round <- parent_round_map[[child$round]]
+            parent_mn <- ceiling(child$matchup_number / 2L)
+            parent_idx <- which(
+                nodes$region == child$region &
+                nodes$round == parent_round &
+                nodes$matchup_number == parent_mn
+            )
+            if (length(parent_idx) == 0L) {
+                return(NULL)
+            }
+            parent <- nodes[parent_idx[[1L]], ]
+            tibble::tibble(
+                from_slot = as.character(child$slot_key),
+                to_slot = as.character(parent$slot_key),
+                x1 = child$node_x,
+                y1 = child$node_y,
+                x2 = parent$node_x,
+                y2 = parent$node_y
+            )
+        })
+
+        e8_nodes <- nodes[nodes$round == "Elite 8", , drop = FALSE]
+        ff_nodes <- nodes[nodes$round == "Final Four", , drop = FALSE]
+
+        e8_ff_edges <- unlist(lapply(seq_along(ff_region_pairs), function(i) {
+            pair <- ff_region_pairs[[i]]
+            ff_row <- ff_nodes[ff_nodes$matchup_number == i, , drop = FALSE]
+            if (nrow(ff_row) == 0L) {
+                return(list())
+            }
+            lapply(pair, function(region_name) {
+                e8_row <- e8_nodes[e8_nodes$region == region_name, , drop = FALSE]
+                if (nrow(e8_row) == 0L) {
+                    return(NULL)
+                }
+                tibble::tibble(
+                    from_slot = as.character(e8_row$slot_key[[1L]]),
+                    to_slot = as.character(ff_row$slot_key[[1L]]),
+                    x1 = e8_row$node_x[[1L]],
+                    y1 = e8_row$node_y[[1L]],
+                    x2 = ff_row$node_x[[1L]],
+                    y2 = ff_row$node_y[[1L]]
+                )
+            })
+        }), recursive = FALSE)
+
+        champ_nodes <- nodes[nodes$round == "Championship", , drop = FALSE]
+        ff_champ_edges <- if (nrow(champ_nodes) > 0L && nrow(ff_nodes) > 0L) {
+            lapply(seq_len(nrow(ff_nodes)), function(i) {
+                ff_row <- ff_nodes[i, ]
+                tibble::tibble(
+                    from_slot = as.character(ff_row$slot_key),
+                    to_slot = as.character(champ_nodes$slot_key[[1L]]),
+                    x1 = ff_row$node_x,
+                    y1 = ff_row$node_y,
+                    x2 = champ_nodes$node_x[[1L]],
+                    y2 = champ_nodes$node_y[[1L]]
+                )
+            })
         } else {
-            NA_real_
+            list()
         }
-    }, numeric(1))
 
-    ds$evidence_id  <- paste0("evidence-", as.character(ds$slot_key))
-    ds$is_divergence <- dplyr::coalesce(as.logical(ds$candidate_diff_flag), FALSE)
-
-    # --- Build edges ---
-
-    # Within-region edges: R64→R32, R32→S16, S16→E8
-    parent_round_map <- c(
-        "Round of 64" = "Round of 32",
-        "Round of 32" = "Sweet 16",
-        "Sweet 16"    = "Elite 8"
-    )
-
-    child_rounds <- regional_rounds[seq_len(length(regional_rounds) - 1L)]
-    child_ds <- ds[ds$round %in% child_rounds, , drop = FALSE]
-
-    regional_edges <- lapply(seq_len(nrow(child_ds)), function(i) {
-        child         <- child_ds[i, ]
-        parent_round  <- parent_round_map[[child$round]]
-        parent_mn     <- ceiling(child$matchup_number / 2L)
-        parent_idx    <- which(
-            ds$region         == child$region &
-            ds$round          == parent_round &
-            ds$matchup_number == parent_mn
-        )
-        if (length(parent_idx) == 0L) return(NULL)
-        parent <- ds[parent_idx[[1L]], ]
-        tibble::tibble(
-            from_slot     = as.character(child$slot_key),
-            to_slot       = as.character(parent$slot_key),
-            x1            = child$node_x,
-            y1            = child$node_y,
-            x2            = parent$node_x,
-            y2            = parent$node_y,
-            c1_same_as_c2 = !child$is_divergence
-        )
-    })
-
-    # E8 → Final Four edges
-    e8_ds <- ds[ds$round == "Elite 8",    , drop = FALSE]
-    ff_ds <- ds[ds$round == "Final Four", , drop = FALSE]
-
-    e8_ff_edges <- unlist(lapply(seq_along(ff_region_pairs), function(i) {
-        pair   <- ff_region_pairs[[i]]
-        ff_row <- ff_ds[ff_ds$matchup_number == i, , drop = FALSE]
-        if (nrow(ff_row) == 0L) return(list())
-        lapply(pair, function(reg) {
-            e8_row <- e8_ds[e8_ds$region == reg, , drop = FALSE]
-            if (nrow(e8_row) == 0L) return(NULL)
-            tibble::tibble(
-                from_slot     = as.character(e8_row$slot_key[[1L]]),
-                to_slot       = as.character(ff_row$slot_key[[1L]]),
-                x1            = e8_row$node_x[[1L]],
-                y1            = e8_row$node_y[[1L]],
-                x2            = ff_row$node_x[[1L]],
-                y2            = ff_row$node_y[[1L]],
-                c1_same_as_c2 = !e8_row$is_divergence[[1L]]
-            )
-        })
-    }), recursive = FALSE)
-
-    # Final Four → Championship edges
-    champ_ds <- ds[ds$round == "Championship", , drop = FALSE]
-    ff_champ_edges <- if (nrow(champ_ds) > 0L && nrow(ff_ds) > 0L) {
-        lapply(seq_len(nrow(ff_ds)), function(i) {
-            ff_row <- ff_ds[i, ]
-            tibble::tibble(
-                from_slot     = as.character(ff_row$slot_key),
-                to_slot       = as.character(champ_ds$slot_key[[1L]]),
-                x1            = ff_row$node_x,
-                y1            = ff_row$node_y,
-                x2            = champ_ds$node_x[[1L]],
-                y2            = champ_ds$node_y[[1L]],
-                c1_same_as_c2 = !ff_row$is_divergence
-            )
-        })
-    } else {
-        list()
+        edge_list <- Filter(Negate(is.null), c(regional_edges, e8_ff_edges, ff_champ_edges))
+        if (length(edge_list) == 0L) {
+            return(tibble::tibble())
+        }
+        dplyr::bind_rows(edge_list)
     }
 
-    all_edge_list <- Filter(Negate(is.null), c(regional_edges, e8_ff_edges, ff_champ_edges))
-    edges <- if (length(all_edge_list) > 0L) {
-        dplyr::bind_rows(all_edge_list)
-    } else {
-        tibble::tibble()
-    }
+    trees <- Filter(Negate(is.null), lapply(seq_along(candidates), function(index) {
+        candidate <- candidates[[index]]
+        matchups <- candidate$matchups %||% tibble::tibble()
+        if (nrow(matchups) == 0L) {
+            return(NULL)
+        }
 
-    list(nodes = ds, edges = edges)
+        candidate_id <- suppressWarnings(as.integer(candidate$candidate_id %||% index))
+        if (!is.finite(candidate_id)) {
+            candidate_id <- index
+        }
+        candidate_label <- sprintf("Candidate %d", candidate_id)
+
+        nodes <- if ("slot_key" %in% names(matchups)) {
+            matchups
+        } else {
+            augment_matchup_decisions(matchups)
+        }
+        nodes <- nodes[!(as.character(nodes$round) %in% "First Four"), , drop = FALSE]
+        if (nrow(nodes) == 0L) {
+            return(NULL)
+        }
+
+        nodes$round <- as.character(nodes$round)
+        nodes$region <- as.character(nodes$region)
+        nodes$node_x <- unname(round_x[nodes$round])
+        nodes$node_y <- vapply(seq_len(nrow(nodes)), function(i) {
+            round_name <- nodes$round[[i]]
+            if (round_name %in% regional_rounds) {
+                regional_game_y(nodes$region[[i]], round_name, nodes$matchup_number[[i]])
+            } else if (round_name == "Final Four") {
+                ff_y[[as.integer(nodes$matchup_number[[i]])]]
+            } else if (round_name == "Championship") {
+                champ_y
+            } else {
+                NA_real_
+            }
+        }, numeric(1))
+        nodes$evidence_id <- paste0("evidence-", as.character(nodes$slot_key))
+        nodes$candidate_id <- candidate_id
+        nodes$candidate_label <- candidate_label
+        nodes$candidate_pick <- nodes$winner
+
+        list(
+            candidate_id = candidate_id,
+            candidate_label = candidate_label,
+            nodes = nodes,
+            edges = build_edges(nodes)
+        )
+    }))
+
+    list(trees = trees)
 }
 
 #' Summarize path-level details for a bracket candidate
