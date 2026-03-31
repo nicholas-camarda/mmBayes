@@ -2096,6 +2096,252 @@ render_candidate_divergence_svg <- function(decision_sheet) {
     )
 }
 
+#' Render the interactive bracket tree SVG section
+#'
+#' Converts the output of [build_bracket_tree_data()] into a self-contained
+#' HTML snippet containing an SVG bracket tree, candidate toggle controls, a
+#' tier/candidate legend, and a floating tooltip element driven by vanilla JS
+#' in the parent dashboard.
+#'
+#' @param tree_data The list returned by [build_bracket_tree_data()], with
+#'   `$nodes` and `$edges` tibbles.
+#'
+#' @return A scalar character string containing HTML markup ready to embed in
+#'   the bracket dashboard.
+#' @keywords internal
+render_bracket_tree_svg <- function(tree_data) {
+    if (is.null(tree_data) || is.null(tree_data$nodes) || nrow(tree_data$nodes) == 0L) {
+        return("<p class='empty-state'>Bracket tree data not available.</p>")
+    }
+
+    nodes <- tree_data$nodes
+    edges <- tree_data$edges %||% tibble::tibble()
+
+    SVG_WIDTH     <- 1400L
+    SVG_HEIGHT    <- 1070L
+    TOP_MARGIN    <- 55L
+    REGION_HEIGHT <- 240L
+    NODE_W        <- 120L
+    NODE_H        <- 28L
+
+    round_x <- c(
+        "Round of 64"  = 170L,
+        "Round of 32"  = 350L,
+        "Sweet 16"     = 530L,
+        "Elite 8"      = 710L,
+        "Final Four"   = 890L,
+        "Championship" = 1070L
+    )
+    round_labels_short <- c(
+        "Round of 64"  = "ROUND OF 64",
+        "Round of 32"  = "ROUND OF 32",
+        "Sweet 16"     = "SWEET 16",
+        "Elite 8"      = "ELITE 8",
+        "Final Four"   = "FINAL FOUR",
+        "Championship" = "CHAMP"
+    )
+
+    region_row_index <- c("East" = 0L, "South" = 1L, "Midwest" = 2L, "West" = 3L)
+
+    # Add display columns
+    nodes$tier_color <- dashboard_tier_color(as.character(nodes$confidence_tier))
+    nodes$label_a <- paste0(
+        ifelse(!is.na(nodes$teamA_seed), paste0("(", nodes$teamA_seed, ") "), ""),
+        truncate_dashboard_label(nodes$teamA, width = 9L)
+    )
+    nodes$label_b <- paste0(
+        ifelse(!is.na(nodes$teamB_seed), paste0("(", nodes$teamB_seed, ") "), ""),
+        truncate_dashboard_label(nodes$teamB, width = 9L)
+    )
+
+    # --- Round column labels ---
+    col_labels_html <- paste(
+        vapply(names(round_x), function(rnd) {
+            sprintf(
+                "<text x='%d' y='22' text-anchor='middle' font-size='10' font-weight='700' fill='#64748b' font-family='system-ui,sans-serif'>%s</text>",
+                round_x[[rnd]], round_labels_short[[rnd]]
+            )
+        }, character(1L)),
+        collapse = "\n"
+    )
+
+    # --- Region band backgrounds and labels ---
+    region_names <- c("East", "South", "Midwest", "West")
+    band_colors  <- c("rgba(248,250,252,0.6)", "rgba(241,245,249,0.6)", "rgba(248,250,252,0.6)", "rgba(241,245,249,0.6)")
+
+    region_bands_html <- paste(
+        vapply(region_names, function(r) {
+            row_idx  <- region_row_index[[r]]
+            y_top    <- TOP_MARGIN + row_idx * REGION_HEIGHT
+            y_mid    <- y_top + REGION_HEIGHT / 2L
+            bg_color <- band_colors[[row_idx + 1L]]
+            sep_line <- if (row_idx < 3L) {
+                sprintf("<line x1='60' y1='%d' x2='%d' y2='%d' stroke='#e2e8f0' stroke-width='1'/>",
+                    y_top + REGION_HEIGHT, SVG_WIDTH, y_top + REGION_HEIGHT)
+            } else ""
+            paste0(
+                sprintf("<rect x='0' y='%d' width='%d' height='%d' fill='%s'/>",
+                    y_top, SVG_WIDTH, REGION_HEIGHT, bg_color),
+                sprintf("<text x='56' y='%d' text-anchor='end' font-size='13' font-weight='700' fill='#334155' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
+                    y_mid, r),
+                sep_line
+            )
+        }, character(1L)),
+        collapse = "\n"
+    )
+
+    # --- Edges ---
+    edges_html <- if (nrow(edges) > 0L) {
+        paste(
+            vapply(seq_len(nrow(edges)), function(i) {
+                e    <- edges[i, ]
+                x1   <- as.integer(round(e$x1[[1L]]))
+                y1   <- as.integer(round(e$y1[[1L]]))
+                x2   <- as.integer(round(e$x2[[1L]]))
+                y2   <- as.integer(round(e$y2[[1L]]))
+                same <- isTRUE(e$c1_same_as_c2[[1L]])
+
+                # Elbow connector: leave right edge of source, enter left edge of target
+                sx   <- x1 + NODE_W %/% 2L
+                tx   <- x2 - NODE_W %/% 2L
+                mid  <- (sx + tx) %/% 2L
+
+                if (same) {
+                    sprintf(
+                        "<path d='M%d,%d L%d,%d L%d,%d L%d,%d' fill='none' stroke='#94a3b8' stroke-width='1.5' class='btree-edge-shared'/>",
+                        sx, y1, mid, y1, mid, y2, tx, y2
+                    )
+                } else {
+                    paste0(
+                        sprintf(
+                            "<path d='M%d,%d L%d,%d L%d,%d L%d,%d' fill='none' stroke='#1d4ed8' stroke-width='2' opacity='0.75' class='btree-edge-c1'/>",
+                            sx, y1 - 2L, mid, y1 - 2L, mid, y2 - 2L, tx, y2 - 2L
+                        ),
+                        sprintf(
+                            "<path d='M%d,%d L%d,%d L%d,%d L%d,%d' fill='none' stroke='#d97706' stroke-width='2' opacity='0.75' stroke-dasharray='4 3' class='btree-edge-c2'/>",
+                            sx, y1 + 2L, mid, y1 + 2L, mid, y2 + 2L, tx, y2 + 2L
+                        )
+                    )
+                }
+            }, character(1L)),
+            collapse = "\n"
+        )
+    } else ""
+
+    # --- Nodes ---
+    nodes_html <- paste(
+        vapply(seq_len(nrow(nodes)), function(i) {
+            n <- nodes[i, ]
+            x <- n$node_x[[1L]]
+            y <- n$node_y[[1L]]
+            if (is.na(x) || is.na(y)) return("")
+
+            x <- as.integer(round(x))
+            y <- as.integer(round(y))
+
+            tier        <- as.character(n$confidence_tier[[1L]] %||% "")
+            tier_color  <- as.character(n$tier_color[[1L]])
+            label_a     <- html_escape(as.character(n$label_a[[1L]]))
+            label_b     <- html_escape(as.character(n$label_b[[1L]]))
+            evidence_id <- as.character(n$evidence_id[[1L]])
+            slot_key    <- as.character(n$slot_key[[1L]])
+            c1_pick     <- html_escape(as.character(n$candidate_1_pick[[1L]] %||% ""))
+            c2_pick     <- html_escape(as.character(n$candidate_2_pick[[1L]] %||% ""))
+            fav         <- html_escape(as.character(n$posterior_favorite[[1L]] %||% ""))
+            prob_val    <- n$win_prob_favorite[[1L]]
+            prob_str    <- if (!is.null(prob_val) && length(prob_val) == 1L && !is.na(prob_val)) {
+                sprintf("%.0f%%", 100 * prob_val)
+            } else "n/a"
+            rationale   <- html_escape(as.character(n$rationale_short[[1L]] %||% ""))
+            round_lbl   <- html_escape(as.character(n$round[[1L]]))
+            region_lbl  <- html_escape(as.character(n$region[[1L]]))
+            is_div      <- isTRUE(n$is_divergence[[1L]])
+            c1_upset    <- isTRUE(n$candidate_1_upset[[1L]])
+            c2_upset    <- isTRUE(n$candidate_2_upset[[1L]])
+
+            # Pipe-delimited tooltip data (no pipes allowed in values — use gsub as guard)
+            clean <- function(s) gsub("|", " ", s, fixed = TRUE)
+            tip <- paste(
+                clean(paste(label_a, "vs", label_b)),
+                clean(round_lbl), clean(region_lbl), clean(fav),
+                clean(prob_str), clean(tier), clean(c1_pick), clean(c2_pick),
+                clean(rationale), clean(evidence_id),
+                sep = "|"
+            )
+
+            # Text color: dark on yellow/red tiers, white on green/blue
+            text_color <- if (tier %in% c("Toss-up", "Volatile")) "#0f172a" else "#ffffff"
+
+            rx <- x - NODE_W %/% 2L
+            ry <- y - NODE_H %/% 2L
+
+            paste0(
+                sprintf("<g class='btree-node' data-slot='%s' data-open-evidence='%s' data-tip='%s'>",
+                    html_escape(slot_key), html_escape(evidence_id), tip),
+                if (is_div) sprintf(
+                    "<rect x='%d' y='%d' width='%d' height='%d' rx='6' fill='none' stroke='#f59e0b' stroke-width='3' class='btree-divergence-ring'/>",
+                    rx - 3L, ry - 3L, NODE_W + 6L, NODE_H + 6L
+                ) else "",
+                sprintf("<rect x='%d' y='%d' width='%d' height='%d' rx='4' fill='%s'/>",
+                    rx, ry, NODE_W, NODE_H, tier_color),
+                sprintf("<text x='%d' y='%d' text-anchor='middle' font-size='9' fill='%s' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
+                    x, y - 7L, text_color, label_a),
+                sprintf("<text x='%d' y='%d' text-anchor='middle' font-size='9' fill='%s' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
+                    x, y + 7L, text_color, label_b),
+                if (c1_upset || c2_upset) sprintf(
+                    "<text x='%d' y='%d' font-size='8' font-weight='800' fill='#e76f51' font-family='system-ui,sans-serif' class='btree-upset-badge'>U</text>",
+                    rx + NODE_W - 10L, ry + 2L
+                ) else "",
+                "</g>"
+            )
+        }, character(1L)),
+        collapse = "\n"
+    )
+
+    # --- Toggle controls ---
+    controls_html <- paste0(
+        "<div class='bracket-tree-controls'>",
+        "<button class='btree-toggle is-active' data-btree-view='both'>Both candidates</button>",
+        "<button class='btree-toggle' data-btree-view='c1'>Candidate 1 only</button>",
+        "<button class='btree-toggle' data-btree-view='c2'>Candidate 2 only</button>",
+        "</div>"
+    )
+
+    # --- Legend ---
+    tier_palette <- dashboard_tier_palette()
+    legend_items <- paste(
+        vapply(names(tier_palette), function(tier_name) {
+            sprintf("<span class='btree-legend-item'><span class='btree-legend-swatch' style='background:%s'></span>%s</span>",
+                tier_palette[[tier_name]], html_escape(tier_name))
+        }, character(1L)),
+        collapse = ""
+    )
+    legend_html <- paste0(
+        "<div class='btree-legend'>",
+        legend_items,
+        "<span class='btree-legend-item'><span class='btree-legend-ring'></span>Diverges between candidates</span>",
+        "<span class='btree-legend-item'><span class='btree-legend-edge btree-legend-edge-c1'></span>Candidate 1 path</span>",
+        "<span class='btree-legend-item'><span class='btree-legend-edge btree-legend-edge-c2'></span>Candidate 2 path</span>",
+        "<span class='btree-legend-item'><span style='font-weight:800;color:#e76f51;font-size:11px;'>U</span> Upset pick</span>",
+        "</div>"
+    )
+
+    paste0(
+        controls_html,
+        legend_html,
+        "<div class='bracket-tree-container'>",
+        sprintf("<svg id='btree-svg' viewBox='0 0 %d %d' width='100%%' style='min-width:%dpx;display:block;'>",
+            SVG_WIDTH, SVG_HEIGHT, SVG_WIDTH),
+        "<g id='btree-bg'>", region_bands_html, "</g>",
+        "<g id='btree-col-labels'>", col_labels_html, "</g>",
+        "<g id='btree-edges'>", edges_html, "</g>",
+        "<g id='btree-nodes'>", nodes_html, "</g>",
+        "</svg>",
+        "</div>",
+        "<div id='btree-tooltip'></div>"
+    )
+}
+
 #' Render a live tournament performance panel
 #'
 #' @param live_performance A live performance summary returned by
@@ -3223,6 +3469,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     candidate_delta_rows <- dashboard_context$candidate_delta_rows %||% tibble::tibble()
     watchlist_rows <- dashboard_context$watchlist_rows %||% tibble::tibble()
     matchup_context_rows <- dashboard_context$matchup_context_rows %||% tibble::tibble()
+    bracket_tree_data <- dashboard_context$bracket_tree_data
 
     primary_candidate <- if (length(candidates) >= 1L) candidates[[1]] else list(candidate_id = 1L, type = "safe", champion = NA_character_, final_four = NA_character_, bracket_log_prob = NA_real_, mean_game_prob = NA_real_, diff_summary = "Primary bracket.")
     alternate_candidate <- if (length(candidates) >= 2L) candidates[[2]] else primary_candidate
@@ -3761,6 +4008,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     top_links <- paste0(
         "<nav class='jump-nav' aria-label='Dashboard sections'>",
         "<a href='#build'>Build</a>",
+        "<a href='#bracket-tree'>Tree</a>",
         "<a href='#delta'>Delta</a>",
         "<a href='#watchlist'>Watchlist</a>",
         "<a href='#evidence'>Evidence</a>",
@@ -3853,6 +4101,25 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".status-unknown{background:#eef2ff;border-color:#6366f1;color:#312e81;}",
         ".surface-pill{display:inline-flex;align-items:center;gap:8px;padding:4px 9px;border-radius:999px;background:#f8fafc;border:1px solid #e2e8f0;}",
         ".jump-button{background:#101827;color:#fff;border-color:#101827;}",
+        ".bracket-tree-container{overflow-x:auto;margin:0;}",
+        ".bracket-tree-controls{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;}",
+        ".btree-toggle{border:1px solid #d6d3d1;background:#fff;border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;}",
+        ".btree-toggle.is-active{background:#101827;color:#fff;border-color:#101827;}",
+        ".btree-node{cursor:pointer;}",
+        ".btree-node:hover rect:first-of-type{filter:brightness(0.85);}",
+        ".btree-divergence-ring{pointer-events:none;}",
+        ".btree-upset-badge{pointer-events:none;}",
+        "#btree-tooltip{position:fixed;background:#0f172a;color:#f8fafc;border-radius:12px;padding:12px 14px;font-size:13px;max-width:280px;z-index:999;pointer-events:none;opacity:0;transition:opacity 0.12s;line-height:1.6;box-shadow:0 8px 24px rgba(0,0,0,0.3);}",
+        "#btree-tooltip.is-visible{opacity:1;}",
+        "#btree-svg.btree-view-c1 .btree-edge-c2{opacity:0.06;}",
+        "#btree-svg.btree-view-c2 .btree-edge-c1{opacity:0.06;}",
+        ".btree-legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;align-items:center;}",
+        ".btree-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#334155;}",
+        ".btree-legend-swatch{display:inline-block;width:14px;height:14px;border-radius:3px;flex-shrink:0;}",
+        ".btree-legend-ring{display:inline-block;width:14px;height:14px;border-radius:3px;border:2px solid #f59e0b;flex-shrink:0;}",
+        ".btree-legend-edge{display:inline-block;width:24px;height:3px;border-radius:2px;flex-shrink:0;}",
+        ".btree-legend-edge-c1{background:#1d4ed8;}",
+        ".btree-legend-edge-c2{background:repeating-linear-gradient(to right,#d97706 0,#d97706 4px,transparent 4px,transparent 7px);}",
         "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.dashboard-table{min-width:820px;}.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid{grid-template-columns:1fr;}}"
     )
 
@@ -3885,6 +4152,32 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "if(panel){panel.open=true;panel.scrollIntoView({behavior:'smooth', block:'start'});}",
         "});",
         "setFilter('All');",
+        "var btreeTip=document.getElementById('btree-tooltip');",
+        "if(btreeTip){",
+        "Array.from(document.querySelectorAll('.btree-node')).forEach(function(node){",
+        "node.addEventListener('mouseenter',function(){",
+        "var p=node.getAttribute('data-tip').split('|');",
+        "btreeTip.innerHTML='<strong>'+p[0]+'</strong><br>'+p[1]+'&nbsp;&middot;&nbsp;'+p[2]+'<br>Fav:&nbsp;<strong>'+p[3]+'</strong>&nbsp;('+p[4]+')<br>Tier:&nbsp;'+p[5]+'<br>C1:&nbsp;'+p[6]+'&nbsp;&nbsp;C2:&nbsp;'+p[7]+(p[8]?'<br><em>'+p[8]+'</em>':'');",
+        "btreeTip.classList.add('is-visible');",
+        "});",
+        "node.addEventListener('mousemove',function(e){",
+        "btreeTip.style.left=Math.min(e.clientX+14,window.innerWidth-295)+'px';",
+        "btreeTip.style.top=Math.min(e.clientY-10,window.innerHeight-185)+'px';",
+        "});",
+        "node.addEventListener('mouseleave',function(){btreeTip.classList.remove('is-visible');});",
+        "});",
+        "}",
+        "var btreeSvg=document.getElementById('btree-svg');",
+        "if(btreeSvg){",
+        "Array.from(document.querySelectorAll('.btree-toggle')).forEach(function(b){",
+        "b.addEventListener('click',function(){",
+        "Array.from(document.querySelectorAll('.btree-toggle')).forEach(function(x){x.classList.remove('is-active');});",
+        "b.classList.add('is-active');",
+        "['btree-view-both','btree-view-c1','btree-view-c2'].forEach(function(c){btreeSvg.classList.remove(c);});",
+        "btreeSvg.classList.add('btree-view-'+b.getAttribute('data-btree-view'));",
+        "});",
+        "});",
+        "}",
         "})();",
         "</script>"
     )
@@ -3917,6 +4210,11 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<div class='summary-chip'><span>Upset pivots</span><strong>", html_escape(display_value(get_watchlist_count("Upset pivots"), digits = 0L)), "</strong></div>",
         "<div class='summary-chip'><span>Fragile favorites</span><strong>", html_escape(display_value(get_watchlist_count("Fragile favorites"), digits = 0L)), "</strong></div>",
         "</div>",
+        "</section>",
+        "<section class='section' id='bracket-tree'>",
+        "<h2>Bracket Tree</h2>",
+        "<p class='section-note'>Each node is a game. Color shows confidence tier. Click any game to open its evidence drawer. Hover for probabilities and candidate picks. Use the buttons to highlight each bracket path.</p>",
+        render_bracket_tree_svg(bracket_tree_data),
         "</section>",
         "<section class='section' id='delta'>",
         "<h2>Candidate 2 Delta From Candidate 1</h2>",
