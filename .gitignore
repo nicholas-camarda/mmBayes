@@ -27,6 +27,8 @@ tests/testthat/*.log
 CLAUDE.md
 AGENTS.md
 
+.claude/
+
 node_modules/
 .playwright/
 playwright-report/
