@@ -15,3 +15,10 @@
 ^tournament_simulation\.log$
 ^archive$
 ^scripts$
+^node_modules$
+^package\.json$
+^package-lock\.json$
+^playwright\.config\.(js|cjs|mjs|ts)$
+^e2e$
+^playwright-report$
+^test-results$

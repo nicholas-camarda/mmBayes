@@ -1431,7 +1431,7 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
 build_bracket_tree_data <- function(
     decision_sheet,
     candidates = list(),
-    ff_region_pairs = list(c("East", "South"), c("Midwest", "West"))
+    ff_region_pairs = list(c("South", "West"), c("East", "Midwest"))
 ) {
     if (is.null(decision_sheet) || nrow(decision_sheet) == 0) {
         return(list(nodes = tibble::tibble(), edges = tibble::tibble()))
@@ -1492,7 +1492,7 @@ build_bracket_tree_data <- function(
         }
     }, numeric(1))
 
-    ds$evidence_id  <- paste0("ev-", gsub("[^a-zA-Z0-9_-]", "_", as.character(ds$slot_key)))
+    ds$evidence_id  <- paste0("evidence-", as.character(ds$slot_key))
     ds$is_divergence <- dplyr::coalesce(as.logical(ds$candidate_diff_flag), FALSE)
 
     # --- Build edges ---

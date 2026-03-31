@@ -113,7 +113,8 @@ html_escape <- function(x) {
     x <- gsub("&", "&amp;", x, fixed = TRUE)
     x <- gsub("<", "&lt;", x, fixed = TRUE)
     x <- gsub(">", "&gt;", x, fixed = TRUE)
-    gsub("\"", "&quot;", x, fixed = TRUE)
+    x <- gsub("\"", "&quot;", x, fixed = TRUE)
+    gsub("'", "&#39;", x, fixed = TRUE)
 }
 
 #' Build a dashboard href for local or hosted use
@@ -2271,15 +2272,21 @@ render_bracket_tree_svg <- function(tree_data) {
             c1_upset    <- isTRUE(n$candidate_1_upset[[1L]])
             c2_upset    <- isTRUE(n$candidate_2_upset[[1L]])
 
-            # Pipe-delimited tooltip data (no pipes allowed in values — use gsub as guard)
-            clean <- function(s) gsub("|", " ", s, fixed = TRUE)
-            tip <- paste(
-                clean(paste(label_a, "vs", label_b)),
-                clean(round_lbl), clean(region_lbl), clean(fav),
-                clean(prob_str), clean(tier), clean(c1_pick), clean(c2_pick),
-                clean(rationale), clean(evidence_id),
-                sep = "|"
-            )
+            clean_attr <- function(s) {
+                s <- as.character(s %||% "")
+                s <- gsub("[\r\n\t]+", " ", s)
+                html_escape(s)
+            }
+
+            matchup_tip <- clean_attr(paste0(as.character(n$teamA[[1L]] %||% ""), " vs ", as.character(n$teamB[[1L]] %||% "")))
+            round_tip <- clean_attr(as.character(n$round[[1L]] %||% ""))
+            region_tip <- clean_attr(as.character(n$region[[1L]] %||% ""))
+            fav_tip <- clean_attr(as.character(n$posterior_favorite[[1L]] %||% ""))
+            prob_tip <- clean_attr(prob_str)
+            tier_tip <- clean_attr(tier)
+            c1_tip <- clean_attr(as.character(n$candidate_1_pick[[1L]] %||% ""))
+            c2_tip <- clean_attr(as.character(n$candidate_2_pick[[1L]] %||% ""))
+            rationale_tip <- clean_attr(as.character(n$rationale_short[[1L]] %||% ""))
 
             # Text color: dark on yellow/red tiers, white on green/blue
             text_color <- if (tier %in% c("Toss-up", "Volatile")) "#0f172a" else "#ffffff"
@@ -2288,8 +2295,33 @@ render_bracket_tree_svg <- function(tree_data) {
             ry <- y - NODE_H %/% 2L
 
             paste0(
-                sprintf("<g class='btree-node' data-slot='%s' data-open-evidence='%s' data-tip='%s'>",
-                    html_escape(slot_key), html_escape(evidence_id), tip),
+                sprintf(paste0(
+                    "<g class=\"btree-node\"",
+                    " data-slot=\"%s\"",
+                    " data-open-evidence=\"%s\"",
+                    " data-tip-matchup=\"%s\"",
+                    " data-tip-round=\"%s\"",
+                    " data-tip-region=\"%s\"",
+                    " data-tip-fav=\"%s\"",
+                    " data-tip-prob=\"%s\"",
+                    " data-tip-tier=\"%s\"",
+                    " data-tip-c1=\"%s\"",
+                    " data-tip-c2=\"%s\"",
+                    " data-tip-rationale=\"%s\"",
+                    ">"
+                ),
+                clean_attr(slot_key),
+                clean_attr(evidence_id),
+                matchup_tip,
+                round_tip,
+                region_tip,
+                fav_tip,
+                prob_tip,
+                tier_tip,
+                c1_tip,
+                c2_tip,
+                rationale_tip
+                ),
                 if (is_div) sprintf(
                     "<rect x='%d' y='%d' width='%d' height='%d' rx='6' fill='none' stroke='#f59e0b' stroke-width='3' class='btree-divergence-ring'/>",
                     rx - 3L, ry - 3L, NODE_W + 6L, NODE_H + 6L
@@ -3922,12 +3954,50 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
-    evidence_panels <- if (nrow(watchlist_rows) == 0) {
+    evidence_seed <- decision_sheet %||% tibble::tibble()
+
+    watchlist_lookup <- watchlist_rows %||% tibble::tibble()
+    required_watchlist_cols <- c("slot_key", "reason_surface", "why_this_matters", "downstream_implication_text")
+    if (!all(required_watchlist_cols %in% names(watchlist_lookup))) {
+        watchlist_lookup <- tibble::tibble(
+            slot_key = character(),
+            reason_surface = character(),
+            why_this_matters = character(),
+            downstream_implication_text = character()
+        )
+    }
+
+    watchlist_lookup <- watchlist_lookup %>%
+        dplyr::transmute(
+            slot_key = as.character(slot_key),
+            watch_surface = as.character(reason_surface),
+            watch_why = as.character(why_this_matters),
+            watch_downstream = as.character(downstream_implication_text)
+        )
+
+    evidence_seed <- evidence_seed %>%
+        dplyr::mutate(
+            slot_key = as.character(slot_key),
+            evidence_id = paste0("evidence-", slot_key),
+            late_round_only = as.character(round) %in% c("Sweet 16", "Elite 8", "Final Four", "Championship")
+        ) %>%
+        dplyr::left_join(watchlist_lookup, by = "slot_key") %>%
+        dplyr::mutate(
+            reason_surface = dplyr::coalesce(watch_surface, "All matchups"),
+            why_this_matters = dplyr::coalesce(
+                watch_why,
+                "Reference matchup. Use this drawer when you want the evidence inputs behind a specific node."
+            ),
+            downstream_implication_text = watch_downstream
+        ) %>%
+        dplyr::select(-watch_surface, -watch_why, -watch_downstream)
+
+    evidence_panels <- if (nrow(evidence_seed) == 0) {
         "<p class='empty-state'>No evidence drawers to show yet.</p>"
     } else {
         paste(
-            purrr::map_chr(seq_len(nrow(watchlist_rows)), function(index) {
-                render_evidence_detail(watchlist_rows[index, , drop = FALSE])
+            purrr::map_chr(seq_len(nrow(evidence_seed)), function(index) {
+                render_evidence_detail(evidence_seed[index, , drop = FALSE])
             }),
             collapse = "\n"
         )
@@ -4187,12 +4257,41 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "setFilter('All');",
         "var btreeTip=document.getElementById('btree-tooltip');",
         "if(btreeTip){",
+        "var setTip=function(node){",
+        "btreeTip.textContent='';",
+        "var matchup=node.getAttribute('data-tip-matchup')||'';",
+        "var round=node.getAttribute('data-tip-round')||'';",
+        "var region=node.getAttribute('data-tip-region')||'';",
+        "var fav=node.getAttribute('data-tip-fav')||'';",
+        "var prob=node.getAttribute('data-tip-prob')||'';",
+        "var tier=node.getAttribute('data-tip-tier')||'';",
+        "var c1=node.getAttribute('data-tip-c1')||'';",
+        "var c2=node.getAttribute('data-tip-c2')||'';",
+        "var rationale=node.getAttribute('data-tip-rationale')||'';",
+        "var strong=document.createElement('strong');",
+        "strong.textContent=matchup;",
+        "btreeTip.appendChild(strong);",
+        "btreeTip.appendChild(document.createElement('br'));",
+        "btreeTip.appendChild(document.createTextNode(round+' · '+region));",
+        "btreeTip.appendChild(document.createElement('br'));",
+        "btreeTip.appendChild(document.createTextNode('Fav: '));",
+        "var favStrong=document.createElement('strong');",
+        "favStrong.textContent=fav;",
+        "btreeTip.appendChild(favStrong);",
+        "btreeTip.appendChild(document.createTextNode(' ('+prob+')'));",
+        "btreeTip.appendChild(document.createElement('br'));",
+        "btreeTip.appendChild(document.createTextNode('Tier: '+tier));",
+        "btreeTip.appendChild(document.createElement('br'));",
+        "btreeTip.appendChild(document.createTextNode('C1: '+c1+'   C2: '+c2));",
+        "if(rationale){",
+        "btreeTip.appendChild(document.createElement('br'));",
+        "var em=document.createElement('em');",
+        "em.textContent=rationale;",
+        "btreeTip.appendChild(em);",
+        "}",
+        "};",
         "Array.from(document.querySelectorAll('.btree-node')).forEach(function(node){",
-        "node.addEventListener('mouseenter',function(){",
-        "var p=node.getAttribute('data-tip').split('|');",
-        "btreeTip.innerHTML='<strong>'+p[0]+'</strong><br>'+p[1]+'&nbsp;&middot;&nbsp;'+p[2]+'<br>Fav:&nbsp;<strong>'+p[3]+'</strong>&nbsp;('+p[4]+')<br>Tier:&nbsp;'+p[5]+'<br>C1:&nbsp;'+p[6]+'&nbsp;&nbsp;C2:&nbsp;'+p[7]+(p[8]?'<br><em>'+p[8]+'</em>':'');",
-        "btreeTip.classList.add('is-visible');",
-        "});",
+        "node.addEventListener('mouseenter',function(){setTip(node);btreeTip.classList.add('is-visible');});",
         "node.addEventListener('mousemove',function(e){",
         "btreeTip.style.left=Math.min(e.clientX+14,window.innerWidth-295)+'px';",
         "btreeTip.style.top=Math.min(e.clientY-10,window.innerHeight-185)+'px';",
