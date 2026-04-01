@@ -1200,7 +1200,7 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
         "<table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Log loss</th><th>Brier</th><th>Empirical rate</th></tr></thead><tbody>", round_rows, "</tbody></table>",
         "</div>",
         "</div>",
-        "</div>"
+        ""
     )
 }
 
