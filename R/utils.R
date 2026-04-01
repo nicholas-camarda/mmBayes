@@ -56,6 +56,51 @@ normalize_model_overview <- function(model_overview) {
     list()
 }
 
+#' Bundle matchup and total-points model overviews for dashboard rendering
+#'
+#' @param matchup_overview Model overview for the matchup model.
+#' @param totals_overview Model overview for the total-points model.
+#'
+#' @return A wrapper list with `matchup` and `totals` entries, or an empty list
+#'   when neither overview is available.
+#' @keywords internal
+bundle_model_overview <- function(matchup_overview = NULL, totals_overview = NULL) {
+    has_matchup <- !is.null(matchup_overview) && length(matchup_overview) > 0
+    has_totals <- !is.null(totals_overview) && length(totals_overview) > 0
+
+    if (!has_matchup && !has_totals) {
+        return(list())
+    }
+
+    list(
+        matchup = if (has_matchup) matchup_overview else NULL,
+        totals = if (has_totals) totals_overview else NULL
+    )
+}
+
+#' Coerce a model-overview payload into a matchup-plus-totals bundle
+#'
+#' @param model_overview A single-model overview or a pre-bundled overview.
+#' @param totals_overview Optional total-points overview to merge in when
+#'   `model_overview` only contains the matchup model.
+#'
+#' @return A wrapper list with `matchup` and `totals` entries, or an empty list.
+#' @keywords internal
+as_model_overview_bundle <- function(model_overview, totals_overview = NULL) {
+    if (is.null(model_overview) || length(model_overview) == 0) {
+        return(bundle_model_overview(matchup_overview = NULL, totals_overview = totals_overview))
+    }
+
+    if (!is.null(model_overview$matchup) || !is.null(model_overview$totals)) {
+        return(bundle_model_overview(
+            matchup_overview = model_overview$matchup %||% NULL,
+            totals_overview = model_overview$totals %||% totals_overview
+        ))
+    }
+
+    bundle_model_overview(matchup_overview = model_overview, totals_overview = totals_overview)
+}
+
 #' Safely coerce values to numeric
 #'
 #' @param x A vector to coerce.
@@ -2257,10 +2302,12 @@ save_results <- function(results, output_config) {
     output_dir <- output_config$path %||% default_runtime_output_root()
     prefix <- output_config$prefix %||% "tournament_sim"
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
-    model_overview <- results$model_overview %||% summarize_model_overview(results$model, draws = results$draws_budget %||% NULL)
-    if (length(model_overview) == 0) {
-        model_overview <- summarize_model_overview(results$total_points_model, draws = results$draws_budget %||% NULL)
-    }
+    matchup_model_overview <- results$model_overview %||% summarize_model_overview(results$model, draws = results$draws_budget %||% NULL)
+    total_points_model_overview <- results$total_points_model_overview %||% summarize_model_overview(results$total_points_model, draws = results$draws_budget %||% NULL)
+    model_overview <- as_model_overview_bundle(
+        model_overview = matchup_model_overview,
+        totals_overview = total_points_model_overview
+    )
     quality_signature <- build_model_quality_signature(results)
 
     rds_path <- file.path(output_dir, paste0(prefix, ".rds"))

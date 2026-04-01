@@ -208,13 +208,16 @@ build_model_comparison_bundle <- function(data,
         current_label = current_label,
         alternate_label = alternate_label,
         current = list(
-            model_overview = current_model_overview,
+            model_overview = as_model_overview_bundle(
+                model_overview = current_model_overview,
+                totals_overview = current_total_points_overview
+            ),
             totals_overview = current_total_points_overview,
             backtest = current_backtest,
             live_performance = current_live_performance
         ),
         alternate = list(
-            model_overview = alternate_model_overview,
+            model_overview = as_model_overview_bundle(alternate_model_overview),
             totals_overview = alternate_model_overview$totals,
             backtest = alternate_backtest,
             live_performance = alternate_live_performance

@@ -975,6 +975,19 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
         return(if (compact) empty_html else paste0("<div class='panel'><h2>Model Overview</h2>", empty_html, "</div>"))
     }
 
+    feature_mix_note <- function(overview) {
+        interaction_terms <- overview$interaction_terms %||% character(0)
+        if (length(interaction_terms) > 0) {
+            return(paste("Interaction terms:", paste(interaction_terms, collapse = ", ")))
+        }
+
+        if (identical(overview$engine, "bart")) {
+            return("No explicit interaction terms were supplied; BART can still learn interactions through tree splits.")
+        }
+
+        "No explicit interaction terms were supplied."
+    }
+
     if (!is.null(model_overview$matchup) || !is.null(model_overview$totals)) {
         render_model_card <- function(title, overview) {
             if (is.null(overview) || length(overview) == 0) {
@@ -1007,10 +1020,10 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
                 "<div class='summary-card'><div class='summary-label'>Engine</div><div class='summary-value'>", html_escape(overview$engine_label %||% overview$engine %||% "Unknown"), "</div><p class='summary-note'>", html_escape(if (identical(overview$engine, "bart")) "Nonlinear posterior tree model" else "Bayesian logistic regression"), "</p></div>",
                 "<div class='summary-card'><div class='summary-label'>Draw budget</div><div class='summary-value'>", html_escape(if (is.finite(safe_numeric(overview$draw_budget, default = NA_real_))) format(safe_numeric(overview$draw_budget, default = NA_real_), scientific = FALSE) else "n/a"), "</div><p class='summary-note'>Posterior draws used for scoring and simulation.</p></div>",
                 "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(as.character(overview$predictor_count %||% 0L)), "</div><p class='summary-note'>", html_escape(overview$predictor_summary %||% "No predictors were recorded."), "</p></div>",
-                "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(overview$interaction_terms %||% character(0)) > 0) "Interactions on" else "No interactions"), "</div><p class='summary-note'>", html_escape(if (length(overview$interaction_terms %||% character(0)) > 0) paste("Interaction terms:", paste(overview$interaction_terms, collapse = ", ")) else "No explicit interaction terms were supplied."), "</p></div>",
+                "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(overview$interaction_terms %||% character(0)) > 0) "Interactions on" else "No explicit terms"), "</div><p class='summary-note'>", html_escape(feature_mix_note(overview)), "</p></div>",
                 "</div>",
                 if (nrow(bart_rows) > 0) paste0(
-                    "<h4>", html_escape(if (identical(overview$engine, "bart")) "BART settings" else "Model settings"), "</h4>",
+                    "<h4>Engine settings</h4>",
                     render_html_table(bart_rows)
                 ) else "",
                 "</div>"
@@ -1068,13 +1081,13 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
         "<div class='summary-card'><div class='summary-label'>Engine</div><div class='summary-value'>", html_escape(engine_label), "</div><p class='summary-note'>", html_escape(if (identical(model_overview$engine, "bart")) "Nonlinear posterior tree model" else "Bayesian logistic regression"), "</p></div>",
         "<div class='summary-card'><div class='summary-label'>Draw budget</div><div class='summary-value'>", html_escape(if (is.finite(draw_budget)) format(draw_budget, scientific = FALSE) else "n/a"), "</div><p class='summary-note'>Posterior draws used for scoring and simulation.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(as.character(model_overview$predictor_count %||% 0L)), "</div><p class='summary-note'>", html_escape(predictor_summary), "</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(interaction_terms) > 0) "Interactions on" else "No interactions"), "</div><p class='summary-note'>", html_escape(if (length(interaction_terms) > 0) paste("Interaction terms:", paste(interaction_terms, collapse = ", ")) else "No explicit interaction terms were supplied."), "</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(interaction_terms) > 0) "Interactions on" else "No explicit terms"), "</div><p class='summary-note'>", html_escape(feature_mix_note(model_overview)), "</p></div>",
         "</div>"
     )
 
     bart_table <- if (nrow(bart_rows) > 0) {
         paste0(
-            "<div class='quality-card'><h3>", html_escape(if (identical(model_overview$engine, "bart")) "BART settings" else "Model settings"), "</h3>",
+            "<div class='quality-card'><h3>Engine settings</h3>",
             render_html_table(bart_rows),
             "</div>"
         )
@@ -1272,8 +1285,16 @@ render_model_comparison_summary_html <- function(model_comparison) {
     backtest_table <- model_comparison$backtest_comparison %||% tibble::tibble()
     live_table <- model_comparison$live_comparison %||% tibble::tibble()
     modeling_notes <- model_comparison$notes %||% character()
-    current_live_model <- normalize_model_overview(model_comparison$current$model_overview %||% list())
-    alternate_live_model <- normalize_model_overview(model_comparison$alternate$model_overview %||% list())
+    current_overview <- as_model_overview_bundle(
+        model_overview = model_comparison$current$model_overview %||% list(),
+        totals_overview = model_comparison$current$totals_overview %||% NULL
+    )
+    alternate_overview <- as_model_overview_bundle(
+        model_overview = model_comparison$alternate$model_overview %||% list(),
+        totals_overview = model_comparison$alternate$totals_overview %||% NULL
+    )
+    current_live_model <- normalize_model_overview(current_overview)
+    alternate_live_model <- normalize_model_overview(alternate_overview)
     current_live_model_label <- current_live_model$engine_label %||% current_live_model$engine %||% current_label
     alternate_live_model_label <- alternate_live_model$engine_label %||% alternate_live_model$engine %||% alternate_label
     backtest_summary <- summarize_model_metric_comparison(backtest_table, current_label, alternate_label)
@@ -1314,12 +1335,12 @@ render_model_comparison_summary_html <- function(model_comparison) {
         "</div>",
         "</div>",
         "<div class='toggle-panel' data-model-view-panel='current'>",
-        render_model_overview_html(model_comparison$current$model_overview %||% list()),
+        render_model_overview_html(current_overview),
         render_model_diagnostics_html(model_comparison$current$backtest %||% NULL, quality_source_label = paste(current_label, "backtest")),
         render_live_performance_html(model_comparison$current$live_performance %||% NULL, model_label = current_live_model_label),
         "</div>",
         "<div class='toggle-panel' data-model-view-panel='alternate'>",
-        render_model_overview_html(model_comparison$alternate$model_overview %||% list()),
+        render_model_overview_html(alternate_overview),
         render_model_diagnostics_html(model_comparison$alternate$backtest %||% NULL, quality_source_label = paste(alternate_label, "backtest")),
         render_live_performance_html(model_comparison$alternate$live_performance %||% NULL, model_label = alternate_live_model_label),
         "</div>",
@@ -2958,6 +2979,28 @@ render_calibration_svg <- function(calibration_tbl) {
 
     calibration_tbl <- calibration_tbl %>%
         dplyr::arrange(mean_predicted)
+    point_titles <- purrr::pmap_chr(
+        list(
+            if ("bin" %in% names(calibration_tbl)) calibration_tbl$bin else rep(NA_character_, nrow(calibration_tbl)),
+            calibration_tbl$mean_predicted,
+            calibration_tbl$empirical_rate,
+            calibration_tbl$n_games
+        ),
+        function(bin_label, mean_predicted, empirical_rate, n_games) {
+            bucket_text <- if (!is.na(bin_label) && nzchar(as.character(bin_label))) {
+                format_calibration_bin(bin_label)
+            } else {
+                "Probability bucket"
+            }
+            sprintf(
+                "%s | avg predicted %.0f%% | observed %.0f%% | %s games",
+                bucket_text,
+                100 * safe_numeric(mean_predicted, default = NA_real_),
+                100 * safe_numeric(empirical_rate, default = NA_real_),
+                as.integer(safe_numeric(n_games, default = NA_real_))
+            )
+        }
+    )
     polyline_points <- paste(
         sprintf(
             "%.1f,%.1f",
@@ -2968,10 +3011,10 @@ render_calibration_svg <- function(calibration_tbl) {
     )
     points_html <- paste(
         sprintf(
-            "<circle cx='%.1f' cy='%.1f' r='5' fill='#457b9d' stroke='white' stroke-width='1.5'><title>%s games</title></circle>",
+            "<circle cx='%.1f' cy='%.1f' r='5' fill='#457b9d' stroke='white' stroke-width='1.5'><title>%s</title></circle>",
             to_x(calibration_tbl$mean_predicted),
             to_y(calibration_tbl$empirical_rate),
-            calibration_tbl$n_games
+            html_escape(point_titles)
         ),
         collapse = "\n"
     )
@@ -2986,8 +3029,8 @@ render_calibration_svg <- function(calibration_tbl) {
         points_html,
         "<text x='", margin_left, "' y='", height - 8, "' font-size='11' fill='#6b7280'>0%</text>",
         "<text x='", margin_left + plot_width, "' y='", height - 8, "' text-anchor='end' font-size='11' fill='#6b7280'>100%</text>",
-        "<text x='", margin_left + (plot_width / 2), "' y='", height - 8, "' text-anchor='middle' font-size='11' fill='#6b7280'>Predicted probability</text>",
-        "<text x='18' y='", 36 + (plot_height / 2), "' font-size='11' fill='#6b7280' transform='rotate(-90 18 ", 36 + (plot_height / 2), ")'>Observed win rate</text>",
+        "<text x='", margin_left + (plot_width / 2), "' y='", height - 8, "' text-anchor='middle' font-size='11' fill='#6b7280'>Average predicted win probability</text>",
+        "<text x='18' y='", 36 + (plot_height / 2), "' font-size='11' fill='#6b7280' transform='rotate(-90 18 ", 36 + (plot_height / 2), ")'>Observed win rate in bucket</text>",
         "</svg>"
     )
 }
@@ -2999,10 +3042,10 @@ render_calibration_svg <- function(calibration_tbl) {
 render_calibration_help_html <- function() {
     paste0(
         "<div class='legend-row'>",
-        "<div class='legend-chip'><span class='legend-swatch' style='background:#457b9d;'></span>Observed by bin (win rate)</div>",
+        "<div class='legend-chip'><span class='legend-swatch' style='background:#457b9d;'></span>Observed win rate in that probability range</div>",
         "<div class='legend-chip'><span class='legend-swatch' style='background:transparent;border:1px dashed #d6d3d1;box-sizing:border-box;'></span>Perfect line</div>",
         "</div>",
-        "<p class='legend-copy calibration-note'><strong>How to read this chart:</strong> the x-axis is the model's average predicted win rate in each probability bin, and the y-axis is the observed win rate in that bin. Points close to the dashed line are well calibrated. Points below the line mean the model was too optimistic; points above the line mean the model was too pessimistic.</p>"
+        "<p class='legend-copy calibration-note'><strong>How to read this chart:</strong> each point groups held-out games into a probability range, such as 30% to 40%. The x-axis is the model's average pregame win probability in that range, and the y-axis is how often that side actually won. If a range averages 35% and the observed win rate is also about 35%, that range is well calibrated. This is about long-run frequency matching, not whether those were the easiest or 'best' individual predictions. Points below the dashed line mean the model was too optimistic; points above it mean the model was too pessimistic.</p>"
     )
 }
 

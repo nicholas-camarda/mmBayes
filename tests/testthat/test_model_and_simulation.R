@@ -489,8 +489,10 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(technical_html, "Rolling holdout years")
     expect_match(technical_html, "2018, 2019, 2020")
     expect_match(technical_html, "How to read this chart")
+    expect_match(technical_html, "each point groups held-out games into a probability range")
+    expect_match(technical_html, "This is about long-run frequency matching")
     expect_match(technical_html, "Observed win rate")
-    expect_match(technical_html, "Observed by bin")
+    expect_match(technical_html, "Observed win rate in that probability range")
     expect_match(technical_html, "Perfect line")
     expect_match(technical_html, "too optimistic")
     expect_match(technical_html, "too pessimistic")
@@ -571,6 +573,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(bart_dashboard_html, "n_trees")
     expect_match(bart_dashboard_html, "n_post")
     expect_match(bart_dashboard_html, "Model Overview")
+    expect_match(bart_dashboard_html, "Engine settings")
     expect_match(bart_dashboard_html, "Cached identical validation snapshot")
 
     alt_backtest <- list(
@@ -668,7 +671,20 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(comparison_html, "Current-Year Live Metrics")
     expect_match(comparison_html, "Live Tournament Performance - Stan GLM")
     expect_match(comparison_html, "Live Tournament Performance - BART")
+    expect_true(sum(gregexpr("Matchup Model", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
+    expect_true(sum(gregexpr("Total Points Model", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
+    expect_true(sum(gregexpr("Engine settings", comparison_html, fixed = TRUE)[[1]] > 0) >= 4)
     expect_match(render_model_comparison_link_html(comparison_bundle), "Open the full model comparison dashboard")
+
+    comparison_with_split_current_overview <- comparison_bundle
+    comparison_with_split_current_overview$current$model_overview <- model_overview$matchup
+    comparison_with_split_current_overview$current$totals_overview <- model_overview$totals
+    split_overview_html <- create_model_comparison_dashboard_html(
+        bracket_year = 2026L,
+        model_comparison = comparison_with_split_current_overview
+    )
+    expect_true(sum(gregexpr("Matchup Model", split_overview_html, fixed = TRUE)[[1]] > 0) >= 2)
+    expect_true(sum(gregexpr("Total Points Model", split_overview_html, fixed = TRUE)[[1]] > 0) >= 2)
 
     html_without_quality <- create_technical_dashboard_html(
         bracket_year = 2026L,

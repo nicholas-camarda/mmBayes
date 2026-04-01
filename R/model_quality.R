@@ -321,6 +321,66 @@ format_calibration_bin <- function(bin_value) {
     label
 }
 
+describe_calibration_bin <- function(bin_row, label = c("closest", "widest")) {
+    label <- match.arg(label)
+    if (!inherits(bin_row, "data.frame") || nrow(bin_row) != 1L) {
+        return(NULL)
+    }
+
+    bin_text <- format_calibration_bin(bin_row$bin[[1]])
+    mean_predicted <- 100 * safe_numeric(bin_row$mean_predicted[[1]], default = NA_real_)
+    empirical_rate <- 100 * safe_numeric(bin_row$empirical_rate[[1]], default = NA_real_)
+    gap_points <- 100 * safe_numeric(bin_row$calibration_gap[[1]], default = NA_real_)
+    n_games <- safe_numeric(bin_row$n_games[[1]], default = NA_real_)
+
+    if (!is.finite(mean_predicted) || !is.finite(empirical_rate) || !is.finite(gap_points) || !is.finite(n_games)) {
+        return(NULL)
+    }
+
+    prefix <- if (identical(label, "closest")) {
+        "Closest calibration range"
+    } else {
+        "Weakest calibration range"
+    }
+    tail_text <- if (identical(label, "closest")) {
+        "This does not mean those were the model's 'best predicted' games. It means this stated probability range matched the long-run win rate most closely."
+    } else {
+        "This does not mean those games were hardest overall. It means this stated probability range was furthest from the observed win rate."
+    }
+
+    if (identical(label, "closest")) {
+        return(sprintf(
+            "%s: across %.0f held-out games where one side was assigned a %s win probability, the model averaged %.0f%% and that side actually won %.0f%% of the time. %s",
+            prefix,
+            n_games,
+            bin_text,
+            mean_predicted,
+            empirical_rate,
+            tail_text
+        ))
+    }
+
+    direction_text <- if (empirical_rate > mean_predicted) {
+        "too pessimistic"
+    } else if (empirical_rate < mean_predicted) {
+        "too optimistic"
+    } else {
+        "almost exactly on target"
+    }
+
+    sprintf(
+        "%s: across %.0f held-out games where one side was assigned a %s win probability, the model averaged %.0f%% but that side actually won %.0f%% of the time. In this range the model was %s by %.1f percentage points. %s",
+        prefix,
+        n_games,
+        bin_text,
+        mean_predicted,
+        empirical_rate,
+        direction_text,
+        gap_points,
+        tail_text
+    )
+}
+
 #' Extract the rolling holdout years used in a backtest
 #'
 #' @param backtest A backtest bundle returned by [run_rolling_backtest()].
@@ -466,27 +526,13 @@ summarize_backtest_diagnostics <- function(backtest) {
         if (nrow(best_bin) == 1) {
             strengths <- c(
                 strengths,
-                sprintf(
-                    "Most calibrated bin: the %s bucket had a mean predicted win rate of %.0f%% and an observed win rate of %.0f%%, so the gap was %.3f (%.1f percentage points). Smaller gaps mean better calibration.",
-                    format_calibration_bin(best_bin$bin[[1]]),
-                    100 * safe_numeric(best_bin$mean_predicted[[1]], default = NA_real_),
-                    100 * safe_numeric(best_bin$empirical_rate[[1]], default = NA_real_),
-                    safe_numeric(best_bin$calibration_gap[[1]], default = NA_real_),
-                    100 * safe_numeric(best_bin$calibration_gap[[1]], default = NA_real_)
-                )
+                describe_calibration_bin(best_bin, label = "closest")
             )
         }
         if (nrow(worst_bin) == 1) {
             weaknesses <- c(
                 weaknesses,
-                sprintf(
-                    "Least calibrated bin: the %s bucket had a mean predicted win rate of %.0f%% and an observed win rate of %.0f%%, so the gap was %.3f (%.1f percentage points). Larger gaps mean the model is less calibrated in that range.",
-                    format_calibration_bin(worst_bin$bin[[1]]),
-                    100 * safe_numeric(worst_bin$mean_predicted[[1]], default = NA_real_),
-                    100 * safe_numeric(worst_bin$empirical_rate[[1]], default = NA_real_),
-                    safe_numeric(worst_bin$calibration_gap[[1]], default = NA_real_),
-                    100 * safe_numeric(worst_bin$calibration_gap[[1]], default = NA_real_)
-                )
+                describe_calibration_bin(worst_bin, label = "widest")
             )
         }
     }
@@ -840,11 +886,11 @@ summarize_model_quality <- function(backtest) {
         max_gap <- max(gaps, na.rm = TRUE)
         mean_gap <- mean(gaps, na.rm = TRUE)
         calibration_text <- if (is.finite(max_gap) && max_gap <= 0.03) {
-            sprintf("The calibration curve hugs the diagonal closely. Each point is a probability bin: the x-axis is the model's average predicted win rate in that bin, the y-axis is the observed win rate, and the mean bin gap is %.3f.", mean_gap)
+            sprintf("The calibration curve stays close to the diagonal. Each point pools games with similar predicted probabilities. For example, a point near 35%% asks: when the model gave one side about a 35%% chance to win, how often did that side actually win? Points near the diagonal mean those probabilities were honest on average, and the mean absolute bin gap is %.3f.", mean_gap)
         } else if (is.finite(max_gap) && max_gap <= 0.06) {
-            sprintf("The calibration curve stays fairly close to the diagonal. Each point is a probability bin: the x-axis is the model's average predicted win rate in that bin, the y-axis is the observed win rate, and the mean bin gap is %.3f.", mean_gap)
+            sprintf("The calibration curve is reasonably close to the diagonal. Each point pools games with similar predicted probabilities, so a point near 35%% means the model often forecast one side around 35%% and the chart shows how often that side actually won. This is about probability honesty, not pick difficulty, and the mean absolute bin gap is %.3f.", mean_gap)
         } else {
-            sprintf("The calibration curve shows a noticeable wobble. Each point is a probability bin: the x-axis is the model's average predicted win rate in that bin, the y-axis is the observed win rate, and the mean bin gap is %.3f.", mean_gap)
+            sprintf("The calibration curve shows noticeable deviation from the diagonal. Each point pools games with similar predicted probabilities, so a point near 35%% means the model often forecast one side around 35%% and the chart shows how often that side actually won. This is about whether the probabilities were trustworthy, not whether the games were easy, and the mean absolute bin gap is %.3f.", mean_gap)
         }
     } else {
         calibration_text <- "A bin-level calibration chart is not available for this snapshot."
