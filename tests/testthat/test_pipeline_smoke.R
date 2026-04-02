@@ -55,4 +55,34 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     expect_null(results$visualization)
     expect_null(results$output$bracket_plot)
     expect_true(file.exists(results$output$technical_dashboard))
+
+    repo_output_dir <- file.path(tempfile(pattern = "mmBayes-repo-output-"))
+    dir.create(repo_output_dir, recursive = TRUE, showWarnings = FALSE)
+    unlink(file.path(output_dir, "bracket_dashboard.html"))
+    unlink(file.path(output_dir, "technical_dashboard.html"))
+    unlink(file.path(output_dir, "model_comparison_dashboard.html"))
+
+    testthat::local_mocked_bindings(
+        run_tournament_simulation = function(...) stop("regeneration should not rerun the full simulation"),
+        fit_tournament_model = function(...) stop("regeneration should not fit the matchup model"),
+        fit_total_points_model = function(...) stop("regeneration should not fit the total-points model"),
+        run_rolling_backtest = function(...) stop("regeneration should not run the rolling backtest"),
+        generate_bracket_candidates = function(...) stop("regeneration should not regenerate candidates")
+    )
+
+    regenerated <- regenerate_dashboard_outputs_from_results(
+        results = results,
+        output_dir = output_dir,
+        repo_output_dir = repo_output_dir
+    )
+
+    expect_true(file.exists(regenerated$dashboard))
+    expect_true(file.exists(regenerated$technical_dashboard))
+    expect_true(file.exists(regenerated$model_comparison_dashboard))
+    expect_length(regenerated$repo_output_files, 3L)
+    expect_true(all(file.exists(regenerated$repo_output_files)))
+    expect_equal(
+        basename(regenerated$repo_output_files),
+        dashboard_html_manifest()
+    )
 })

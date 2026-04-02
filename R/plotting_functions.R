@@ -1247,15 +1247,15 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
         return(
             paste0(
                 if (!is.null(quality_source_label)) paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>") else "",
-                "<div class='quality-grid'>",
+                "<div class='diagnostics-overview-grid'>",
                 "<div class='quality-card'><h3>Backtest Summary</h3><p class='empty-state'>Backtest not computed in this run.</p></div>",
                 "<div class='quality-card'><h3>What this means</h3>",
                 "<div class='diagnostic-callout'><strong>Doing well</strong><ul><li>No backtest snapshot was supplied for this run.</li></ul></div>",
                 "<div class='diagnostic-callout'><strong>Needs attention</strong><ul><li>Run the full simulation pipeline if you want calibration and round-level diagnostics here.</li></ul></div>",
                 "</div>",
                 "</div>",
-                "<div class='quality-grid'>",
-                "<div class='quality-card'><h3>Backtest Calibration Curve</h3><p class='empty-state'>Backtest calibration was not available for this run.</p></div>",
+                "<div class='quality-grid diagnostics-detail-grid'>",
+                "<div class='quality-card quality-card--calibration'><h3>Backtest Calibration Curve</h3><p class='empty-state'>Backtest calibration was not available for this run.</p></div>",
                 "<div class='quality-card'><h3>Backtest By Round</h3><p class='empty-state'>Round-level diagnostics were not available for this run.</p></div>",
                 "</div>"
             )
@@ -1338,20 +1338,23 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
         if (!is.null(quality_source_label)) paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>") else "",
         "<p class='quality-intro'>The backtest is the historical baseline, so you can judge the live performance panel that follows against seasons the model has already seen.</p>",
         "<p class='panel-caption'><strong>What this means:</strong> the historical baseline is strongest when the metric strip, calibration curve, and strengths/weaknesses all tell a similar story.</p>",
-        "<div class='overview-grid'>",
+        "<div class='diagnostics-overview-grid'>",
         "<div class='quality-card'><h3>Backtest Summary</h3>", backtest_years_note,
         "<div class='overview-grid' style='margin-top:0;'>", summary_metrics_html, "</div>",
         "<p class='quality-note'>Use this as the compact historical scorecard before you open the curve and round table below.</p>",
         "</div>",
-        "<div class='quality-card'><h3>Doing well</h3>",
-        "<div class='diagnostic-callout'><ul>", if (nzchar(strength_lines)) strength_lines else "<li>No strengths identified.</li>", "</ul></div>",
-        "</div>",
-        "<div class='quality-card'><h3>Needs attention</h3>",
-        "<div class='diagnostic-callout'><ul>", if (nzchar(weakness_lines)) weakness_lines else "<li>No weaknesses identified.</li>", "</ul></div>",
+        "<div class='quality-card'><h3>What this means</h3>",
+        "<div class='diagnostic-callout'><strong>Doing well</strong><ul>", if (nzchar(strength_lines)) strength_lines else "<li>No strengths identified.</li>", "</ul></div>",
+        "<div class='diagnostic-callout'><strong>Needs attention</strong><ul>", if (nzchar(weakness_lines)) weakness_lines else "<li>No weaknesses identified.</li>", "</ul></div>",
         "</div>",
         "</div>",
-        "<div class='quality-grid'>",
-        "<div class='quality-card'><h3>Backtest Calibration Curve</h3>", render_calibration_svg(quality_backtest$calibration %||% tibble::tibble()), render_calibration_help_html(), "</div>",
+        "<div class='quality-grid diagnostics-detail-grid'>",
+        "<div class='quality-card quality-card--calibration'><h3>Backtest Calibration Curve</h3>",
+        "<div class='calibration-layout'>",
+        "<div class='calibration-layout__plot'>", render_calibration_svg(quality_backtest$calibration %||% tibble::tibble()), "</div>",
+        "<div class='calibration-layout__meta'>", render_calibration_help_html(), "</div>",
+        "</div>",
+        "</div>",
         "<div class='quality-card'><h3>Backtest By Round</h3>",
         "<table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Log loss</th><th>Brier</th><th>Empirical rate</th></tr></thead><tbody>", round_rows, "</tbody></table>",
         "</div>",
@@ -1649,19 +1652,34 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         ".note-list{margin:0;padding-left:18px;color:#374151;}",
         ".note-list li + li{margin-top:8px;}",
         ".overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:18px 0;}",
+        ".diagnostics-overview-grid{display:grid;grid-template-columns:minmax(360px,1.05fr) minmax(320px,0.95fr);gap:16px;align-items:start;margin:16px 0;}",
+        ".diagnostics-detail-grid{grid-template-columns:minmax(420px,1.05fr) minmax(360px,0.95fr);}",
         ".toggle-button{appearance:none;border:1px solid #cbd5e1;background:white;border-radius:999px;padding:10px 16px;font-size:14px;font-weight:600;color:#334155;cursor:pointer;}",
         ".toggle-button.is-active{background:#0f172a;color:white;border-color:#0f172a;}",
         ".toggle-panel{display:none;}",
         ".toggle-panel.is-active{display:block;}",
         ".comparison-tab-bar{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 16px 0;}",
         ".comparison-link-copy{margin:14px 0 0 0;font-size:14px;}",
+        ".quality-intro{margin:10px 0 14px 0;color:#374151;max-width:760px;}",
         ".dashboard-table{width:100%;border-collapse:collapse;font-size:13px;background:white;}",
         ".dashboard-table th,.dashboard-table td{border:1px solid #e7e5e4;padding:8px 10px;vertical-align:top;text-align:left;}",
         ".dashboard-table th{background:#f8fafc;}",
+        ".tech-svg{width:100%;height:auto;background:#fcfbf7;border:1px solid #e7e5e4;border-radius:14px;padding:8px;display:block;}",
+        ".tech-svg-compact{max-width:520px;}",
+        ".tech-svg--calibration{max-width:none;}",
+        ".quality-card--calibration{overflow:hidden;}",
+        ".calibration-layout{display:grid;grid-template-columns:minmax(320px,1.2fr) minmax(220px,0.8fr);gap:14px;align-items:start;}",
+        ".calibration-layout__plot,.calibration-layout__meta{min-width:0;}",
         ".empty-state{color:#6b7280;font-style:italic;}",
         ".panel-caption{color:#6b7280;margin:0 0 12px 0;}",
+        ".legend-row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 14px 0;}",
+        ".legend-chip{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:white;border:1px solid #d6d3d1;font-size:13px;}",
+        ".legend-swatch{width:12px;height:12px;border-radius:999px;display:inline-block;}",
+        ".legend-copy{font-size:12px;color:#6b7280;}",
+        ".diagnostic-callout{margin:10px 0 0 0;padding:12px 14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;}",
+        ".diagnostic-callout strong{display:block;margin-bottom:8px;}",
         dashboard_disclosure_css(),
-        "@media (max-width: 900px){.quality-grid{grid-template-columns:1fr;}}",
+        "@media (max-width: 900px){.quality-grid,.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.tech-svg-compact{max-width:none;}}",
         "</style></head><body>",
         "<h1>mmBayes Model Comparison</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year), ". This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " so you can judge calibration, accuracy, and live behavior without mixing the comparison into the main bracket workflow.</p>",
@@ -3211,15 +3229,16 @@ render_calibration_svg <- function(calibration_tbl) {
         return("<p class='empty-state'>Backtest calibration was not available for this run.</p>")
     }
 
-    width <- 520
-    height <- 340
-    margin_left <- 62
-    margin_right <- 36
-    margin_bottom <- 58
+    width <- 640
+    height <- 300
+    plot_top <- 18
+    margin_left <- 56
+    margin_right <- 18
+    margin_bottom <- 42
     plot_width <- width - margin_left - margin_right
-    plot_height <- height - margin_bottom - 50
+    plot_height <- height - margin_bottom - plot_top
     to_x <- function(probability) margin_left + (safe_numeric(probability, default = 0) * plot_width)
-    to_y <- function(probability) 30 + ((1 - safe_numeric(probability, default = 0)) * plot_height)
+    to_y <- function(probability) plot_top + ((1 - safe_numeric(probability, default = 0)) * plot_height)
 
     calibration_tbl <- calibration_tbl %>%
         dplyr::arrange(mean_predicted)
@@ -3264,17 +3283,16 @@ render_calibration_svg <- function(calibration_tbl) {
     )
 
     paste0(
-        "<svg viewBox='0 0 ", width, " ", height, "' class='tech-svg tech-svg-compact' role='img' aria-label='Backtest calibration chart'>",
-        "<text x='", margin_left, "' y='16' font-size='12' font-weight='700' fill='#334155'>Calibration curve</text>",
-        "<line x1='", margin_left, "' y1='", 30 + plot_height, "' x2='", margin_left + plot_width, "' y2='30' stroke='#d6d3d1' stroke-dasharray='4 4' stroke-width='1.5'/>",
-        "<line x1='", margin_left, "' y1='30' x2='", margin_left, "' y2='", 30 + plot_height, "' stroke='#a8a29e' stroke-width='1'/>",
-        "<line x1='", margin_left, "' y1='", 30 + plot_height, "' x2='", margin_left + plot_width, "' y2='", 30 + plot_height, "' stroke='#a8a29e' stroke-width='1'/>",
+        "<svg viewBox='0 0 ", width, " ", height, "' class='tech-svg tech-svg-compact tech-svg--calibration' role='img' aria-label='Backtest calibration chart'>",
+        "<line x1='", margin_left, "' y1='", plot_top + plot_height, "' x2='", margin_left + plot_width, "' y2='", plot_top, "' stroke='#d6d3d1' stroke-dasharray='4 4' stroke-width='1.5'/>",
+        "<line x1='", margin_left, "' y1='", plot_top, "' x2='", margin_left, "' y2='", plot_top + plot_height, "' stroke='#a8a29e' stroke-width='1'/>",
+        "<line x1='", margin_left, "' y1='", plot_top + plot_height, "' x2='", margin_left + plot_width, "' y2='", plot_top + plot_height, "' stroke='#a8a29e' stroke-width='1'/>",
         "<polyline points='", polyline_points, "' fill='none' stroke='#1d4ed8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>",
         points_html,
         "<text x='", margin_left, "' y='", height - 8, "' font-size='11' fill='#6b7280'>0%</text>",
         "<text x='", margin_left + plot_width, "' y='", height - 8, "' text-anchor='end' font-size='11' fill='#6b7280'>100%</text>",
         "<text x='", margin_left + (plot_width / 2), "' y='", height - 8, "' text-anchor='middle' font-size='11' fill='#6b7280'>Average predicted win probability</text>",
-        "<text x='18' y='", 36 + (plot_height / 2), "' font-size='11' fill='#6b7280' transform='rotate(-90 18 ", 36 + (plot_height / 2), ")'>Observed win rate in bucket</text>",
+        "<text x='16' y='", plot_top + (plot_height / 2), "' font-size='11' fill='#6b7280' transform='rotate(-90 16 ", plot_top + (plot_height / 2), ")'>Observed win rate in bucket</text>",
         "</svg>"
     )
 }
@@ -3665,8 +3683,11 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".lede{max-width:980px;color:#374151;margin:8px 0 18px 0;}",
         ".quality-intro{margin:10px 0 14px 0;color:#374151;max-width:760px;}",
         ".quality-grid{display:grid;grid-template-columns:minmax(360px,1.15fr) minmax(320px,0.85fr);gap:18px;align-items:start;}",
+        ".diagnostics-overview-grid{display:grid;grid-template-columns:minmax(360px,1.05fr) minmax(320px,0.95fr);gap:18px;align-items:start;margin:18px 0;}",
+        ".diagnostics-detail-grid{grid-template-columns:minmax(460px,1.08fr) minmax(360px,0.92fr);}",
         ".quality-card{background:#fff;border:1px solid #e7e5e4;border-radius:14px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,0.03);}",
         ".quality-card h3{margin-bottom:10px;}",
+        ".quality-card--calibration{overflow:hidden;}",
         ".quality-note{margin:10px 0 0 0;font-size:13px;color:#6b7280;}",
         ".panel{background:white;border:1px solid #d6d3d1;border-radius:16px;padding:18px;box-shadow:0 2px 10px rgba(15,23,42,0.04);margin-bottom:18px;}",
         ".panel-caption{color:#6b7280;margin:0 0 12px 0;}",
@@ -3702,8 +3723,11 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".dashboard-table tr.inspection-primary td:first-child{border-left:4px solid #d97706;}",
         ".dashboard-table tr.inspection-secondary td{background:#fff1eb;}",
         ".dashboard-table tr.inspection-secondary td:first-child{border-left:4px solid #ea580c;}",
-        ".tech-svg{width:100%;height:auto;background:#fcfbf7;border:1px solid #e7e5e4;border-radius:14px;padding:8px;}",
+        ".tech-svg{width:100%;height:auto;background:#fcfbf7;border:1px solid #e7e5e4;border-radius:14px;padding:8px;display:block;}",
         ".tech-svg-compact{max-width:520px;}",
+        ".tech-svg--calibration{max-width:none;}",
+        ".calibration-layout{display:grid;grid-template-columns:minmax(340px,1.25fr) minmax(240px,0.75fr);gap:14px;align-items:start;}",
+        ".calibration-layout__plot,.calibration-layout__meta{min-width:0;}",
         ".comparison-board{display:flex;flex-direction:column;border:1px solid #e7e5e4;border-radius:16px;background:#fff;overflow:hidden;}",
         ".comparison-board__header{display:grid;grid-template-columns:minmax(220px,1.25fr) minmax(150px,0.8fr) minmax(150px,0.8fr) minmax(320px,1.4fr) minmax(260px,1.25fr);gap:16px;padding:16px 18px;background:#fcfbf7;border-bottom:1px solid #e7e5e4;font-size:12px;font-weight:700;letter-spacing:0.03em;color:#64748b;text-transform:uppercase;}",
         ".comparison-board__header--four{grid-template-columns:minmax(220px,1.2fr) minmax(320px,1.35fr) minmax(220px,1fr) minmax(260px,1.1fr);}",
@@ -3728,7 +3752,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".prob-track-block__title{font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;}",
         ".muted{color:#6b7280;}",
         ".empty-state{color:#6b7280;font-style:italic;}",
-        ".legend-row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 18px 0;}",
+        ".legend-row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 14px 0;}",
         ".legend-chip{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:white;border:1px solid #d6d3d1;font-size:13px;}",
         ".legend-swatch{width:12px;height:12px;border-radius:999px;display:inline-block;}",
         ".legend-copy{font-size:12px;color:#6b7280;}",
@@ -3740,7 +3764,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".diagnostic-bullets li{margin-bottom:6px;}",
         dashboard_disclosure_css(),
         "@media (max-width: 1240px){.comparison-board__header{display:none;}.board-row--ranked,.board-row--divergence,.board-row--upset{grid-template-columns:1fr;}.board-cell::before{display:block;}}",
-        "@media (max-width: 900px){.quality-grid{grid-template-columns:1fr;}.tech-svg-compact{max-width:none;}}",
+        "@media (max-width: 900px){.quality-grid,.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.tech-svg-compact{max-width:none;}}",
         "</style></head><body>",
         "<h1>mmBayes Technical Bracket Dashboard</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year),

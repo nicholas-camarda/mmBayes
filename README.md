@@ -32,6 +32,10 @@ To refresh the GitHub-linked dashboards from the latest runtime HTML, run:
 
 `Rscript scripts/publish_github_pages.R`
 
+If you changed only dashboard rendering code and want a fast refresh from the cached full results bundle, run:
+
+`Rscript scripts/regenerate_dashboards.R`
+
 If you published the latest bundle to the cloud output tree instead of the local runtime root, set `MMBAYES_PAGES_SOURCE` to that folder before running the sync.
 
 The main review loop usually looks like this:
@@ -70,6 +74,21 @@ Rscript scripts/update_data.R
 Rscript scripts/run_simulation.R
 
 # 3. Open the main bracket dashboard in your browser
+open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
+```
+
+For dashboard or CSS/layout iteration after the full results bundle already exists:
+
+```sh
+# 1. Run the authoritative full simulation when model/data inputs change
+Rscript scripts/run_simulation.R
+
+# 2. Edit the dashboard rendering code
+
+# 3. Regenerate only the dashboard HTML from the cached results bundle
+Rscript scripts/regenerate_dashboards.R
+
+# 4. Inspect either the runtime or tracked repo HTML copies
 open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
 
@@ -129,14 +148,16 @@ After a pipeline run the following files are generated in the runtime output dir
 
 | Command | Purpose |
 |---------|---------|
-| `Rscript scripts/run_simulation.R` | Full pipeline: fit, backtest, simulate, export |
+| `Rscript scripts/run_simulation.R` | Authoritative full pipeline: fit, backtest, simulate, compare, and export |
 | `Rscript scripts/update_data.R` | Refresh canonical data files from source |
-| `Rscript scripts/run_bracket_candidates.R` | Fast bracket export without full backtest |
+| `Rscript scripts/run_bracket_candidates.R` | Lighter rerun without the full backtest, but it still fits or reloads models and regenerates candidates |
+| `Rscript scripts/regenerate_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds HTML from the saved full results bundle and syncs repo `output/` copies |
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
 | `Rscript scripts/run_odds_collector.R` | Seasonal Odds API collector for the tournament odds archive |
 | `Rscript scripts/capture_odds_snapshot.R` | Capture a private Odds API snapshot |
 | `Rscript scripts/build_closing_lines.R --year=2026` | Derive closing-line estimates from saved snapshots |
 | `Rscript scripts/publish_release.R` | Copy approved deliverables and the odds-history snapshot into the dated OneDrive release folder |
+| `Rscript scripts/publish_github_pages.R` | Lower-level sync helper that copies already-rendered dashboard HTML into tracked repo `output/` files |
 | `Rscript scripts/evaluate_odds_blend.R --year=2026` | Compare model-only vs blended probabilities against closing lines |
 
 Notes:
@@ -144,6 +165,7 @@ Notes:
 - `scripts/run_simulation.R`, `scripts/run_bracket_candidates.R`, and odds scripts load `.env` when present via `load_dotenv_file()`.
 - Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
 - Odds workflows keep local history under `data/odds_history/` (gitignored), and the seasonal collector only runs during tournament months.
+- `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_dashboards.R` when the saved full results bundle already exists.
 
 ---
 

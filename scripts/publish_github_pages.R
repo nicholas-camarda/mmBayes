@@ -26,12 +26,7 @@ candidate_roots <- unique(c(
     default_cloud_output_root()
 ))
 candidate_roots <- candidate_roots[nzchar(candidate_roots)]
-
-dashboard_files <- c(
-    "bracket_dashboard.html",
-    "technical_dashboard.html",
-    "model_comparison_dashboard.html"
-)
+dashboard_files <- dashboard_html_manifest()
 
 source_candidates <- candidate_roots[vapply(candidate_roots, function(root) {
     dir.exists(root) && all(file.exists(file.path(root, dashboard_files)))
@@ -51,16 +46,13 @@ bundle_mtime <- vapply(source_candidates, function(root) {
 }, numeric(1))
 runtime_output_root <- source_candidates[[which.max(bundle_mtime)]]
 cat(sprintf("Using dashboard source bundle: %s\n", runtime_output_root))
-
+synced_paths <- sync_dashboard_html_files(
+    source_dir = runtime_output_root,
+    destination_dir = file.path(project_root, "output"),
+    dashboard_files = dashboard_files
+)
 for (filename in dashboard_files) {
-    source_path <- file.path(runtime_output_root, filename)
-    destination_path <- file.path("output", filename)
-    if (!file.exists(source_path)) {
-        stop_with_message(sprintf("Missing dashboard file: %s", source_path))
-    }
-    dir.create(dirname(destination_path), recursive = TRUE, showWarnings = FALSE)
-    file.copy(source_path, destination_path, overwrite = TRUE)
-    cat(sprintf("Synced %s -> %s\n", source_path, destination_path))
+    cat(sprintf("Synced %s -> %s\n", file.path(runtime_output_root, filename), synced_paths[[filename]]))
 }
 
 cat("\nGitHub Pages dashboard files are now synced into the repo.\n")

@@ -21,6 +21,17 @@ It is meant to answer four questions clearly:
 3. what the Bayesian models actually are, including priors and notation
 4. how posterior draws become bracket picks, decision scores, and exported files
 
+## Operational Entrypoints
+
+The repo has four different command-line entrypoints for simulation and dashboard output, and they are not interchangeable:
+
+- `Rscript scripts/run_simulation.R` is the authoritative full pipeline. It fits the models, optionally runs the rolling backtest, simulates the bracket, generates candidates, and writes the full output bundle including the saved results RDS.
+- `Rscript scripts/run_bracket_candidates.R` is a lighter rerun for bracket outputs when you do not want the full backtest, but it still reloads or refits models and regenerates bracket candidates. It is not a render-only command.
+- `Rscript scripts/regenerate_dashboards.R` is the preferred command for dashboard/UI iteration. It loads the saved full results bundle, regenerates only the dashboard HTML files, and syncs the tracked repo `output/` HTML copies without rerunning simulation.
+- `Rscript scripts/publish_github_pages.R` is the lower-level sync helper. It only copies already-rendered dashboard HTML into the tracked repo `output/` directory.
+
+Use the render-only path when the cached full results bundle is already valid and you only changed dashboard code or documentation-linked HTML output.
+
 ## End-to-End Pipeline
 
 At a high level, the workflow is:

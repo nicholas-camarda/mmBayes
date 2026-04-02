@@ -64,3 +64,23 @@ test_that("publish_release_bundle copies only approved deliverables and the odds
     expect_true(file.exists(file.path(result$data_snapshot_dir, "odds_history", "2026", "snapshots", "odds_api_20260327_120000.json")))
     expect_true(file.exists(file.path(result$data_snapshot_dir, "odds_history", "2025", "closing_lines.csv")))
 })
+
+test_that("regenerate_dashboards_from_saved_results fails clearly when the saved results bundle is missing", {
+    runtime_root <- tempfile(pattern = "mmBayes-runtime-")
+    output_dir <- file.path(runtime_root, "output")
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+    config <- default_project_config()
+    config$runtime$root <- runtime_root
+    config$output$path <- output_dir
+    config$output$prefix <- "fixture"
+    config <- normalize_project_paths(config)
+
+    expect_error(
+        regenerate_dashboards_from_saved_results(
+            config = config,
+            repo_output_dir = tempfile(pattern = "mmBayes-repo-output-")
+        ),
+        regexp = "Saved results bundle not found: .*fixture\\.rds.*run_simulation\\.R"
+    )
+})

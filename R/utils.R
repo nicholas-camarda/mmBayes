@@ -14,6 +14,55 @@ stop_with_message <- function(message) {
     stop(message, call. = FALSE)
 }
 
+#' Return the dashboard HTML file names used across runtime and repo sync flows
+#'
+#' @return A character vector of dashboard HTML file names.
+#' @keywords internal
+dashboard_html_manifest <- function() {
+    c(
+        "bracket_dashboard.html",
+        "technical_dashboard.html",
+        "model_comparison_dashboard.html"
+    )
+}
+
+#' Sync dashboard HTML files from one directory into another
+#'
+#' @param source_dir Directory containing rendered dashboard HTML files.
+#' @param destination_dir Directory that should receive the copied HTML files.
+#' @param dashboard_files Optional character vector of file names to sync.
+#'
+#' @return A named character vector of destination paths.
+#' @keywords internal
+sync_dashboard_html_files <- function(source_dir,
+                                      destination_dir,
+                                      dashboard_files = dashboard_html_manifest()) {
+    source_dir <- path.expand(source_dir)
+    destination_dir <- path.expand(destination_dir)
+
+    if (!dir.exists(source_dir)) {
+        stop_with_message(sprintf("Dashboard source directory does not exist: %s", source_dir))
+    }
+
+    dir.create(destination_dir, recursive = TRUE, showWarnings = FALSE)
+
+    synced_paths <- vapply(dashboard_files, function(filename) {
+        source_path <- file.path(source_dir, filename)
+        destination_path <- file.path(destination_dir, filename)
+        if (!file.exists(source_path)) {
+            stop_with_message(sprintf("Missing dashboard file: %s", source_path))
+        }
+        copied <- file.copy(source_path, destination_path, overwrite = TRUE)
+        if (!isTRUE(copied)) {
+            stop_with_message(sprintf("Failed to sync dashboard file from %s to %s", source_path, destination_path))
+        }
+        destination_path
+    }, character(1), USE.NAMES = TRUE)
+
+    names(synced_paths) <- dashboard_files
+    synced_paths
+}
+
 #' Provide a default for `NULL`
 #'
 #' @param x A value to test.
@@ -2158,19 +2207,9 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         play_in_resolution = play_in_resolution
     )
     model_overview <- normalize_model_overview(model_overview)
-    model_quality_context <- resolve_model_quality_context(
-        backtest = backtest,
-        output_dir = output_dir,
-        quality_signature = quality_signature,
-        allow_fallback = TRUE,
-        require_exact_match = TRUE
-    )
     summary_path <- file.path(output_dir, "bracket_candidates.txt")
     rds_path <- file.path(output_dir, "bracket_candidates.rds")
     decision_sheet_path <- file.path(output_dir, "bracket_decision_sheet.csv")
-    dashboard_path <- file.path(output_dir, "bracket_dashboard.html")
-    technical_dashboard_path <- file.path(output_dir, "technical_dashboard.html")
-    comparison_dashboard_path <- file.path(output_dir, "model_comparison_dashboard.html")
     matchup_context_path <- file.path(output_dir, "bracket_matchup_context.csv")
     tiebreaker_summary_path <- file.path(output_dir, "championship_tiebreaker_summary.csv")
     championship_distribution_path <- file.path(output_dir, "championship_tiebreaker_distribution.csv")
@@ -2185,13 +2224,6 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         utils::write.csv(total_points_predictions$championship_distribution, championship_distribution_path, row.names = FALSE)
         utils::write.csv(total_points_predictions$matchup_summaries, matchup_totals_path, row.names = FALSE)
     }
-    writeLines(
-        create_model_comparison_dashboard_html(
-            bracket_year = bracket_year,
-            model_comparison = model_comparison
-        ),
-        comparison_dashboard_path
-    )
 
     candidate_csv_paths <- vapply(candidates, function(candidate) {
         path <- file.path(output_dir, sprintf("bracket_candidate_%s.csv", candidate$candidate_id))
@@ -2238,7 +2270,105 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         cat("\n")
     }
     sink()
+    dashboard_outputs <- write_dashboard_outputs(
+        bracket_year = bracket_year,
+        candidates = candidates,
+        output_dir = output_dir,
+        current_teams = current_teams,
+        backtest = backtest,
+        model_overview = model_overview,
+        quality_signature = quality_signature,
+        play_in_resolution = play_in_resolution,
+        total_points_predictions = total_points_predictions,
+        live_performance = live_performance,
+        model_comparison = model_comparison,
+        decision_sheet = decision_sheet,
+        dashboard_context = dashboard_context
+    )
 
+    list(
+        decision_sheet = decision_sheet,
+        decision_sheet_path = decision_sheet_path,
+        dashboard = dashboard_outputs$dashboard,
+        technical_dashboard = dashboard_outputs$technical_dashboard,
+        model_comparison_dashboard = dashboard_outputs$model_comparison_dashboard,
+        matchup_context = matchup_context_path,
+        candidates_rds = rds_path,
+        candidate_summary = summary_path,
+        candidate_csvs = unname(candidate_csv_paths),
+        championship_tiebreaker_summary = if (!is.null(total_points_predictions)) tiebreaker_summary_path else NULL,
+        championship_tiebreaker_distribution = if (!is.null(total_points_predictions)) championship_distribution_path else NULL,
+        matchup_total_points = if (!is.null(total_points_predictions)) matchup_totals_path else NULL,
+        model_quality_source_label = dashboard_outputs$model_quality_source_label %||% NULL,
+        model_quality_source_path = dashboard_outputs$model_quality_source_path %||% NULL,
+        model_quality_used_cached_quality = isTRUE(dashboard_outputs$model_quality_used_cached_quality),
+        model_quality_used_fallback = isTRUE(dashboard_outputs$model_quality_used_fallback)
+    )
+}
+
+#' Write dashboard HTML files without rewriting non-HTML artifacts
+#'
+#' @param bracket_year The active bracket year.
+#' @param candidates A list of candidate bracket objects.
+#' @param output_dir Directory used for the rendered HTML files.
+#' @param current_teams Optional current-year team table.
+#' @param backtest Optional backtest result bundle.
+#' @param model_overview Optional model-overview bundle for the dashboards.
+#' @param quality_signature Optional fingerprint used to match a cached quality artifact.
+#' @param play_in_resolution Optional one-row tibble from
+#'   [summarize_play_in_resolution()].
+#' @param total_points_predictions Optional list returned by
+#'   [predict_candidate_total_points()].
+#' @param live_performance Optional live-performance bundle.
+#' @param model_comparison Optional comparison bundle for Stan GLM vs BART.
+#' @param decision_sheet Optional precomputed decision sheet.
+#' @param dashboard_context Optional precomputed dashboard context bundle.
+#'
+#' @return A list with dashboard file paths and model-quality source metadata.
+#' @keywords internal
+write_dashboard_outputs <- function(bracket_year,
+                                    candidates,
+                                    output_dir = default_runtime_output_root(),
+                                    current_teams = NULL,
+                                    backtest = NULL,
+                                    model_overview = NULL,
+                                    quality_signature = NULL,
+                                    play_in_resolution = NULL,
+                                    total_points_predictions = NULL,
+                                    live_performance = NULL,
+                                    model_comparison = NULL,
+                                    decision_sheet = NULL,
+                                    dashboard_context = NULL) {
+    dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+    decision_sheet <- decision_sheet %||% build_decision_sheet(candidates)
+    dashboard_context <- dashboard_context %||% build_bracket_dashboard_context(
+        current_teams = current_teams,
+        decision_sheet = decision_sheet,
+        candidates = candidates,
+        total_points_predictions = total_points_predictions,
+        play_in_resolution = play_in_resolution
+    )
+    model_overview <- normalize_model_overview(model_overview)
+    model_quality_context <- resolve_model_quality_context(
+        backtest = backtest,
+        output_dir = output_dir,
+        quality_signature = quality_signature,
+        allow_fallback = TRUE,
+        require_exact_match = TRUE
+    )
+
+    dashboard_path <- file.path(output_dir, "bracket_dashboard.html")
+    technical_dashboard_path <- file.path(output_dir, "technical_dashboard.html")
+    comparison_dashboard_path <- file.path(output_dir, "model_comparison_dashboard.html")
+
+    writeLines(
+        create_model_comparison_dashboard_html(
+            bracket_year = bracket_year,
+            model_comparison = model_comparison
+        ),
+        comparison_dashboard_path
+    )
     writeLines(
         create_bracket_dashboard_html(
             bracket_year = bracket_year,
@@ -2272,23 +2402,107 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
     )
 
     list(
-        decision_sheet = decision_sheet,
-        decision_sheet_path = decision_sheet_path,
         dashboard = dashboard_path,
         technical_dashboard = technical_dashboard_path,
         model_comparison_dashboard = comparison_dashboard_path,
-        matchup_context = matchup_context_path,
-        candidates_rds = rds_path,
-        candidate_summary = summary_path,
-        candidate_csvs = unname(candidate_csv_paths),
-        championship_tiebreaker_summary = if (!is.null(total_points_predictions)) tiebreaker_summary_path else NULL,
-        championship_tiebreaker_distribution = if (!is.null(total_points_predictions)) championship_distribution_path else NULL,
-        matchup_total_points = if (!is.null(total_points_predictions)) matchup_totals_path else NULL,
         model_quality_source_label = model_quality_context$source_label %||% NULL,
         model_quality_source_path = model_quality_context$source_path %||% NULL,
         model_quality_used_cached_quality = isTRUE(model_quality_context$used_cached_quality %||% model_quality_context$used_fallback %||% FALSE),
         model_quality_used_fallback = isTRUE(model_quality_context$used_cached_quality %||% model_quality_context$used_fallback %||% FALSE)
     )
+}
+
+#' Regenerate dashboard HTML files from a saved full results bundle
+#'
+#' @param results A result bundle returned by [run_tournament_simulation()].
+#' @param output_dir Directory used for runtime dashboard HTML files.
+#' @param repo_output_dir Optional repo `output/` directory for synced HTML copies.
+#'
+#' @return A list describing the runtime dashboard paths and any synced repo files.
+#' @keywords internal
+regenerate_dashboard_outputs_from_results <- function(results,
+                                                      output_dir = default_runtime_output_root(),
+                                                      repo_output_dir = NULL) {
+    if (is.null(results) || !is.list(results)) {
+        stop_with_message("Saved results bundle is missing or invalid.")
+    }
+    if (is.null(results$bracket_year)) {
+        stop_with_message("Saved results bundle is missing `bracket_year`.")
+    }
+    if (is.null(results$candidates) || length(results$candidates) == 0L) {
+        stop_with_message("Saved results bundle is missing candidate brackets needed for dashboard regeneration.")
+    }
+    if (is.null(results$data$current_teams)) {
+        stop_with_message("Saved results bundle is missing current team data needed for dashboard regeneration.")
+    }
+
+    matchup_model_overview <- results$model_overview %||% summarize_model_overview(results$model, draws = results$draws_budget %||% NULL)
+    total_points_model_overview <- results$total_points_model_overview %||% summarize_model_overview(results$total_points_model, draws = results$draws_budget %||% NULL)
+    model_overview <- as_model_overview_bundle(
+        model_overview = matchup_model_overview,
+        totals_overview = total_points_model_overview
+    )
+    play_in_resolution <- summarize_play_in_resolution(
+        current_teams = results$data$current_teams,
+        actual_play_in_results = results$data$current_play_in_results
+    )
+    quality_signature <- build_model_quality_signature(results)
+
+    runtime_outputs <- write_dashboard_outputs(
+        bracket_year = results$bracket_year,
+        candidates = results$candidates,
+        output_dir = output_dir,
+        current_teams = results$data$current_teams,
+        backtest = results$backtest %||% NULL,
+        model_overview = model_overview,
+        quality_signature = quality_signature,
+        play_in_resolution = play_in_resolution,
+        total_points_predictions = results$total_points_predictions %||% NULL,
+        live_performance = results$live_performance %||% NULL,
+        model_comparison = results$model_comparison %||% NULL,
+        decision_sheet = results$decision_sheet %||% NULL
+    )
+
+    synced_repo_files <- if (!is.null(repo_output_dir)) {
+        sync_dashboard_html_files(
+            source_dir = output_dir,
+            destination_dir = repo_output_dir
+        )
+    } else {
+        character(0)
+    }
+
+    c(runtime_outputs, list(repo_output_files = unname(synced_repo_files)))
+}
+
+#' Regenerate dashboard HTML files from the saved full results bundle on disk
+#'
+#' @param config Optional project configuration list.
+#' @param repo_output_dir Optional repo `output/` directory for synced HTML copies.
+#'
+#' @return A list describing the loaded bundle path and regenerated dashboards.
+#' @keywords internal
+regenerate_dashboards_from_saved_results <- function(config = NULL,
+                                                     repo_output_dir = NULL) {
+    config <- config %||% load_project_config()
+    output_dir <- path.expand(config$output$path %||% default_runtime_output_root())
+    prefix <- config$output$prefix %||% "tournament_sim"
+    results_path <- file.path(output_dir, paste0(prefix, ".rds"))
+
+    if (!file.exists(results_path)) {
+        stop_with_message(sprintf(
+            "Saved results bundle not found: %s. Run `Rscript scripts/run_simulation.R` first to create the authoritative cached bundle.",
+            results_path
+        ))
+    }
+
+    regenerated <- regenerate_dashboard_outputs_from_results(
+        results = readRDS(results_path),
+        output_dir = output_dir,
+        repo_output_dir = repo_output_dir
+    )
+
+    c(list(results_bundle_path = results_path), regenerated)
 }
 
 #' Save simulation outputs to disk
