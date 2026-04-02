@@ -1281,6 +1281,27 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
             `Bracket score` = sprintf("%.1f", mean_bracket_score),
             `Correct picks` = sprintf("%.1f", mean_correct_picks)
         )
+    summary_metrics_html <- paste(
+        purrr::map_chr(seq_len(ncol(calibration_summary)), function(index) {
+            metric_name <- names(calibration_summary)[[index]]
+            metric_value <- calibration_summary[[index]][[1]]
+            paste0(
+                "<div class='summary-card'>",
+                "<div class='summary-label'>", html_escape(metric_name), "</div>",
+                "<div class='summary-value'>", html_escape(metric_value), "</div>",
+                "<p class='summary-note'>", html_escape(dplyr::case_when(
+                    identical(metric_name, "Log loss") ~ "Lower means the forecast probabilities are more honest.",
+                    identical(metric_name, "Brier score") ~ "Lower means the probability estimates are tighter overall.",
+                    identical(metric_name, "Accuracy") ~ "Share of held-out games where the winner was picked correctly.",
+                    identical(metric_name, "Bracket score") ~ "Average pool-style points under the bracket scoring rules.",
+                    identical(metric_name, "Correct picks") ~ "Average number of correct winner picks across the holdout seasons.",
+                    TRUE ~ "Historical backtest metric."
+                )), "</p>",
+                "</div>"
+            )
+        }),
+        collapse = "\n"
+    )
 
     round_tbl <- diagnostics$round_summary %||% tibble::tibble()
     round_rows <- if (nrow(round_tbl) > 0) {
@@ -1316,11 +1337,17 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
     paste0(
         if (!is.null(quality_source_label)) paste0("<p class='panel-caption'><strong>Source:</strong> ", html_escape(quality_source_label), "</p>") else "",
         "<p class='quality-intro'>The backtest is the historical baseline, so you can judge the live performance panel that follows against seasons the model has already seen.</p>",
-        "<div class='quality-grid'>",
-        "<div class='quality-card'><h3>Backtest Summary</h3>", backtest_years_note, render_html_table(calibration_summary), "</div>",
-        "<div class='quality-card'><h3>What this means</h3>",
-        "<div class='diagnostic-callout'><strong>Doing well</strong><ul>", if (nzchar(strength_lines)) strength_lines else "<li>No strengths identified.</li>", "</ul></div>",
-        "<div class='diagnostic-callout'><strong>Needs attention</strong><ul>", if (nzchar(weakness_lines)) weakness_lines else "<li>No weaknesses identified.</li>", "</ul></div>",
+        "<p class='panel-caption'><strong>What this means:</strong> the historical baseline is strongest when the metric strip, calibration curve, and strengths/weaknesses all tell a similar story.</p>",
+        "<div class='overview-grid'>",
+        "<div class='quality-card'><h3>Backtest Summary</h3>", backtest_years_note,
+        "<div class='overview-grid' style='margin-top:0;'>", summary_metrics_html, "</div>",
+        "<p class='quality-note'>Use this as the compact historical scorecard before you open the curve and round table below.</p>",
+        "</div>",
+        "<div class='quality-card'><h3>Doing well</h3>",
+        "<div class='diagnostic-callout'><ul>", if (nzchar(strength_lines)) strength_lines else "<li>No strengths identified.</li>", "</ul></div>",
+        "</div>",
+        "<div class='quality-card'><h3>Needs attention</h3>",
+        "<div class='diagnostic-callout'><ul>", if (nzchar(weakness_lines)) weakness_lines else "<li>No weaknesses identified.</li>", "</ul></div>",
         "</div>",
         "</div>",
         "<div class='quality-grid'>",
