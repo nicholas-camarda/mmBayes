@@ -405,19 +405,21 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         model_quality_context = resolved_quality,
         model_overview = model_overview
     )
-    expect_match(dashboard_html, "Build Your Entries")
-    expect_match(dashboard_html, "Key terms")
+    expect_match(dashboard_html, "Review Queue")
+    expect_match(dashboard_html, "Candidate Recommendations")
+    expect_match(dashboard_html, "How to read this workspace")
     expect_match(dashboard_html, "Overall strength rating")
     expect_match(dashboard_html, "Review priority score")
-    expect_match(dashboard_html, "Candidate 2 Delta From Candidate 1")
-    expect_match(dashboard_html, "Think Harder About These Matchups")
+    expect_match(dashboard_html, "Candidate 2 changes from the baseline")
     expect_match(dashboard_html, "Matchup Evidence")
-    expect_match(dashboard_html, "Full Candidate Paths")
-    expect_match(dashboard_html, "Technical Appendix")
+    expect_match(dashboard_html, "Reference matchups")
+    expect_match(dashboard_html, "Full candidate paths")
+    expect_match(dashboard_html, "Technical appendix")
     expect_match(dashboard_html, "Need more diagnostics?")
     expect_match(dashboard_html, "Open technical_dashboard.html")
     expect_match(dashboard_html, "href='technical_dashboard.html'")
     expect_match(dashboard_html, "href='model_comparison_dashboard.html'")
+    expect_equal(sum(gregexpr("Open the full model comparison dashboard", dashboard_html, fixed = TRUE)[[1]] > 0), 0L)
     if (isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
         expect_match(dashboard_html, "Status: Simulated bracket path")
         expect_match(dashboard_html, "generated brackets assume simulated First Four winners")
@@ -425,19 +427,20 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         expect_match(dashboard_html, "Status: Final result")
         expect_match(dashboard_html, "First Four slots are resolved")
     }
-    build_pos <- regexpr("Build Your Entries", dashboard_html, fixed = TRUE)[[1]]
-    key_terms_pos <- regexpr("Key terms", dashboard_html, fixed = TRUE)[[1]]
-    delta_pos <- regexpr("Candidate 2 Delta From Candidate 1", dashboard_html, fixed = TRUE)[[1]]
-    watch_pos <- regexpr("Think Harder About These Matchups", dashboard_html, fixed = TRUE)[[1]]
+    review_pos <- regexpr("Review Queue", dashboard_html, fixed = TRUE)[[1]]
+    build_pos <- regexpr("Candidate Recommendations", dashboard_html, fixed = TRUE)[[1]]
+    helper_pos <- regexpr("How to read this workspace", dashboard_html, fixed = TRUE)[[1]]
     evidence_pos <- regexpr("Matchup Evidence", dashboard_html, fixed = TRUE)[[1]]
-    paths_pos <- regexpr("Full Candidate Paths", dashboard_html, fixed = TRUE)[[1]]
+    paths_pos <- regexpr("Full candidate paths", dashboard_html, fixed = TRUE)[[1]]
+    appendix_pos <- regexpr("Technical appendix", dashboard_html, fixed = TRUE)[[1]]
     expect_true(build_pos > 0)
-    expect_true(key_terms_pos > 0)
-    expect_true(key_terms_pos < build_pos)
-    expect_true(build_pos < delta_pos)
-    expect_true(delta_pos < watch_pos)
-    expect_true(watch_pos < evidence_pos)
+    expect_true(helper_pos > 0)
+    expect_true(review_pos > 0)
+    expect_true(helper_pos < review_pos)
+    expect_true(review_pos < build_pos)
+    expect_true(build_pos < evidence_pos)
     expect_true(evidence_pos < paths_pos)
+    expect_true(paths_pos < appendix_pos)
     expect_match(dashboard_html, "Bracket-changing toss-ups")
     expect_match(dashboard_html, "Upset pivots")
     expect_match(dashboard_html, "Fragile favorites")
@@ -472,6 +475,9 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     )
     expect_match(technical_html, "mmBayes Technical Bracket Dashboard")
     expect_match(technical_html, "How To Use This Dashboard")
+    expect_match(technical_html, "Action Summary")
+    expect_match(technical_html, "Key Warnings")
+    expect_match(technical_html, "Compare Workspace")
     expect_match(technical_html, "Model Overview")
     expect_match(technical_html, "What this means")
     expect_match(technical_html, "Backtest Calibration Curve")
@@ -517,6 +523,10 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(technical_html, "Candidate 1 Most Fragile Picks")
     expect_match(technical_html, "Candidate 2 Most Fragile Picks")
     expect_match(technical_html, "Candidate 1 Championship Distribution")
+    expect_match(technical_html, "Backtest and calibration evidence")
+    expect_match(technical_html, "Live performance evidence")
+    expect_match(technical_html, "Model setup and engine comparison")
+    expect_match(technical_html, "Reference tables")
     expect_false(grepl("Why These Boards Are Ordered This Way", technical_html, fixed = TRUE))
     expect_false(grepl("Differing slot", technical_html, fixed = TRUE))
     expect_false(grepl("Preferred path, alternate path, and usage note", technical_html, fixed = TRUE))
@@ -667,13 +677,14 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(comparison_html, "Compare")
     expect_match(comparison_html, "Stan GLM")
     expect_match(comparison_html, "BART")
-    expect_match(comparison_html, "Historical Backtest Metrics")
-    expect_match(comparison_html, "Current-Year Live Metrics")
+    expect_match(comparison_html, "Preferred engine verdict")
+    expect_match(comparison_html, "Deeper evidence and metric tables")
+    expect_match(comparison_html, "Preferred engine")
     expect_match(comparison_html, "Live Tournament Performance - Stan GLM")
     expect_match(comparison_html, "Live Tournament Performance - BART")
     expect_true(sum(gregexpr("Matchup Model", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
     expect_true(sum(gregexpr("Total Points Model", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
-    expect_true(sum(gregexpr("Engine settings", comparison_html, fixed = TRUE)[[1]] > 0) >= 4)
+    expect_true(sum(gregexpr("Engine settings and feature detail", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
     expect_match(render_model_comparison_link_html(comparison_bundle), "Open the full model comparison dashboard")
 
     comparison_with_split_current_overview <- comparison_bundle

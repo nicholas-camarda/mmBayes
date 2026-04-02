@@ -343,14 +343,14 @@ describe_calibration_bin <- function(bin_row, label = c("closest", "widest")) {
         "Weakest calibration range"
     }
     tail_text <- if (identical(label, "closest")) {
-        "This does not mean those were the model's 'best predicted' games. It means this stated probability range matched the long-run win rate most closely."
+        "This does not mean those were the model's 'best predicted' games. It means that among games where the model gave one side about this win probability, that side's actual win rate landed closest to the stated probability."
     } else {
-        "This does not mean those games were hardest overall. It means this stated probability range was furthest from the observed win rate."
+        "This does not mean those games were hardest overall. It means that among games where the model gave one side about this win probability, the actual win rate was furthest from the stated probability."
     }
 
     if (identical(label, "closest")) {
         return(sprintf(
-            "%s: across %.0f held-out games where one side was assigned a %s win probability, the model averaged %.0f%% and that side actually won %.0f%% of the time. %s",
+            "%s: among %.0f held-out games where the model gave one side about a %s win probability, that side had an average predicted win rate of %.0f%% and actually won %.0f%% of the time. %s",
             prefix,
             n_games,
             bin_text,
@@ -369,7 +369,7 @@ describe_calibration_bin <- function(bin_row, label = c("closest", "widest")) {
     }
 
     sprintf(
-        "%s: across %.0f held-out games where one side was assigned a %s win probability, the model averaged %.0f%% but that side actually won %.0f%% of the time. In this range the model was %s by %.1f percentage points. %s",
+        "%s: among %.0f held-out games where the model gave one side about a %s win probability, that side had an average predicted win rate of %.0f%% but actually won %.0f%% of the time. In this range the model was %s by %.1f percentage points. %s",
         prefix,
         n_games,
         bin_text,
@@ -886,11 +886,11 @@ summarize_model_quality <- function(backtest) {
         max_gap <- max(gaps, na.rm = TRUE)
         mean_gap <- mean(gaps, na.rm = TRUE)
         calibration_text <- if (is.finite(max_gap) && max_gap <= 0.03) {
-            sprintf("The calibration curve stays close to the diagonal. Each point pools games with similar predicted probabilities. For example, a point near 35%% asks: when the model gave one side about a 35%% chance to win, how often did that side actually win? Points near the diagonal mean those probabilities were honest on average, and the mean absolute bin gap is %.3f.", mean_gap)
+            sprintf("The calibration curve stays close to the diagonal. Each point pools games with similar predicted probabilities. For example, a point near 35%% asks: among games where the model gave one side about a 35%% chance to win, how often did that side actually win? Points near the diagonal mean those probabilities were honest on average, and the mean absolute bin gap is %.3f.", mean_gap)
         } else if (is.finite(max_gap) && max_gap <= 0.06) {
-            sprintf("The calibration curve is reasonably close to the diagonal. Each point pools games with similar predicted probabilities, so a point near 35%% means the model often forecast one side around 35%% and the chart shows how often that side actually won. This is about probability honesty, not pick difficulty, and the mean absolute bin gap is %.3f.", mean_gap)
+            sprintf("The calibration curve is reasonably close to the diagonal. Each point pools games with similar predicted probabilities, so a point near 35%% means: among games where the model gave one side about a 35%% chance to win, that side actually won at roughly the y-axis rate. This is about probability honesty, not pick difficulty, and the mean absolute bin gap is %.3f.", mean_gap)
         } else {
-            sprintf("The calibration curve shows noticeable deviation from the diagonal. Each point pools games with similar predicted probabilities, so a point near 35%% means the model often forecast one side around 35%% and the chart shows how often that side actually won. This is about whether the probabilities were trustworthy, not whether the games were easy, and the mean absolute bin gap is %.3f.", mean_gap)
+            sprintf("The calibration curve shows noticeable deviation from the diagonal. Each point pools games with similar predicted probabilities, so a point near 35%% means: among games where the model gave one side about a 35%% chance to win, the chart shows how often that side actually won. This is about whether the probabilities were trustworthy, not whether the games were easy, and the mean absolute bin gap is %.3f.", mean_gap)
         }
     } else {
         calibration_text <- "A bin-level calibration chart is not available for this snapshot."

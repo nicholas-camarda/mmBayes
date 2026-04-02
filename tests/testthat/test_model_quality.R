@@ -44,8 +44,8 @@ test_that("model quality artifacts save and resolve from the latest snapshot", {
     diagnostics <- summarize_backtest_diagnostics(fake_backtest)
     expect_equal(diagnostics$backtest_years, "2018, 2019, 2020 (3 seasons)")
     expect_true(any(grepl("Closest calibration range", diagnostics$strengths, fixed = TRUE)))
-    expect_true(any(grepl("across 12 held-out games", diagnostics$strengths, fixed = TRUE)))
-    expect_true(any(grepl("that side actually won", diagnostics$strengths, fixed = TRUE)))
+    expect_true(any(grepl("among 12 held-out games", diagnostics$strengths, fixed = TRUE)))
+    expect_true(any(grepl("average predicted win rate", diagnostics$strengths, fixed = TRUE)))
     expect_true(any(grepl("Weakest calibration range", diagnostics$weaknesses, fixed = TRUE)))
     expect_true(any(grepl("best predicted", diagnostics$strengths, fixed = TRUE)))
     expect_true(any(grepl("too pessimistic|too optimistic|almost exactly on target", diagnostics$weaknesses)))
@@ -53,7 +53,9 @@ test_that("model quality artifacts save and resolve from the latest snapshot", {
     quality_summary <- summarize_model_quality(fake_backtest)
     expect_match(quality_summary, "Each point pools games with similar predicted probabilities")
     expect_match(quality_summary, "probability honesty")
+    expect_match(quality_summary, "among games where the model gave one side about a 35% chance to win")
     expect_match(render_calibration_help_html(), "long-run frequency matching")
+    expect_match(render_calibration_help_html(), "among games where the model gave one side about a 35% chance to win")
 
     updated_backtest <- fake_backtest
     updated_backtest$summary$mean_log_loss <- 0.331
