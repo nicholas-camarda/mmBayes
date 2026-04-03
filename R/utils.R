@@ -379,6 +379,148 @@ bracket_region_levels <- function() {
     c("East", "South", "Midwest", "West")
 }
 
+#' Build round-region divergence map rows for the bracket dashboard
+#'
+#' @param matchup_context_rows Full matchup context rows for the active dashboard.
+#' @param candidate_delta_rows Exact candidate divergence rows.
+#' @param watchlist_rows Dashboard watchlist rows.
+#'
+#' @return A tibble with one row per round-region bucket, including zero-count
+#'   buckets used to render quiet empty cells.
+#' @keywords internal
+build_divergence_map_rows <- function(matchup_context_rows, candidate_delta_rows, watchlist_rows) {
+    if (nrow(matchup_context_rows) == 0) {
+        return(tibble::tibble())
+    }
+
+    round_order <- round_levels()
+    region_order <- c(bracket_region_levels(), "National")
+
+    bucket_seed <- matchup_context_rows %>%
+        dplyr::transmute(
+            round = as.character(round),
+            region = as.character(region)
+        ) %>%
+        dplyr::filter(!is.na(round), !is.na(region), nzchar(round), nzchar(region)) %>%
+        dplyr::distinct() %>%
+        dplyr::mutate(
+            round_order = match(round, round_order),
+            region_order = match(region, region_order),
+            late_round_only = round %in% c("Sweet 16", "Elite 8", "Final Four", "Championship")
+        ) %>%
+        dplyr::arrange(round_order, region_order)
+
+    if (nrow(bucket_seed) == 0) {
+        return(tibble::tibble())
+    }
+
+    delta_summary <- if (nrow(candidate_delta_rows) == 0) {
+        tibble::tibble(
+            round = character(),
+            region = character(),
+            total_count = integer(),
+            winner_change_count = integer(),
+            path_only_count = integer(),
+            first_evidence_id = character(),
+            slot_keys = list(),
+            evidence_ids = list()
+        )
+    } else {
+        candidate_delta_rows %>%
+            dplyr::mutate(
+                round = as.character(round),
+                region = as.character(region),
+                winner_change_flag = difference_mode %in% c("Winner", "Winner and path"),
+                path_only_flag = difference_mode == "Path"
+            ) %>%
+            dplyr::group_by(round, region) %>%
+            dplyr::summarise(
+                total_count = dplyr::n(),
+                winner_change_count = sum(winner_change_flag, na.rm = TRUE),
+                path_only_count = sum(path_only_flag, na.rm = TRUE),
+                first_evidence_id = dplyr::first(evidence_id),
+                slot_keys = list(as.character(slot_key)),
+                evidence_ids = list(as.character(evidence_id)),
+                .groups = "drop"
+            )
+    }
+
+    watchlist_summary <- if (nrow(watchlist_rows) == 0) {
+        tibble::tibble(
+            round = character(),
+            region = character(),
+            surfaced_count = integer(),
+            surfaced_slot_keys = list(),
+            surfaced_evidence_ids = list()
+        )
+    } else {
+        watchlist_rows %>%
+            dplyr::filter(candidate_diff_flag) %>%
+            dplyr::mutate(
+                round = as.character(round),
+                region = as.character(region)
+            ) %>%
+            dplyr::group_by(round, region) %>%
+            dplyr::summarise(
+                surfaced_count = dplyr::n(),
+                surfaced_slot_keys = list(as.character(slot_key)),
+                surfaced_evidence_ids = list(as.character(evidence_id)),
+                .groups = "drop"
+            )
+    }
+
+    bucket_seed %>%
+        dplyr::left_join(delta_summary, by = c("round", "region")) %>%
+        dplyr::left_join(watchlist_summary, by = c("round", "region")) %>%
+        dplyr::mutate(
+            total_count = dplyr::coalesce(total_count, 0L),
+            winner_change_count = dplyr::coalesce(winner_change_count, 0L),
+            path_only_count = dplyr::coalesce(path_only_count, 0L),
+            surfaced_count = dplyr::coalesce(surfaced_count, 0L),
+            unsurfaced_count = pmax(total_count - surfaced_count, 0L),
+            slot_keys = purrr::map(slot_keys, ~ .x %||% character()),
+            evidence_ids = purrr::map(evidence_ids, ~ .x %||% character()),
+            surfaced_slot_keys = purrr::map(surfaced_slot_keys, ~ .x %||% character()),
+            surfaced_evidence_ids = purrr::map(surfaced_evidence_ids, ~ .x %||% character()),
+            has_divergence = total_count > 0L,
+            all_in_watchlist = has_divergence & unsurfaced_count == 0L,
+            target_evidence_id = purrr::map2_chr(
+                surfaced_evidence_ids,
+                evidence_ids,
+                function(surfaced, all_ids) {
+                    if (length(surfaced) > 0L) {
+                        return(surfaced[[1]])
+                    }
+                    if (length(all_ids) > 0L) {
+                        return(all_ids[[1]])
+                    }
+                    NA_character_
+                }
+            )
+        ) %>%
+        dplyr::arrange(round_order, region_order) %>%
+        dplyr::select(
+            round,
+            region,
+            round_order,
+            region_order,
+            late_round_only,
+            total_count,
+            winner_change_count,
+            path_only_count,
+            surfaced_count,
+            unsurfaced_count,
+            has_divergence,
+            all_in_watchlist,
+            first_evidence_id,
+            target_evidence_id,
+            slot_keys,
+            evidence_ids,
+            surfaced_slot_keys,
+            surfaced_evidence_ids
+        )
+}
+
 #' List allowed pre-tournament feature columns
 #'
 #' @return A character vector of season-available team feature names.
@@ -1409,6 +1551,12 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
         ) %>%
         dplyr::arrange(reason_surface_rank, fill_round, fill_region, matchup_number)
 
+    divergence_map_rows <- build_divergence_map_rows(
+        matchup_context_rows = matchup_context_rows,
+        candidate_delta_rows = candidate_delta_rows,
+        watchlist_rows = watchlist_rows
+    )
+
     late_round_diff_count <- if (nrow(candidate_delta_rows) > 0) {
         sum(as.character(candidate_delta_rows$round) %in% c("Sweet 16", "Elite 8", "Final Four", "Championship"), na.rm = TRUE)
     } else {
@@ -1445,10 +1593,14 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
             return("Alternate bracket that mirrors Candidate 1.")
         }
         if (late_round_diff_count > 0) {
-            return("Alternate bracket that keeps the early path close but changes the later title route.")
+            return(sprintf(
+                "Alternate bracket that keeps most early picks aligned but changes %s late-round slot%s on the title route.",
+                late_round_diff_count,
+                ifelse(late_round_diff_count == 1L, "", "s")
+            ))
         }
         sprintf(
-            "Alternate bracket with %s changed slot%s.",
+            "Alternate bracket that stays on the same late-round route and changes %s earlier slot%s.",
             diff_count,
             ifelse(diff_count == 1L, "", "s")
         )
@@ -1492,6 +1644,7 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
     list(
         matchup_context_rows = matchup_context_rows,
         candidate_delta_rows = candidate_delta_rows,
+        divergence_map_rows = divergence_map_rows,
         watchlist_rows = watchlist_rows,
         candidate_summary_rows = candidate_summary_rows,
         play_in_resolution = play_in_resolution %||% tibble::tibble(),

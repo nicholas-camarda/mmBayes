@@ -406,6 +406,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         model_overview = model_overview
     )
     expect_match(dashboard_html, "Review Queue")
+    expect_match(dashboard_html, "Divergence Map")
     expect_match(dashboard_html, "Candidate Recommendations")
     expect_match(dashboard_html, "How to read this workspace")
     expect_match(dashboard_html, "Overall strength rating")
@@ -445,6 +446,10 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(dashboard_html, "Upset pivots")
     expect_match(dashboard_html, "Fragile favorites")
     expect_match(dashboard_html, "data-open-evidence")
+    expect_match(dashboard_html, "data-divergence-target")
+    expect_match(dashboard_html, "data-divergence-round")
+    expect_match(dashboard_html, "candidate-divergence-reference")
+    expect_match(dashboard_html, "Late-round changes:")
     expect_match(dashboard_html, "Candidate 1 full path")
     expect_match(dashboard_html, "Candidate 2 full path")
     expect_match(dashboard_html, "Need more diagnostics?")
@@ -452,6 +457,10 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(dashboard_html, "Model-facing matchup diffs")
     expect_match(dashboard_html, "Favorite probability")
     expect_match(dashboard_html, "Candidate usage")
+    divergence_map_pos <- regexpr("Divergence Map", dashboard_html, fixed = TRUE)[[1]]
+    diff_reference_pos <- regexpr("Candidate 2 changes from the baseline", dashboard_html, fixed = TRUE)[[1]]
+    expect_true(divergence_map_pos > 0)
+    expect_true(divergence_map_pos < diff_reference_pos)
 
     technical_html <- create_technical_dashboard_html(
         bracket_year = 2026L,
@@ -843,6 +852,7 @@ test_that("bracket dashboard context builder enriches matchup evidence determini
     expect_equal(sample_row$teamB_Conf[[1]], team_b_lookup$Conf[[1]])
 
     expect_identical(context_one$candidate_delta_rows$slot_key, context_two$candidate_delta_rows$slot_key)
+    expect_identical(context_one$divergence_map_rows$total_count, context_two$divergence_map_rows$total_count)
     expect_identical(context_one$watchlist_rows$slot_key, context_two$watchlist_rows$slot_key)
     expect_identical(context_one$watchlist_rows$reason_surface, context_two$watchlist_rows$reason_surface)
 
@@ -868,6 +878,14 @@ test_that("bracket dashboard context builder enriches matchup evidence determini
         expect_true(all(!is.na(context_one$candidate_delta_rows$why_swap_exists)))
     }
 
+    expect_true(all(c(
+        "round", "region", "total_count", "winner_change_count", "path_only_count",
+        "late_round_only", "all_in_watchlist", "target_evidence_id"
+    ) %in% names(context_one$divergence_map_rows)))
+    expect_true(any(context_one$divergence_map_rows$total_count == 0L))
+    expect_true(any(context_one$divergence_map_rows$late_round_only))
+    expect_true(all(context_one$divergence_map_rows$winner_change_count + context_one$divergence_map_rows$path_only_count <= context_one$divergence_map_rows$total_count))
+
     differing_watch_row <- context_one$watchlist_rows %>%
         dplyr::filter(reason_surface == "Bracket-changing toss-ups", candidate_diff_flag) %>%
         dplyr::slice_head(n = 1)
@@ -881,6 +899,53 @@ test_that("bracket dashboard context builder enriches matchup evidence determini
     if (nrow(non_differing_watch_row) == 1) {
         expect_true(is.na(non_differing_watch_row$downstream_implication_text[[1]]))
     }
+})
+
+test_that("divergence map summary keeps empty buckets and path-only splits distinct", {
+    matchup_context_rows <- tibble::tibble(
+        round = c("Round of 64", "Round of 64", "Sweet 16", "Championship"),
+        region = c("East", "South", "East", "National")
+    )
+    candidate_delta_rows <- tibble::tibble(
+        round = c("Round of 64", "Sweet 16", "Championship"),
+        region = c("East", "East", "National"),
+        difference_mode = c("Path", "Winner", "Winner and path"),
+        evidence_id = c("evidence-east-r64", "evidence-east-s16", "evidence-title"),
+        slot_key = c("r64-east", "s16-east", "title-game")
+    )
+    watchlist_rows <- tibble::tibble(
+        round = c("Round of 64", "Sweet 16"),
+        region = c("East", "East"),
+        candidate_diff_flag = c(TRUE, TRUE),
+        evidence_id = c("evidence-east-r64", "evidence-east-s16"),
+        slot_key = c("r64-east", "s16-east")
+    )
+
+    summary_rows <- build_divergence_map_rows(
+        matchup_context_rows = matchup_context_rows,
+        candidate_delta_rows = candidate_delta_rows,
+        watchlist_rows = watchlist_rows
+    )
+
+    empty_bucket <- summary_rows %>%
+        dplyr::filter(round == "Round of 64", region == "South")
+    expect_equal(nrow(empty_bucket), 1L)
+    expect_equal(empty_bucket$total_count[[1]], 0L)
+
+    path_only_bucket <- summary_rows %>%
+        dplyr::filter(round == "Round of 64", region == "East")
+    expect_equal(path_only_bucket$total_count[[1]], 1L)
+    expect_equal(path_only_bucket$winner_change_count[[1]], 0L)
+    expect_equal(path_only_bucket$path_only_count[[1]], 1L)
+    expect_true(path_only_bucket$all_in_watchlist[[1]])
+
+    unsurfaced_bucket <- summary_rows %>%
+        dplyr::filter(round == "Championship", region == "National")
+    expect_equal(unsurfaced_bucket$total_count[[1]], 1L)
+    expect_equal(unsurfaced_bucket$winner_change_count[[1]], 1L)
+    expect_equal(unsurfaced_bucket$path_only_count[[1]], 0L)
+    expect_false(unsurfaced_bucket$all_in_watchlist[[1]])
+    expect_equal(unsurfaced_bucket$unsurfaced_count[[1]], 1L)
 })
 
 test_that("actual First Four winners replace stale Round of 64 opponents", {
