@@ -382,7 +382,8 @@ bracket_region_levels <- function() {
 #' Build round-region divergence map rows for the bracket dashboard
 #'
 #' @param matchup_context_rows Full matchup context rows for the active dashboard.
-#' @param candidate_delta_rows Exact candidate divergence rows.
+#' @param candidate_delta_rows Candidate divergence rows for the active
+#'   divergence map surface.
 #' @param watchlist_rows Dashboard watchlist rows.
 #'
 #' @return A tibble with one row per round-region bucket, including zero-count
@@ -1286,6 +1287,14 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
 
     round_fill_levels <- round_levels()
     region_fill_levels <- bracket_region_levels()
+    first_four_actionable <- TRUE
+    if (!is.null(play_in_resolution) &&
+        nrow(play_in_resolution) > 0 &&
+        "has_unresolved_slots" %in% names(play_in_resolution) &&
+        !is.na(play_in_resolution$has_unresolved_slots[[1]]) &&
+        !isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
+        first_four_actionable <- FALSE
+    }
 
     team_lookup <- tibble::tibble()
     if (!is.null(current_teams) && nrow(current_teams) > 0) {
@@ -1314,6 +1323,7 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
     matchup_context_rows <- decision_sheet %>%
         dplyr::mutate(
             slot_key = dplyr::coalesce(as.character(slot_key), sprintf("%s|%s|%s", region, round, matchup_number)),
+            is_first_four_row = as.character(round) == "First Four",
             teamA_key = normalize_team_key(teamA),
             teamB_key = normalize_team_key(teamB)
         )
@@ -1428,6 +1438,7 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
             dplyr::arrange(fill_round, fill_region, matchup_number) %>%
             dplyr::transmute(
                 slot_key,
+                is_first_four_row,
                 candidate_diff_flag,
                 round = as.character(round),
                 region = as.character(region),
@@ -1450,7 +1461,17 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
             )
     }
 
-    watchlist_seed <- matchup_context_rows %>%
+    actionable_matchup_context_rows <- matchup_context_rows %>%
+        dplyr::filter(!is_first_four_row | first_four_actionable)
+
+    actionable_candidate_delta_rows <- if ("is_first_four_row" %in% names(candidate_delta_rows)) {
+        candidate_delta_rows %>%
+            dplyr::filter(!is_first_four_row | first_four_actionable)
+    } else {
+        candidate_delta_rows
+    }
+
+    watchlist_seed <- actionable_matchup_context_rows %>%
         dplyr::mutate(
             fill_round = factor(as.character(round), levels = round_fill_levels),
             fill_region = factor(as.character(region), levels = region_fill_levels),
@@ -1552,8 +1573,8 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
         dplyr::arrange(reason_surface_rank, fill_round, fill_region, matchup_number)
 
     divergence_map_rows <- build_divergence_map_rows(
-        matchup_context_rows = matchup_context_rows,
-        candidate_delta_rows = candidate_delta_rows,
+        matchup_context_rows = actionable_matchup_context_rows,
+        candidate_delta_rows = actionable_candidate_delta_rows,
         watchlist_rows = watchlist_rows
     )
 

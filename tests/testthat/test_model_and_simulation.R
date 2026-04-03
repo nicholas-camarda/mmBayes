@@ -1093,16 +1093,28 @@ test_that("dashboard warning tracks unresolved versus completed First Four slots
             n_games = c(12L, 16L, 10L)
         )
     )
+    decision_sheet_partial <- build_decision_sheet(candidates_partial)
+    play_in_resolution_partial <- summarize_play_in_resolution(loaded_partial$current_teams, loaded_partial$current_play_in_results)
+    context_partial <- build_bracket_dashboard_context(
+        current_teams = loaded_partial$current_teams,
+        decision_sheet = decision_sheet_partial,
+        candidates = candidates_partial,
+        play_in_resolution = play_in_resolution_partial
+    )
     html_partial <- create_bracket_dashboard_html(
         bracket_year = loaded_partial$bracket_year,
-        decision_sheet = build_decision_sheet(candidates_partial),
+        decision_sheet = decision_sheet_partial,
         candidates = candidates_partial,
         current_teams = loaded_partial$current_teams,
         backtest = fake_quality_backtest,
-        play_in_resolution = summarize_play_in_resolution(loaded_partial$current_teams, loaded_partial$current_play_in_results)
+        dashboard_context = context_partial,
+        play_in_resolution = play_in_resolution_partial
     )
 
     expect_match(html_partial, "Status: Simulated bracket path")
+    expect_true(any(context_partial$matchup_context_rows$round == "First Four"))
+    expect_true(any(context_partial$divergence_map_rows$round == "First Four"))
+    expect_match(html_partial, "data-round='First Four'")
 
     write_fixture_data_files(team_file, results_file, team_data = team_data, results_data = dplyr::bind_rows(results_data, current_duplicate_slots))
     loaded_resolved <- load_tournament_data(config)
@@ -1115,15 +1127,30 @@ test_that("dashboard warning tracks unresolved versus completed First Four slots
         n_simulations = 8L,
         random_seed = 123
     )
+    decision_sheet_resolved <- build_decision_sheet(candidates_resolved)
+    play_in_resolution_resolved <- summarize_play_in_resolution(loaded_resolved$current_teams, loaded_resolved$current_play_in_results)
+    context_resolved <- build_bracket_dashboard_context(
+        current_teams = loaded_resolved$current_teams,
+        decision_sheet = decision_sheet_resolved,
+        candidates = candidates_resolved,
+        play_in_resolution = play_in_resolution_resolved
+    )
     html_resolved <- create_bracket_dashboard_html(
         bracket_year = loaded_resolved$bracket_year,
-        decision_sheet = build_decision_sheet(candidates_resolved),
+        decision_sheet = decision_sheet_resolved,
         candidates = candidates_resolved,
         current_teams = loaded_resolved$current_teams,
         backtest = fake_quality_backtest,
-        play_in_resolution = summarize_play_in_resolution(loaded_resolved$current_teams, loaded_resolved$current_play_in_results)
+        dashboard_context = context_resolved,
+        play_in_resolution = play_in_resolution_resolved
     )
 
     expect_match(html_resolved, "Status: Final result")
     expect_no_match(html_resolved, "Status: Simulated bracket path")
+    expect_true(any(context_resolved$matchup_context_rows$round == "First Four"))
+    expect_false(any(context_resolved$watchlist_rows$round == "First Four"))
+    expect_false(any(context_resolved$divergence_map_rows$round == "First Four"))
+    expect_no_match(html_resolved, "data-round='First Four'")
+    expect_no_match(html_resolved, "data-divergence-round='First Four'")
+    expect_match(html_resolved, "<td>First Four</td>")
 })

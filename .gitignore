@@ -23,6 +23,8 @@ tests/testthat/*.log
 .history/
 .lintr
 .env
+Rplots.pdf
+docs/first-time-user-audit-*.md
 
 CLAUDE.md
 AGENTS.md
