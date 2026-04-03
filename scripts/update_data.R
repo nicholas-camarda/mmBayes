@@ -23,9 +23,7 @@ config <- load_project_config("config.yml")
 log_path <- config$output$refresh_log_path %||% file.path(config$output$path %||% default_runtime_output_root(), "logs", "data_refresh.log")
 
 initialize_logging(log_path)
-paths <- update_tournament_data(config = config)
+refresh_result <- update_tournament_data(config = config)
 
-cat("Updated tournament data files:\n")
-cat(sprintf("- Team features: %s\n", paths$team_features))
-cat(sprintf("- Tournament game results: %s\n", paths$game_results))
-cat(sprintf("- Refresh log: %s\n", log_path))
+cat(paste(format_refresh_status_summary(refresh_result, log_path = log_path), collapse = "\n"))
+cat("\n")

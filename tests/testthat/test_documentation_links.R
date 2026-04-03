@@ -40,6 +40,15 @@ test_that("README documents the dashboard regeneration workflow and command role
     expect_match(readme_text, "publish_github_pages\\.R.*Lower-level sync helper")
 })
 
+test_that("README explains update_data refresh status outcomes", {
+    repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
+    readme_text <- paste(readLines(file.path(repo_root, "README.md"), warn = FALSE), collapse = "\n")
+
+    expect_match(readme_text, "Refresh status: Success")
+    expect_match(readme_text, "Refresh status: Degraded success")
+    expect_match(readme_text, "do not continue to simulation")
+})
+
 test_that("methods guide documents operational entrypoint roles", {
     repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
     methods_text <- paste(readLines(file.path(repo_root, "docs", "methods-and-interpretation.md"), warn = FALSE), collapse = "\n")

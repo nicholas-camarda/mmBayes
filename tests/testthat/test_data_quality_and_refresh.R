@@ -351,3 +351,156 @@ test_that("parser handles no-contest bracket slots without shifting later rounds
     expect_equal(sum(parsed$region == "National" & parsed$round == "Championship"), 1L)
     expect_false(any(parsed$teamA == "Oregon" & parsed$teamB == "VCU"))
 })
+
+test_that("update_tournament_data returns success when refresh sources complete cleanly", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    bart_ratings <- make_fixture_bart_ratings(team_data)
+    conf_assignments <- make_fixture_conf_assignments(team_data)
+    historical_results <- make_fixture_game_results(team_data, history_years = 2024)
+    current_results <- make_fixture_current_year_completed_results(team_data, current_year = 2025)
+
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    config <- default_project_config()
+    config$data$team_features_path <- team_file
+    config$data$game_results_path <- results_file
+
+    testthat::local_mocked_bindings(
+        scrape_bart_data = function(year) {
+            bart_ratings %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_conf_assignments = function(year) {
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_tournament_results = function(year) {
+            historical_results %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_espn_tournament_results = function(...) {
+            current_results
+        }
+    )
+
+    result <- update_tournament_data(
+        config = config,
+        start_year = 2024L,
+        bracket_year = 2025L,
+        history_window = 1L
+    )
+
+    expect_identical(result$status, "success")
+    expect_equal(result$warning_count, 0L)
+    expect_equal(nrow(result$refresh_issues), 0L)
+    expect_equal(nrow(result$warning_summary), 0L)
+    expect_true(file.exists(result$team_features))
+    expect_true(file.exists(result$game_results))
+})
+
+test_that("update_tournament_data returns degraded success for optional fallback warnings", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    bart_ratings <- make_fixture_bart_ratings(team_data)
+    conf_assignments <- make_fixture_conf_assignments(team_data)
+    historical_results <- make_fixture_game_results(team_data, history_years = 2024)
+
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    config <- default_project_config()
+    config$data$team_features_path <- team_file
+    config$data$game_results_path <- results_file
+
+    testthat::local_mocked_bindings(
+        scrape_bart_data = function(year) {
+            bart_ratings %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_conf_assignments = function(year) {
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_tournament_results = function(year) {
+            historical_results %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_espn_tournament_results = function(...) {
+            stop("ESPN scoreboard temporarily unavailable")
+        }
+    )
+
+    result <- update_tournament_data(
+        config = config,
+        start_year = 2024L,
+        bracket_year = 2025L,
+        history_window = 1L
+    )
+
+    expect_identical(result$status, "degraded_success")
+    expect_gte(result$warning_count, 1L)
+    expect_true(file.exists(result$team_features))
+    expect_true(file.exists(result$game_results))
+    expect_true(any(result$refresh_issues$step == "current_year_scoreboard_fallback"))
+    expect_true(any(grepl("ESPN scoreboard temporarily unavailable", result$refresh_issues$message, fixed = TRUE)))
+    expect_true(any(result$warning_summary$step == "current_year_scoreboard_fallback"))
+})
+
+test_that("update_tournament_data degrades when current-year fallback is empty but allowed", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    bart_ratings <- make_fixture_bart_ratings(team_data)
+    conf_assignments <- make_fixture_conf_assignments(team_data)
+    historical_results <- make_fixture_game_results(team_data, history_years = 2024)
+
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    config <- default_project_config()
+    config$data$team_features_path <- team_file
+    config$data$game_results_path <- results_file
+
+    testthat::local_mocked_bindings(
+        scrape_bart_data = function(year) {
+            bart_ratings %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_conf_assignments = function(year) {
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_tournament_results = function(year) {
+            historical_results %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_espn_tournament_results = function(...) {
+            empty_game_results_table()
+        }
+    )
+
+    result <- update_tournament_data(
+        config = config,
+        start_year = 2024L,
+        bracket_year = 2025L,
+        history_window = 1L
+    )
+
+    expect_identical(result$status, "degraded_success")
+    expect_true(any(grepl("No completed current-year fallback results were available", result$refresh_issues$message, fixed = TRUE)))
+
+    summary_lines <- format_refresh_status_summary(result, log_path = "/tmp/data_refresh.log")
+    expect_true(any(grepl("^Refresh status: Degraded success$", summary_lines)))
+    expect_true(any(grepl("Warnings: 1", summary_lines, fixed = TRUE)))
+    expect_true(any(grepl("/tmp/data_refresh.log", summary_lines, fixed = TRUE)))
+})
+
+test_that("update_tournament_data still fails on required source errors", {
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    config <- default_project_config()
+    config$data$team_features_path <- team_file
+    config$data$game_results_path <- results_file
+
+    testthat::local_mocked_bindings(
+        scrape_bart_data = function(year) {
+            stop(sprintf("Could not pass browser verification for %s", year))
+        }
+    )
+
+    expect_error(
+        update_tournament_data(
+            config = config,
+            start_year = 2024L,
+            bracket_year = 2025L,
+            history_window = 1L
+        ),
+        regexp = "Could not pass browser verification"
+    )
+})

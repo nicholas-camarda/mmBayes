@@ -70,6 +70,11 @@ The checkout is a local workspace. The cloud project root holds the canonical in
 # 1. Refresh the canonical data files in the cloud project root
 Rscript scripts/update_data.R
 
+# If the script ends with "Refresh status: Success", continue normally.
+# If it ends with "Refresh status: Degraded success", you can still continue,
+# but review the listed warnings and the refresh log first.
+# If it fails, do not continue to simulation until the refresh error is fixed.
+
 # 2. Run the full simulation and generate all outputs
 Rscript scripts/run_simulation.R
 

@@ -6,6 +6,142 @@ library(rvest)
 library(stringr)
 library(writexl)
 
+#' Return an empty refresh-issues table
+#'
+#' @return A zero-row tibble with the canonical refresh-issue schema.
+#' @keywords internal
+empty_refresh_issues_table <- function() {
+    tibble::tibble(
+        step = character(),
+        source = character(),
+        severity = character(),
+        message = character()
+    )
+}
+
+#' Append a structured refresh issue
+#'
+#' @param issues Existing refresh issues tibble.
+#' @param step Short internal step identifier.
+#' @param source Human-readable source or subsystem label.
+#' @param severity Issue severity label.
+#' @param message Human-readable issue message.
+#'
+#' @return The refresh issues tibble with the new issue appended.
+#' @keywords internal
+append_refresh_issue <- function(issues,
+                                 step,
+                                 source,
+                                 severity = "warning",
+                                 message) {
+    dplyr::bind_rows(
+        issues %||% empty_refresh_issues_table(),
+        tibble::tibble(
+            step = as.character(step %||% ""),
+            source = as.character(source %||% ""),
+            severity = as.character(severity %||% ""),
+            message = as.character(message %||% "")
+        )
+    )
+}
+
+#' Summarize refresh issues for operator-facing reporting
+#'
+#' @param issues Refresh issues tibble.
+#'
+#' @return A grouped summary tibble with one row per unique issue message.
+#' @keywords internal
+summarize_refresh_issues <- function(issues) {
+    issues <- issues %||% empty_refresh_issues_table()
+    if (nrow(issues) == 0) {
+        return(dplyr::mutate(issues, count = integer()))
+    }
+
+    issues %>%
+        dplyr::count(step, source, severity, message, name = "count", sort = TRUE)
+}
+
+#' Derive the overall refresh status from structured issues
+#'
+#' @param issues Refresh issues tibble.
+#'
+#' @return A scalar status string.
+#' @keywords internal
+refresh_status_from_issues <- function(issues) {
+    issues <- issues %||% empty_refresh_issues_table()
+    if (nrow(issues) == 0) {
+        return("success")
+    }
+
+    "degraded_success"
+}
+
+#' Return an operator-facing label for a refresh status code
+#'
+#' @param status Refresh status code.
+#'
+#' @return A scalar human-readable status label.
+#' @keywords internal
+refresh_status_label <- function(status) {
+    dplyr::case_when(
+        identical(status, "degraded_success") ~ "Degraded success",
+        identical(status, "success") ~ "Success",
+        TRUE ~ "Failure"
+    )
+}
+
+#' Format the final CLI summary for `scripts/update_data.R`
+#'
+#' @param refresh_result Result list returned by [update_tournament_data()].
+#' @param log_path Path to the refresh log file.
+#'
+#' @return A character vector of summary lines.
+#' @keywords internal
+format_refresh_status_summary <- function(refresh_result, log_path) {
+    refresh_result <- refresh_result %||% list()
+    status <- refresh_result$status %||% "failure"
+    status_label <- refresh_status_label(status)
+    warning_summary <- refresh_result$warning_summary %||% tibble::tibble()
+    warning_count <- safe_numeric(refresh_result$warning_count %||% 0L, default = 0L)
+
+    headline <- if (identical(status, "degraded_success")) {
+        "Canonical files were written and quality checks passed, but some optional refresh steps were skipped or downgraded."
+    } else if (identical(status, "success")) {
+        "Canonical files were written and all refresh steps completed cleanly."
+    } else {
+        "The refresh did not complete successfully."
+    }
+
+    lines <- c(
+        sprintf("Refresh status: %s", status_label),
+        headline,
+        sprintf("- Team features: %s", refresh_result$team_features %||% "n/a"),
+        sprintf("- Tournament game results: %s", refresh_result$game_results %||% "n/a"),
+        sprintf("- Refresh log: %s", log_path %||% "n/a")
+    )
+
+    if (warning_count > 0L && nrow(warning_summary) > 0) {
+        warning_lines <- purrr::map_chr(seq_len(nrow(warning_summary)), function(index) {
+            row <- warning_summary[index, , drop = FALSE]
+            prefix <- sprintf("- [%s] %s", row$step[[1]], row$message[[1]])
+            count_value <- safe_numeric(row$count[[1]], default = 1L)
+            if (count_value > 1L) {
+                paste0(prefix, sprintf(" (x%s)", as.integer(round(count_value))))
+            } else {
+                prefix
+            }
+        })
+        lines <- c(
+            lines,
+            sprintf("- Warnings: %s", as.integer(round(warning_count))),
+            "Warning summary:",
+            warning_lines
+        )
+    }
+
+    lines
+}
+
 #' Read HTML with a simple verification fallback
 #'
 #' @param url A URL to request and parse as HTML.
@@ -103,22 +239,40 @@ scrape_conf_assignments <- function(year) {
     )
     logger::log_info("Scraping conference assignments from {url}")
 
-    page <- tryCatch(
-        read_html_verified(url),
+    page_result <- tryCatch(
+        list(
+            page = read_html_verified(url),
+            issues = empty_refresh_issues_table()
+        ),
         error = function(error) {
-            logger::log_warn("Skipping conference assignments for year {year}: {error$message}")
-            NULL
+            issue_message <- sprintf(
+                "Skipping conference assignments for year %s: %s",
+                year,
+                error$message
+            )
+            logger::log_warn(issue_message)
+            issue_table <- empty_refresh_issues_table() %>%
+                append_refresh_issue(
+                    step = "conference_assignments",
+                    source = "Bart Torvik Tourney Time",
+                    severity = "warning",
+                    message = issue_message
+                )
+            list(page = NULL, issues = issue_table)
         }
     )
-    if (is.null(page)) {
-        return(tibble::tibble(
+    if (is.null(page_result$page)) {
+        empty_tbl <- tibble::tibble(
             Year = character(),
             Team = character(),
             Seed = integer(),
             Region = character(),
             Conf = character()
-        ))
+        )
+        attr(empty_tbl, "refresh_issues") <- page_result$issues %||% empty_refresh_issues_table()
+        return(empty_tbl)
     }
+    page <- page_result$page
 
     table <- extract_primary_table(page, url, expected_header_tokens = c("Seed", "Region", "Team", "Conf"))
 
@@ -1215,6 +1369,15 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
     dir.create(dirname(team_features_file), showWarnings = FALSE, recursive = TRUE)
     dir.create(dirname(game_results_file), showWarnings = FALSE, recursive = TRUE)
 
+    refresh_issues <- empty_refresh_issues_table()
+    register_refresh_issues <- function(issues) {
+        issues <- issues %||% empty_refresh_issues_table()
+        if (nrow(issues) > 0) {
+            refresh_issues <<- dplyr::bind_rows(refresh_issues, issues)
+        }
+        invisible(NULL)
+    }
+
     start_year <- start_year %||% max(2008L, bracket_year - history_window - 2L)
     historical_years <- seq.int(start_year, bracket_year)
     historical_years <- historical_years[historical_years != 2020L]
@@ -1230,7 +1393,9 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
 
     conf_assignments <- purrr::map_dfr(historical_years, function(year) {
         logger::log_info("Refreshing tournament roster for {year}")
-        scrape_conf_assignments(year)
+        conf_tbl <- scrape_conf_assignments(year)
+        register_refresh_issues(attr(conf_tbl, "refresh_issues", exact = TRUE))
+        conf_tbl
     })
 
     logger::log_info("Joining tournament rosters to year-wide Bart ratings")
@@ -1256,10 +1421,39 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
     current_year_fallback <- tryCatch(
         scrape_espn_tournament_results(bracket_year, team_features),
         error = function(err) {
-            logger::log_warn("Skipping ESPN scoreboard fallback for {bracket_year}: {err$message}")
+            issue_message <- sprintf(
+                "Skipping ESPN scoreboard fallback for %s: %s",
+                bracket_year,
+                err$message
+            )
+            logger::log_warn(issue_message)
+            register_refresh_issues(
+                append_refresh_issue(
+                    empty_refresh_issues_table(),
+                    step = "current_year_scoreboard_fallback",
+                    source = "ESPN scoreboard API",
+                    severity = "warning",
+                    message = issue_message
+                )
+            )
             empty_game_results_table()
         }
     )
+    if (nrow(current_year_fallback) == 0 &&
+        !any(refresh_issues$step == "current_year_scoreboard_fallback")) {
+        register_refresh_issues(
+            append_refresh_issue(
+                empty_refresh_issues_table(),
+                step = "current_year_scoreboard_fallback",
+                source = "ESPN scoreboard API",
+                severity = "warning",
+                message = sprintf(
+                    "No completed current-year fallback results were available for %s; current-year rows remain empty until games are completed.",
+                    bracket_year
+                )
+            )
+        )
+    }
     tournament_results <- dplyr::bind_rows(tournament_results, current_year_results)
     tournament_results <- merge_current_year_tournament_results(
         game_results = tournament_results,
@@ -1278,8 +1472,15 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
     logger::log_info("Wrote team features to {team_features_file}")
     logger::log_info("Wrote tournament results to {game_results_file}")
 
+    warning_summary <- summarize_refresh_issues(refresh_issues)
+    status <- refresh_status_from_issues(refresh_issues)
+
     list(
         team_features = team_features_file,
-        game_results = game_results_file
+        game_results = game_results_file,
+        status = status,
+        warning_count = nrow(refresh_issues),
+        refresh_issues = refresh_issues,
+        warning_summary = warning_summary
     )
 }
