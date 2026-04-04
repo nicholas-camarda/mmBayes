@@ -38,6 +38,8 @@ test_that("README documents the dashboard regeneration workflow and command role
     expect_match(readme_text, "Preferred dashboard-refresh command")
     expect_match(readme_text, "run_bracket_candidates\\.R.*not the right command for CSS/layout-only iteration")
     expect_match(readme_text, "publish_github_pages\\.R.*Lower-level sync helper")
+    expect_match(readme_text, "~/ProjectsRuntime/mmBayes/output")
+    expect_match(readme_text, "macOS: use `open`")
 })
 
 test_that("README explains update_data refresh status outcomes", {

@@ -1664,6 +1664,24 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
         )
     }
 
+    build_candidate_comparison_summary <- function(candidate_id, diff_count, late_round_diff_count) {
+        if (identical(as.integer(candidate_id), 1L)) {
+            return(list(
+                label = "Card role",
+                value = "Baseline reference"
+            ))
+        }
+
+        list(
+            label = "Changed slots from baseline",
+            value = sprintf(
+                "%s total | %s late-round",
+                safe_numeric(diff_count, default = 0L),
+                safe_numeric(late_round_diff_count, default = 0L)
+            )
+        )
+    }
+
     candidate_summary_rows <- purrr::map_dfr(candidates, function(candidate) {
         if (nrow(total_points_summary) > 0 && "candidate_id" %in% names(total_points_summary)) {
             tiebreaker_row <- total_points_summary %>%
@@ -1672,11 +1690,12 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
             tiebreaker_row <- tibble::tibble()
         }
         path_summary <- summarize_candidate_path(candidate$matchups)
-        candidate_diff_count <- if (candidate$candidate_id == 1L) {
-            diff_count
-        } else {
-            diff_count
-        }
+        candidate_diff_count <- diff_count
+        comparison_summary <- build_candidate_comparison_summary(
+            candidate_id = candidate$candidate_id,
+            diff_count = candidate_diff_count,
+            late_round_diff_count = late_round_diff_count
+        )
         tibble::tibble(
             candidate_id = candidate$candidate_id,
             candidate_type = candidate$type %||% "unknown",
@@ -1694,6 +1713,8 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
             diff_count = candidate_diff_count,
             late_round_diff_count = late_round_diff_count,
             identity_text = build_identity_text(candidate, diff_count = candidate_diff_count, late_round_diff_count = late_round_diff_count),
+            comparison_summary_label = comparison_summary$label %||% NA_character_,
+            comparison_summary_value = comparison_summary$value %||% NA_character_,
             path_link = sprintf("#candidate-path-%s", candidate$candidate_id),
             evidence_link = "#evidence"
         )
