@@ -462,6 +462,15 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(divergence_map_pos > 0)
     expect_true(divergence_map_pos < diff_reference_pos)
 
+    dashboard_doc <- xml2::read_html(dashboard_html)
+    reference_panels <- rvest::html_elements(dashboard_doc, "details.evidence-panel[data-surface='All matchups']")
+    expect_true(length(reference_panels) > 0)
+    reference_panel_text <- rvest::html_text2(reference_panels[[1]])
+    expect_match(reference_panel_text, "Reference matchup\\. Use this drawer when you want the evidence inputs behind a specific node\\.")
+    expect_match(reference_panel_text, "Candidate usage")
+    expect_match(reference_panel_text, "C1:")
+    expect_match(reference_panel_text, "C2:")
+
     technical_html <- create_technical_dashboard_html(
         bracket_year = 2026L,
         decision_sheet = decision_sheet,
@@ -946,6 +955,21 @@ test_that("divergence map summary keeps empty buckets and path-only splits disti
     expect_equal(unsurfaced_bucket$path_only_count[[1]], 0L)
     expect_false(unsurfaced_bucket$all_in_watchlist[[1]])
     expect_equal(unsurfaced_bucket$unsurfaced_count[[1]], 1L)
+})
+
+test_that("candidate usage helper formats picks consistently", {
+    expect_identical(
+        build_candidate_usage_label("Duke", "Florida", FALSE, TRUE),
+        "C1: Duke (Favorite); C2: Florida (Underdog)"
+    )
+    expect_identical(
+        build_candidate_usage_label("Houston", "Houston", NA, NA),
+        "C1: Houston (Favorite); C2: Houston (Favorite)"
+    )
+    expect_identical(
+        build_candidate_usage_label(NA_character_, "Auburn", NA, TRUE),
+        "C1: n/a; C2: Auburn (Underdog)"
+    )
 })
 
 test_that("actual First Four winners replace stale Round of 64 opponents", {

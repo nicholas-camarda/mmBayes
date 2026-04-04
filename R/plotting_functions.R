@@ -4472,6 +4472,11 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     }
 
     evidence_seed <- decision_sheet %||% tibble::tibble()
+    evidence_candidate_usage <- if ("candidate_usage" %in% names(evidence_seed)) {
+        as.character(evidence_seed$candidate_usage)
+    } else {
+        rep(NA_character_, nrow(evidence_seed))
+    }
 
     watchlist_lookup <- watchlist_rows %||% tibble::tibble()
     required_watchlist_cols <- c("slot_key", "reason_surface", "why_this_matters", "downstream_implication_text")
@@ -4496,7 +4501,20 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         dplyr::mutate(
             slot_key = as.character(slot_key),
             evidence_id = paste0("evidence-", slot_key),
-            late_round_only = as.character(round) %in% c("Sweet 16", "Elite 8", "Final Four", "Championship")
+            late_round_only = as.character(round) %in% c("Sweet 16", "Elite 8", "Final Four", "Championship"),
+            candidate_usage = dplyr::coalesce(
+                evidence_candidate_usage,
+                vapply(
+                    seq_len(dplyr::n()),
+                    function(index) build_candidate_usage_label(
+                        candidate_1_pick = candidate_1_pick[[index]],
+                        candidate_2_pick = candidate_2_pick[[index]],
+                        candidate_1_upset = candidate_1_upset[[index]],
+                        candidate_2_upset = candidate_2_upset[[index]]
+                    ),
+                    character(1)
+                )
+            )
         ) %>%
         dplyr::left_join(watchlist_lookup, by = "slot_key") %>%
         dplyr::mutate(

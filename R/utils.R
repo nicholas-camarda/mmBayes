@@ -1270,6 +1270,40 @@ build_flip_rationale <- function(comparison_row) {
     "Controlled alternate path with a plausible downstream payoff."
 }
 
+#' Build a canonical candidate-usage label for dashboard summaries
+#'
+#' @param candidate_1_pick Candidate 1's selected team.
+#' @param candidate_2_pick Candidate 2's selected team.
+#' @param candidate_1_upset Whether Candidate 1 is taking the underdog.
+#' @param candidate_2_upset Whether Candidate 2 is taking the underdog.
+#'
+#' @return A single-line usage label for dashboard cards and evidence chips.
+#' @keywords internal
+build_candidate_usage_label <- function(candidate_1_pick, candidate_2_pick, candidate_1_upset = FALSE, candidate_2_upset = FALSE) {
+    format_pick <- function(prefix, pick, upset_flag) {
+        pick_text <- NA_character_
+        if (length(pick) > 0) {
+            pick_value <- pick[[1]]
+            if (!is.null(pick_value) && !(length(pick_value) == 1L && is.na(pick_value))) {
+                pick_text <- trimws(as.character(pick_value))
+            }
+        }
+
+        if (is.na(pick_text) || !nzchar(pick_text)) {
+            return(sprintf("%s: n/a", prefix))
+        }
+
+        usage_label <- if (isTRUE(upset_flag)) "Underdog" else "Favorite"
+        sprintf("%s: %s (%s)", prefix, pick_text, usage_label)
+    }
+
+    paste(
+        format_pick("C1", candidate_1_pick, candidate_1_upset),
+        format_pick("C2", candidate_2_pick, candidate_2_upset),
+        sep = "; "
+    )
+}
+
 #' Build the bracket dashboard context used by the main HTML page
 #'
 #' @param current_teams A current-year team feature table.
@@ -1544,12 +1578,15 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
     watchlist_rows <- dplyr::bind_rows(bracket_rows, upset_rows, fragile_rows) %>%
         dplyr::mutate(
             late_round_only = as.character(round) %in% c("Sweet 16", "Elite 8", "Final Four", "Championship"),
-            candidate_usage = sprintf(
-                "C1: %s (%s); C2: %s (%s)",
-                candidate_1_pick,
-                candidate_1_usage_label,
-                candidate_2_pick,
-                candidate_2_usage_label
+            candidate_usage = vapply(
+                seq_len(n()),
+                function(index) build_candidate_usage_label(
+                    candidate_1_pick = candidate_1_pick[[index]],
+                    candidate_2_pick = candidate_2_pick[[index]],
+                    candidate_1_upset = candidate_1_upset[[index]],
+                    candidate_2_upset = candidate_2_upset[[index]]
+                ),
+                character(1)
             ),
             why_this_matters = dplyr::coalesce(why_this_matters, alternate_rationale, rationale_short),
             downstream_implication_text = dplyr::if_else(
