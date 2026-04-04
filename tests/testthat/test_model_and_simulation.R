@@ -455,6 +455,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(dashboard_html, "Need more diagnostics?")
     expect_match(dashboard_html, "Core metrics")
     expect_match(dashboard_html, "Model-facing matchup diffs")
+    expect_match(dashboard_html, "Diff favors")
     expect_match(dashboard_html, "Favorite probability")
     expect_match(dashboard_html, "Candidate usage")
     divergence_map_pos <- regexpr("Divergence Map", dashboard_html, fixed = TRUE)[[1]]
@@ -470,6 +471,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(reference_panel_text, "Candidate usage")
     expect_match(reference_panel_text, "C1:")
     expect_match(reference_panel_text, "C2:")
+    expect_match(reference_panel_text, "Diff favors")
 
     technical_html <- create_technical_dashboard_html(
         bracket_year = 2026L,
@@ -518,6 +520,8 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(technical_html, "2018, 2019, 2020")
     expect_match(technical_html, "How to read this chart")
     expect_match(technical_html, "each point groups held-out games into a probability range")
+    expect_match(technical_html, "Additional model detail")
+    expect_false(grepl("Engine settings and feature detail", technical_html, fixed = TRUE))
     expect_match(technical_html, "This is about long-run frequency matching")
     expect_match(technical_html, "Observed win rate")
     expect_match(technical_html, "Observed win rate in that probability range")
@@ -605,7 +609,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(bart_dashboard_html, "n_trees")
     expect_match(bart_dashboard_html, "n_post")
     expect_match(bart_dashboard_html, "Model Overview")
-    expect_match(bart_dashboard_html, "Engine settings")
+    expect_match(bart_dashboard_html, "BART settings")
     expect_match(bart_dashboard_html, "Cached identical validation snapshot")
 
     alt_backtest <- list(

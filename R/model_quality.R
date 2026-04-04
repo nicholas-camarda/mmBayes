@@ -99,6 +99,7 @@ summarize_model_overview <- function(model_results, draws = NULL) {
         prior_type = model_results$prior_type %||% NULL,
         draw_budget = draw_budget,
         predictor_count = length(feature_columns),
+        predictor_columns = feature_columns,
         betting_predictor_count = betting_predictor_count,
         predictor_summary = if (length(feature_columns) == 0) {
             "No predictors were recorded."

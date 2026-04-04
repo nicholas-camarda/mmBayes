@@ -1067,18 +1067,83 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
         "No explicit interaction terms were supplied."
     }
 
-    render_feature_detail_html <- function(overview) {
+    render_model_detail_html <- function(overview) {
         interaction_terms <- overview$interaction_terms %||% character(0)
-        paste0(
-            "<div class='quality-card reference-callout'>",
-            "<h4>Feature detail</h4>",
-            "<p>", html_escape(overview$predictor_summary %||% "No predictors were recorded."), "</p>",
-            if (length(interaction_terms) > 0) {
-                paste0("<p><strong>Interactions:</strong> ", html_escape(paste(interaction_terms, collapse = ", ")), "</p>")
+        predictor_columns <- overview$predictor_columns %||% character(0)
+        detail_cards <- character(0)
+
+        if (identical(overview$engine, "bart")) {
+            bart_config <- overview$bart_config %||% list()
+            bart_rows <- tibble::tibble(
+                Setting = c("n_trees", "n_burn", "n_post", "k", "power"),
+                Value = c(
+                    bart_config$n_trees %||% NA_integer_,
+                    bart_config$n_burn %||% NA_integer_,
+                    bart_config$n_post %||% NA_integer_,
+                    bart_config$k %||% NA_real_,
+                    bart_config$power %||% NA_real_
+                )
+            )
+            detail_cards <- c(
+                detail_cards,
+                paste0(
+                    "<div class='quality-card reference-callout'><h4>BART settings</h4>",
+                    render_html_table(bart_rows),
+                    "</div>"
+                )
+            )
+        } else if (!is.null(overview$prior_type) && nzchar(as.character(overview$prior_type)[[1]])) {
+            detail_cards <- c(
+                detail_cards,
+                paste0(
+                    "<div class='quality-card reference-callout'><h4>Prior settings</h4>",
+                    render_html_table(tibble::tibble(
+                        Setting = "Prior type",
+                        Value = overview$prior_type %||% "default"
+                    )),
+                    "</div>"
+                )
+            )
+        }
+
+        if (length(predictor_columns) > 6L) {
+            detail_cards <- c(
+                detail_cards,
+                paste0(
+                    "<div class='quality-card reference-callout'>",
+                    "<h4>Full predictor list</h4>",
+                    "<p>", html_escape(paste(predictor_columns, collapse = ", ")), "</p>",
+                    "</div>"
+                )
+            )
+        }
+
+        if (length(interaction_terms) > 0) {
+            detail_cards <- c(
+                detail_cards,
+                paste0(
+                    "<div class='quality-card reference-callout'>",
+                    "<h4>Interaction terms</h4>",
+                    "<p>", html_escape(paste(interaction_terms, collapse = ", ")), "</p>",
+                    "</div>"
+                )
+            )
+        }
+
+        if (length(detail_cards) == 0) {
+            return("")
+        }
+
+        render_dashboard_disclosure_html(
+            title = "Additional model detail",
+            role = "reference",
+            note = if (identical(overview$engine, "bart")) {
+                "Tuning settings and expanded predictor detail."
             } else {
-                "<p class='summary-note'>No explicit interaction terms were supplied for this fit.</p>"
+                "Prior settings and expanded predictor detail."
             },
-            "</div>"
+            open = FALSE,
+            body = paste(detail_cards, collapse = "")
         )
     }
 
@@ -1086,31 +1151,6 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
         render_model_card <- function(title, overview) {
             if (is.null(overview) || length(overview) == 0) {
                 return("")
-            }
-
-            bart_config <- overview$bart_config %||% list()
-            bart_rows <- if (identical(overview$engine, "bart")) {
-                tibble::tibble(
-                    Setting = c("n_trees", "n_burn", "n_post", "k", "power"),
-                    Value = c(
-                        bart_config$n_trees %||% NA_integer_,
-                        bart_config$n_burn %||% NA_integer_,
-                        bart_config$n_post %||% NA_integer_,
-                        bart_config$k %||% NA_real_,
-                        bart_config$power %||% NA_real_
-                    )
-                )
-            } else {
-                tibble::tibble(
-                    Setting = c("Engine", "Prior type"),
-                    Value = c(overview$engine_label %||% overview$engine %||% "Unknown", overview$prior_type %||% "default")
-                )
-            }
-
-            details_note <- if (identical(overview$engine, "bart")) {
-                "Tree settings and recorded feature mix."
-            } else {
-                "Prior settings and recorded feature mix."
             }
 
             paste0(
@@ -1122,20 +1162,7 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
                 "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(as.character(overview$predictor_count %||% 0L)), "</div><p class='summary-note'>", html_escape(overview$predictor_summary %||% "No predictors were recorded."), "</p></div>",
                 "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(overview$interaction_terms %||% character(0)) > 0) "Interactions on" else "No explicit terms"), "</div><p class='summary-note'>", html_escape(feature_mix_note(overview)), "</p></div>",
                 "</div>",
-                render_dashboard_disclosure_html(
-                    title = "Engine settings and feature detail",
-                    role = "reference",
-                    note = details_note,
-                    open = FALSE,
-                    body = paste0(
-                        if (nrow(bart_rows) > 0) paste0(
-                            "<div class='quality-card reference-callout'><h4>Engine settings</h4>",
-                            render_html_table(bart_rows),
-                            "</div>"
-                        ) else "",
-                        render_feature_detail_html(overview)
-                    )
-                ),
+                render_model_detail_html(overview),
                 "</div>"
             )
         }
@@ -1164,27 +1191,8 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
     engine_label <- model_overview$engine_label %||% model_overview$engine %||% "Unknown"
     draw_budget <- model_overview$draw_budget %||% NA_real_
     predictor_summary <- model_overview$predictor_summary %||% "No predictors were recorded."
-    bart_config <- model_overview$bart_config %||% list()
-    prior_type <- model_overview$prior_type %||% NULL
     interaction_terms <- model_overview$interaction_terms %||% character(0)
-
-    bart_rows <- if (identical(model_overview$engine, "bart")) {
-        tibble::tibble(
-            Setting = c("n_trees", "n_burn", "n_post", "k", "power"),
-            Value = c(
-                bart_config$n_trees %||% NA_integer_,
-                bart_config$n_burn %||% NA_integer_,
-                bart_config$n_post %||% NA_integer_,
-                bart_config$k %||% NA_real_,
-                bart_config$power %||% NA_real_
-            )
-        )
-    } else {
-        tibble::tibble(
-            Setting = c("Engine", "Prior type"),
-            Value = c(engine_label, prior_type %||% "default")
-        )
-    }
+    bart_config <- model_overview$bart_config %||% list()
 
     summary_cards <- paste0(
         "<div class='overview-grid'>",
@@ -1194,16 +1202,6 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
         "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(interaction_terms) > 0) "Interactions on" else "No explicit terms"), "</div><p class='summary-note'>", html_escape(feature_mix_note(model_overview)), "</p></div>",
         "</div>"
     )
-
-    bart_table <- if (nrow(bart_rows) > 0) {
-        paste0(
-            "<div class='quality-card'><h3>Engine settings</h3>",
-            render_html_table(bart_rows),
-            "</div>"
-        )
-    } else {
-        ""
-    }
 
     if (compact) {
         paste0(
@@ -1218,18 +1216,7 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
         paste0(
             "<div class='panel'><h2>Model Overview</h2>",
             summary_cards,
-            render_dashboard_disclosure_html(
-                title = "Engine settings and feature detail",
-                role = "reference",
-                note = if (identical(model_overview$engine, "bart")) "Tree settings and predictor summary." else "Prior settings and predictor summary.",
-                open = FALSE,
-                body = paste0(
-                    "<div class='quality-grid'>",
-                    bart_table,
-                    render_feature_detail_html(model_overview),
-                    "</div>"
-                )
-            ),
+            render_model_detail_html(model_overview),
             "</div>"
         )
     }
@@ -4064,53 +4051,55 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     }
 
     render_diff_table <- function(row) {
-        metric_rows <- tibble::tibble(
+        team_a_name <- row_value(row, "teamA", row_value(row, "teamA_Team", "Team A"))
+        team_b_name <- row_value(row, "teamB", row_value(row, "teamB_Team", "Team B"))
+        feature_specs <- tibble::tibble(
             Feature = c("same_conf", "Seed", "Barthag logit", "AdjOE", "AdjDE", "WAB", "TOR", "TORD", "ORB", "DRB", "3P%", "3P%D", "Adj T."),
-            `Team A` = c(
-                display_value(row_value(row, "same_conf", NA_integer_), digits = 0L),
-                display_value(row_value(row, "teamA_Seed", NA_real_), digits = 0L),
-                display_value(row_value(row, "teamA_barthag_logit", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamA_AdjOE", NA_real_), digits = 1L),
-                display_value(row_value(row, "teamA_AdjDE", NA_real_), digits = 1L),
-                display_value(row_value(row, "teamA_WAB", NA_real_), digits = 1L),
-                display_value(row_value(row, "teamA_TOR", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamA_TORD", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamA_ORB", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamA_DRB", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamA_3P%", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamA_3P%D", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamA_Adj T.", NA_real_), digits = 1L)
-            ),
-            `Team B` = c(
-                display_value(row_value(row, "same_conf", NA_integer_), digits = 0L),
-                display_value(row_value(row, "teamB_Seed", NA_real_), digits = 0L),
-                display_value(row_value(row, "teamB_barthag_logit", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamB_AdjOE", NA_real_), digits = 1L),
-                display_value(row_value(row, "teamB_AdjDE", NA_real_), digits = 1L),
-                display_value(row_value(row, "teamB_WAB", NA_real_), digits = 1L),
-                display_value(row_value(row, "teamB_TOR", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamB_TORD", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamB_ORB", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamB_DRB", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamB_3P%", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamB_3P%D", NA_real_), digits = 3L),
-                display_value(row_value(row, "teamB_Adj T.", NA_real_), digits = 1L)
-            ),
-            Diff = c(
-                display_value(row_value(row, "same_conf", NA_integer_), digits = 0L),
-                display_value(row_value(row, "seed_diff", NA_real_), digits = 0L),
-                display_value(row_value(row, "barthag_logit_diff", NA_real_), digits = 3L),
-                display_value(row_value(row, "AdjOE_diff", NA_real_), digits = 1L),
-                display_value(row_value(row, "AdjDE_diff", NA_real_), digits = 1L),
-                display_value(row_value(row, "WAB_diff", NA_real_), digits = 1L),
-                display_value(row_value(row, "TOR_diff", NA_real_), digits = 3L),
-                display_value(row_value(row, "TORD_diff", NA_real_), digits = 3L),
-                display_value(row_value(row, "ORB_diff", NA_real_), digits = 3L),
-                display_value(row_value(row, "DRB_diff", NA_real_), digits = 3L),
-                display_value(row_value(row, "3P%_diff", NA_real_), digits = 3L),
-                display_value(row_value(row, "3P%D_diff", NA_real_), digits = 3L),
-                display_value(row_value(row, "Adj T._diff", NA_real_), digits = 1L)
-            )
+            team_a_column = c("same_conf", "teamA_Seed", "teamA_barthag_logit", "teamA_AdjOE", "teamA_AdjDE", "teamA_WAB", "teamA_TOR", "teamA_TORD", "teamA_ORB", "teamA_DRB", "teamA_3P%", "teamA_3P%D", "teamA_Adj T."),
+            team_b_column = c("same_conf", "teamB_Seed", "teamB_barthag_logit", "teamB_AdjOE", "teamB_AdjDE", "teamB_WAB", "teamB_TOR", "teamB_TORD", "teamB_ORB", "teamB_DRB", "teamB_3P%", "teamB_3P%D", "teamB_Adj T."),
+            diff_column = c("same_conf", "seed_diff", "barthag_logit_diff", "AdjOE_diff", "AdjDE_diff", "WAB_diff", "TOR_diff", "TORD_diff", "ORB_diff", "DRB_diff", "3P%_diff", "3P%D_diff", "Adj T._diff"),
+            digits = c(0L, 0L, 3L, 1L, 1L, 1L, 3L, 3L, 3L, 3L, 3L, 3L, 1L),
+            preferred_direction = c("neutral", "lower", "higher", "higher", "lower", "higher", "lower", "higher", "higher", "higher", "higher", "lower", "neutral")
+        )
+
+        favor_label <- function(diff_value, preferred_direction) {
+            if (!is.finite(diff_value)) {
+                return("n/a")
+            }
+            if (identical(preferred_direction, "neutral")) {
+                return("Context only")
+            }
+            if (abs(diff_value) < 1e-9) {
+                return("Even")
+            }
+            if (identical(preferred_direction, "higher")) {
+                return(if (diff_value > 0) team_a_name else team_b_name)
+            }
+            if (identical(preferred_direction, "lower")) {
+                return(if (diff_value < 0) team_a_name else team_b_name)
+            }
+            "n/a"
+        }
+
+        team_a_values <- purrr::map2_chr(feature_specs$team_a_column, feature_specs$digits, function(column_name, digits) {
+            display_value(row_value(row, column_name, NA_real_), digits = digits)
+        })
+        team_b_values <- purrr::map2_chr(feature_specs$team_b_column, feature_specs$digits, function(column_name, digits) {
+            display_value(row_value(row, column_name, NA_real_), digits = digits)
+        })
+        diff_numeric <- purrr::map_dbl(feature_specs$diff_column, function(column_name) {
+            safe_numeric(row_value(row, column_name, NA_real_), default = NA_real_)
+        })
+        diff_values <- purrr::map2_chr(feature_specs$diff_column, feature_specs$digits, function(column_name, digits) {
+            display_value(row_value(row, column_name, NA_real_), digits = digits)
+        })
+
+        metric_rows <- tibble::tibble(
+            Feature = feature_specs$Feature,
+            !!team_a_name := team_a_values,
+            !!team_b_name := team_b_values,
+            Diff = diff_values,
+            `Diff favors` = purrr::map2_chr(diff_numeric, feature_specs$preferred_direction, favor_label)
         )
 
         render_value_table("Model-facing matchup diffs", metric_rows)
