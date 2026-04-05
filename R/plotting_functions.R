@@ -800,6 +800,7 @@ render_dashboard_term_legend_html <- function() {
     paste0(
         "<section class='term-legend' aria-label='Key terms'>",
         "<div class='term-legend__label'>Key terms</div>",
+        "<p class='term-legend__intro'>Short labels you will see on cards, tables, and evidence drawers.</p>",
         "<div class='term-legend__grid'>",
         chips,
         "</div>",
@@ -814,20 +815,33 @@ render_dashboard_term_legend_html <- function() {
 #' @keywords internal
 render_dashboard_reading_guide_html <- function() {
     paste0(
-        "<div class='guide-grid'>",
-        "<div class='guide-card'>",
+        "<section class='reading-guide' aria-label='How to read this workspace'>",
+        "<div class='reading-guide__hero'>",
+        "<div class='reading-guide__eyebrow'>Quick orientation</div>",
+        "<h3 class='reading-guide__title'>Read the signal first, then open evidence only when the call still matters.</h3>",
+        "<p class='reading-guide__lede'>The review queue tells you what deserves attention. The confidence styling tells you how stable the current recommendation is. The evidence drawers are for the handful of games where you still want the deeper matchup detail.</p>",
+        "</div>",
+        "<div class='reading-guide__section'>",
         "<div class='guide-label'>How to read a row</div>",
-        "<p><strong>Dot:</strong> posterior mean probability.</p>",
-        "<p><strong>Bar:</strong> posterior interval around that mean.</p>",
-        "<p><strong>Color:</strong> confidence tier from Lock through Volatile.</p>",
+        "<div class='reading-guide__cards'>",
+        "<div class='reading-guide__card'><strong>Dot</strong><span>Posterior mean probability for the recommended side.</span></div>",
+        "<div class='reading-guide__card'><strong>Bar</strong><span>Posterior interval around that mean, showing how much uncertainty still remains.</span></div>",
+        "<div class='reading-guide__card'><strong>Color</strong><span>Confidence tier from Lock through Volatile so you can scan stability quickly.</span></div>",
         "</div>",
-        "<div class='guide-card'>",
-        "<div class='guide-label'>Why the rows are ordered this way</div>",
-        "<p>The ranked board sorts by decision score so the most consequential calls rise first.</p>",
-        "<p>The upset board sorts by leverage so the highest-payoff underdog pivots are obvious.</p>",
-        "<p>The divergence map shows where Candidate 2 splits from Candidate 1, with late-round route changes carrying more visual weight.</p>",
         "</div>",
-        "</div>"
+        "<div class='reading-guide__section'>",
+        "<div class='guide-label'>Why the boards are ordered this way</div>",
+        "<div class='reading-guide__cards'>",
+        "<div class='reading-guide__card'><strong>Ranked board</strong><span>Sorted by decision score so the most consequential calls rise first.</span></div>",
+        "<div class='reading-guide__card'><strong>Upset board</strong><span>Sorted by leverage so the highest-payoff underdog pivots are obvious.</span></div>",
+        "<div class='reading-guide__card'><strong>Divergence map</strong><span>Shows where Candidate 2 splits from Candidate 1, with late-round route changes carrying more visual weight.</span></div>",
+        "</div>",
+        "</div>",
+        "<div class='reading-guide__section reading-guide__section--legend'>",
+        "<div class='guide-label'>Confidence tiers</div>",
+        render_confidence_legend_html(),
+        "</div>",
+        "</section>"
     )
 }
 
@@ -1603,7 +1617,7 @@ render_model_comparison_summary_html <- function(model_comparison) {
 create_model_comparison_dashboard_html <- function(bracket_year, model_comparison) {
     if (is.null(model_comparison) || length(model_comparison) == 0) {
         return(paste0(
-            "<!DOCTYPE html><html><head><meta charset='utf-8'><title>mmBayes Model Comparison</title></head><body>",
+            "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>mmBayes Model Comparison</title></head><body>",
             "<h1>mmBayes Model Comparison</h1>",
             "<p class='empty-state'>Model comparison was not supplied for this run.</p>",
             "<p><a href='", dashboard_preview_url("technical_dashboard.html"), "'>Back to the technical dashboard</a></p>",
@@ -1620,10 +1634,10 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
     }
 
     paste0(
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>",
         "<title>mmBayes Model Comparison</title>",
         "<style>",
-        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f1e8;color:#111827;margin:0;padding:24px;line-height:1.5;}",
+        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f1e8;color:#111827;margin:0;padding:24px;line-height:1.5;overflow-x:hidden;}",
         "h1,h2,h3{margin:0 0 8px 0;} h1{font-size:32px;} h2{margin-top:26px;font-size:21px;} h3{font-size:17px;}",
         ".lede{max-width:980px;color:#374151;margin:8px 0 18px 0;}",
         ".panel{background:white;border:1px solid #d6d3d1;border-radius:16px;padding:18px;box-shadow:0 2px 10px rgba(15,23,42,0.04);margin-bottom:18px;}",
@@ -1666,7 +1680,9 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         ".diagnostic-callout{margin:10px 0 0 0;padding:12px 14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;}",
         ".diagnostic-callout strong{display:block;margin-bottom:8px;}",
         dashboard_disclosure_css(),
+        "@media (max-width: 1024px){body{padding:18px;}.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.overview-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}.panel,.summary-card,.quality-card{padding:16px;}}",
         "@media (max-width: 900px){.quality-grid,.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.tech-svg-compact{max-width:none;}}",
+        "@media (max-width: 640px){body{padding:14px;}.panel,.summary-card,.quality-card{padding:14px;}.comparison-tab-bar{gap:8px;}.toggle-button{width:100%;justify-content:center;}.summary-value{font-size:20px;}h1{font-size:28px;}}",
         "</style></head><body>",
         "<h1>mmBayes Model Comparison</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year), ". This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " so you can judge calibration, accuracy, and live behavior without mixing the comparison into the main bracket workflow.</p>",
@@ -1901,7 +1917,7 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
     }
 
     paste0(
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>",
         "<title>mmBayes Bracket Dashboard</title>",
         "<style>",
         "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f7f4ee;color:#1b1b1b;margin:0;padding:24px;line-height:1.4;}",
@@ -1937,13 +1953,26 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         ".legend-copy{font-size:12px;color:#6b7280;}",
         ".legend-primary{background:#fbbf24;}",
         ".legend-secondary{background:#fb923c;}",
-        ".term-legend{margin:14px 0 18px 0;padding:14px 16px;border:1px solid #e2e8f0;border-radius:18px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);}",
-        ".term-legend__label{font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:10px;}",
-        ".term-legend__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 10px;}",
-        ".term-chip{padding:8px 10px;border-radius:14px;background:#fff;border:1px solid #dbe4ef;}",
-        ".term-chip strong{display:block;font-size:13px;color:#0f172a;line-height:1.2;}",
-        ".term-chip span{display:block;font-size:12px;color:#475569;line-height:1.35;margin-top:2px;}",
-        ".term-legend__note{margin:10px 0 0 0;font-size:12px;color:#64748b;max-width:88ch;}",
+        ".reading-guide{display:grid;gap:16px;margin-top:4px;}",
+        ".reading-guide__hero,.reading-guide__section,.term-legend{border:1px solid #dbe4ef;border-radius:20px;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);box-shadow:0 10px 24px rgba(15,23,42,0.04);}",
+        ".reading-guide__hero{padding:18px 20px;background:linear-gradient(135deg,#eff6ff 0%,#ffffff 62%);}",
+        ".reading-guide__eyebrow{font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#1d4ed8;margin-bottom:8px;}",
+        ".reading-guide__title{margin:0 0 8px 0;font-size:22px;color:#0f172a;max-width:24ch;}",
+        ".reading-guide__lede{margin:0;max-width:76ch;color:#475569;line-height:1.6;}",
+        ".reading-guide__section{padding:16px 18px;}",
+        ".reading-guide__cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px;}",
+        ".reading-guide__card{padding:14px 14px 13px;border-radius:16px;background:#fff;border:1px solid #dbe4ef;min-width:0;}",
+        ".reading-guide__card strong{display:block;font-size:14px;color:#0f172a;margin-bottom:6px;}",
+        ".reading-guide__card span{display:block;font-size:13px;line-height:1.5;color:#475569;}",
+        ".reading-guide__section--legend .legend-row{margin:12px 0 0 0;}",
+        ".term-legend{margin:0;padding:16px 18px;}",
+        ".term-legend__label{font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#64748b;margin-bottom:6px;}",
+        ".term-legend__intro{margin:0 0 12px 0;font-size:13px;color:#475569;}",
+        ".term-legend__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}",
+        ".term-chip{padding:12px 12px 11px;border-radius:16px;background:#fff;border:1px solid #dbe4ef;display:flex;flex-direction:column;gap:8px;min-height:88px;}",
+        ".term-chip strong{display:inline-flex;align-self:flex-start;padding:4px 8px;border-radius:999px;background:#eff6ff;border:1px solid #bfdbfe;font-size:12px;color:#1d4ed8;line-height:1.1;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;}",
+        ".term-chip span{display:block;font-size:13px;color:#334155;line-height:1.45;}",
+        ".term-legend__note{margin:12px 0 0 0;font-size:12px;color:#64748b;max-width:88ch;line-height:1.55;}",
         ".empty-state{color:#6b7280;font-style:italic;}",
         ".model-overview-strip{margin:10px 0 18px 0;padding:10px 12px;border-radius:999px;background:#eef2ff;color:#1e293b;font-size:13px;border:1px solid #c7d2fe;}",
         ".comparison-link-panel{border-left:5px solid #0f172a;}",
@@ -2586,8 +2615,8 @@ render_bracket_tree_svg <- function(tree_data) {
             if (!is_active) " hidden" else "", ">",
             "<div class='bracket-tree-container'>",
             sprintf(
-                "<svg id='btree-svg-%s' class='btree-svg' viewBox='0 0 %d %d' width='100%%' style='min-width:%dpx;display:block;'>",
-                tree$candidate_id %||% 1L, SVG_WIDTH, SVG_HEIGHT, SVG_WIDTH
+                "<svg id='btree-svg-%s' class='btree-svg' viewBox='0 0 %d %d' width='100%%'>",
+                tree$candidate_id %||% 1L, SVG_WIDTH, SVG_HEIGHT
             ),
             "<g class='btree-bg'>", region_bands_html, "</g>",
             "<g class='btree-col-labels'>", col_labels_html, "</g>",
@@ -3662,10 +3691,10 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
     )
 
     paste0(
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>",
         "<title>mmBayes Technical Dashboard</title>",
         "<style>",
-        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f1e8;color:#111827;margin:0;padding:24px;line-height:1.5;}",
+        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f1e8;color:#111827;margin:0;padding:24px;line-height:1.5;overflow-x:hidden;}",
         "h1,h2,h3{margin:0 0 8px 0;} h1{font-size:32px;} h2{margin-top:26px;font-size:21px;} h3{font-size:17px;}",
         ".lede{max-width:980px;color:#374151;margin:8px 0 18px 0;}",
         ".quality-intro{margin:10px 0 14px 0;color:#374151;max-width:760px;}",
@@ -3751,7 +3780,9 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".diagnostic-bullets li{margin-bottom:6px;}",
         dashboard_disclosure_css(),
         "@media (max-width: 1240px){.comparison-board__header{display:none;}.board-row--ranked,.board-row--divergence,.board-row--upset{grid-template-columns:1fr;}.board-cell::before{display:block;}}",
+        "@media (max-width: 1024px){body{padding:18px;}.two-column,.distribution-grid,.quality-grid,.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.overview-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}.panel,.summary-card,.quality-card,.guide-card,.explain-card{padding:16px;}}",
         "@media (max-width: 900px){.quality-grid,.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.tech-svg-compact{max-width:none;}}",
+        "@media (max-width: 640px){body{padding:14px;}.panel,.summary-card,.quality-card,.guide-card,.explain-card{padding:14px;}.toggle-bar{flex-direction:column;}.toggle-button{width:100%;justify-content:center;}.summary-value{font-size:20px;}.board-row{padding:14px;gap:12px;}h1{font-size:28px;}}",
         "</style></head><body>",
         "<h1>mmBayes Technical Bracket Dashboard</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year),
@@ -4115,11 +4146,20 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
         tiebreaker_median <- display_value(row_value(summary_row, "predicted_total_median", NA_real_), digits = 1L)
         summary_note <- row_value(summary_row, "identity_text", "No summary available.")
-        change_copy <- sprintf(
-            "Late-round changes: %s | total changed slots: %s%s",
-            display_value(row_value(summary_row, "late_round_diff_count", NA_real_), digits = 0L),
+        alternate_change_summary <- sprintf(
+            "%s total | %s late-round",
             display_value(row_value(summary_row, "diff_count", NA_real_), digits = 0L),
-            ifelse(safe_numeric(row_value(summary_row, "diff_count", 0L), default = 0) == 1, "", "s")
+            display_value(row_value(summary_row, "late_round_diff_count", NA_real_), digits = 0L)
+        )
+        comparison_summary_label <- row_value(
+            summary_row,
+            "comparison_summary_label",
+            if (identical(as.integer(candidate_id), 1L)) "Card role" else "Changed slots from baseline"
+        )
+        comparison_summary_value <- row_value(
+            summary_row,
+            "comparison_summary_value",
+            if (identical(as.integer(candidate_id), 1L)) "Baseline reference" else alternate_change_summary
         )
 
         paste0(
@@ -4138,8 +4178,13 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             "<div><span>Mean picked-game probability</span><strong>", html_escape(display_value(row_value(summary_row, "mean_picked_game_probability", NA_real_), digits = 3L)), "</strong></div>",
             "<div><span>Championship tiebreaker</span><strong>", html_escape(display_value(tiebreaker_points, digits = 0L)), "</strong></div>",
             "<div><span>Title-game total</span><strong>", html_escape(tiebreaker_median), " <span class='muted'>(", html_escape(tiebreaker_interval), ")</span></strong></div>",
-            "<div><span>Change count</span><strong>", html_escape(change_copy), "</strong></div>",
+            "<div><span>", html_escape(comparison_summary_label), "</span><strong>", html_escape(comparison_summary_value), "</strong></div>",
             "</div>",
+            if (!identical(as.integer(candidate_id), 1L)) {
+                paste0("<p class='candidate-card__note muted'><strong>Pairwise diff:</strong> ", html_escape(alternate_change_summary), " relative to Candidate 1.</p>")
+            } else {
+                ""
+            },
             if (!is.na(tiebreaker_points)) {
                 paste0(
                     "<div class='candidate-card__tiebreaker'>",
@@ -4559,7 +4604,9 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                 "<details class='path-panel' id='candidate-path-", candidate_id_value, "'>",
                 "<summary><strong>Candidate ", candidate_id_value, " full path</strong></summary>",
                 "<p class='path-panel__lede'>Reference material only. Open this when you want the bracket-ordered sequence after you have decided what to enter.</p>",
+                "<div class='table-shell'>",
                 render_html_table(path_view, row_classes = row_classes),
+                "</div>",
                 "</details>"
             )
         }),
@@ -4598,7 +4645,17 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                     mean_picked_game_probability = candidate$mean_game_prob %||% NA_real_,
                     diff_count = if (nrow(candidate_delta_rows) > 0) nrow(candidate_delta_rows) else 0L,
                     late_round_diff_count = if (nrow(candidate_delta_rows) > 0) sum(candidate_delta_rows$round %in% c("Sweet 16", "Elite 8", "Final Four", "Championship"), na.rm = TRUE) else 0L,
-                    identity_text = candidate$diff_summary %||% "Bracket summary unavailable."
+                    identity_text = candidate$diff_summary %||% "Bracket summary unavailable.",
+                    comparison_summary_label = if ((candidate$candidate_id %||% index) == 1L) "Card role" else "Changed slots from baseline",
+                    comparison_summary_value = if ((candidate$candidate_id %||% index) == 1L) {
+                        "Baseline reference"
+                    } else {
+                        sprintf(
+                            "%s total | %s late-round",
+                            if (nrow(candidate_delta_rows) > 0) nrow(candidate_delta_rows) else 0L,
+                            if (nrow(candidate_delta_rows) > 0) sum(candidate_delta_rows$round %in% c("Sweet 16", "Elite 8", "Final Four", "Championship"), na.rm = TRUE) else 0L
+                        )
+                    }
                 )
                 render_candidate_card(candidate_summary)
             }),
@@ -4663,7 +4720,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     )
 
     page_style <- paste0(
-        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(180deg,#f7f4ee 0%,#faf8f2 40%,#f5f7fb 100%);color:#111827;margin:0;line-height:1.45;}",
+        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:linear-gradient(180deg,#f7f4ee 0%,#faf8f2 40%,#f5f7fb 100%);color:#111827;margin:0;line-height:1.45;overflow-x:hidden;}",
         "a{color:#1d4ed8;text-decoration:none;} a:hover{text-decoration:underline;}",
         ".page{max-width:1320px;margin:0 auto;padding:24px 22px 48px;}",
         ".hero{background:rgba(255,255,255,0.78);backdrop-filter:blur(8px);border:1px solid #e7e5e4;border-radius:24px;padding:22px 22px 18px;box-shadow:0 18px 40px rgba(15,23,42,0.06);margin-bottom:18px;}",
@@ -4687,6 +4744,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".candidate-card__facts div,.summary-chip,.metric-pill{border:1px solid #e2e8f0;border-radius:14px;padding:10px 12px;background:#f8fafc;}",
         ".candidate-card__facts span,.summary-chip span,.metric-pill span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px;}",
         ".candidate-card__facts strong,.summary-chip strong,.metric-pill strong{display:block;font-size:14px;color:#0f172a;}",
+        ".candidate-card__note{margin:0 0 12px;}",
         ".candidate-card__links{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}",
         ".candidate-card__tiebreaker{margin-top:12px;padding-top:12px;border-top:1px dashed #e2e8f0;}",
         ".summary-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:12px 0 0;}",
@@ -4717,8 +4775,9 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".divergence-pill--reference{background:#ede9fe;color:#5b21b6;}",
         ".divergence-pill--quiet{background:#e5e7eb;color:#6b7280;}",
         ".delta-round{margin-top:16px;}",
-        ".table-shell{overflow:auto;border:1px solid #e7e5e4;border-radius:16px;background:#fff;}",
-        ".dashboard-table{width:100%;border-collapse:collapse;font-size:13px;min-width:960px;}",
+        ".table-shell{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;max-width:100%;border:1px solid #e7e5e4;border-radius:16px;background:#fff;}",
+        ".dashboard-table{width:100%;border-collapse:collapse;font-size:13px;min-width:0;}",
+        ".table-shell .dashboard-table{min-width:720px;}",
         ".dashboard-table th,.dashboard-table td{border-bottom:1px solid #eef2f7;padding:10px 12px;vertical-align:top;text-align:left;}",
         ".dashboard-table th{background:#f8fafc;position:sticky;top:0;z-index:1;}",
         ".dashboard-table tr:last-child td{border-bottom:none;}",
@@ -4764,8 +4823,9 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".status-unknown{background:#eef2ff;border-color:#6366f1;color:#312e81;}",
         ".surface-pill{display:inline-flex;align-items:center;gap:8px;padding:4px 9px;border-radius:999px;background:#f8fafc;border:1px solid #e2e8f0;}",
         ".jump-button{background:#101827;color:#fff;border-color:#101827;}",
-        ".bracket-tree-container{overflow-x:auto;margin:0;}",
+        ".bracket-tree-container{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;margin:0;}",
         ".bracket-tree-controls{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;}",
+        ".btree-svg{display:block;min-width:980px;height:auto;}",
         ".btree-toggle{border:1px solid #d6d3d1;background:#fff;border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;}",
         ".btree-toggle.is-active{background:#101827;color:#fff;border-color:#101827;}",
         ".btree-panel[hidden]{display:none !important;}",
@@ -4778,7 +4838,9 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".btree-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#334155;}",
         ".btree-legend-swatch{display:inline-block;width:14px;height:14px;border-radius:3px;flex-shrink:0;}",
         dashboard_disclosure_css(),
-        "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.dashboard-table{min-width:820px;}.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid{grid-template-columns:1fr;}}"
+        "@media (max-width: 1024px){.page{padding:20px 18px 40px;}.hero,.section{padding:18px;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary,.divergence-map-panel__head{flex-wrap:wrap;}.candidate-card__facts,.summary-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.candidate-card__links,.appendix-links,.jump-nav,.watchlist-toolbar,.filter-toolbar,.bracket-tree-controls{gap:8px;}.table-shell .dashboard-table{min-width:680px;}}",
+        "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.section-grid,.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid,.divergence-map{grid-template-columns:1fr;}.candidate-card__facts,.summary-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.table-shell .dashboard-table{min-width:620px;}.btree-svg{min-width:900px;}}",
+        "@media (max-width: 640px){.page{padding:14px 12px 28px;}h1{font-size:29px;}h2{font-size:21px;}h3{font-size:17px;}.hero,.section,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout{padding:14px;}.jump-nav,.watchlist-toolbar,.filter-toolbar,.candidate-card__links,.appendix-links,.bracket-tree-controls{flex-direction:column;align-items:stretch;}.jump-nav a,.filter-chip,.show-more-button,.jump-button,.btree-toggle{justify-content:center;width:100%;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary{flex-direction:column;align-items:flex-start;}.candidate-card__facts,.summary-strip{grid-template-columns:1fr;}.table-shell .dashboard-table{min-width:560px;}.btree-svg{min-width:760px;}.candidate-card__mini{font-size:18px;}}"
     )
 
     script <- paste0(
@@ -4909,7 +4971,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     candidate_path_blocks <- if (nchar(candidate_paths_html) > 0) candidate_paths_html else "<p class='empty-state'>Candidate paths were not supplied.</p>"
 
     paste0(
-        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>",
         "<title>mmBayes Bracket Dashboard</title>",
         "<style>", page_style, "</style>",
         "</head><body>",

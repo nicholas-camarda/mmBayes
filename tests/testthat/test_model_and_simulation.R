@@ -409,6 +409,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(dashboard_html, "Divergence Map")
     expect_match(dashboard_html, "Candidate Recommendations")
     expect_match(dashboard_html, "How to read this workspace")
+    expect_match(dashboard_html, "<meta name='viewport' content='width=device-width, initial-scale=1'>")
     expect_match(dashboard_html, "Overall strength rating")
     expect_match(dashboard_html, "Review priority score")
     expect_match(dashboard_html, "Candidate 2 changes from the baseline")
@@ -449,7 +450,10 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(dashboard_html, "data-divergence-target")
     expect_match(dashboard_html, "data-divergence-round")
     expect_match(dashboard_html, "candidate-divergence-reference")
-    expect_match(dashboard_html, "Late-round changes:")
+    expect_match(dashboard_html, "Baseline reference")
+    expect_match(dashboard_html, "Changed slots from baseline")
+    expect_match(dashboard_html, "Pairwise diff:")
+    expect_no_match(dashboard_html, "Change count")
     expect_match(dashboard_html, "Candidate 1 full path")
     expect_match(dashboard_html, "Candidate 2 full path")
     expect_match(dashboard_html, "Need more diagnostics?")
@@ -491,9 +495,11 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         total_points_predictions = total_predictions,
         play_in_resolution = play_in_resolution,
         model_quality_context = resolved_quality,
-        live_performance = live_performance
+        live_performance = live_performance,
+        model_overview = model_overview
     )
     expect_match(technical_html, "mmBayes Technical Bracket Dashboard")
+    expect_match(technical_html, "<meta name='viewport' content='width=device-width, initial-scale=1'>")
     expect_match(technical_html, "How To Use This Dashboard")
     expect_match(technical_html, "Action Summary")
     expect_match(technical_html, "Key Warnings")
@@ -700,6 +706,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         model_comparison = comparison_bundle
     )
     expect_match(comparison_html, "Model Comparison")
+    expect_match(comparison_html, "<meta name='viewport' content='width=device-width, initial-scale=1'>")
     expect_match(comparison_html, "Compare")
     expect_match(comparison_html, "Stan GLM")
     expect_match(comparison_html, "BART")
@@ -710,7 +717,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(comparison_html, "Live Tournament Performance - BART")
     expect_true(sum(gregexpr("Matchup Model", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
     expect_true(sum(gregexpr("Total Points Model", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
-    expect_true(sum(gregexpr("Engine settings and feature detail", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
+    expect_true(sum(gregexpr("Additional model detail", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
     expect_match(render_model_comparison_link_html(comparison_bundle), "Open the full model comparison dashboard")
 
     comparison_with_split_current_overview <- comparison_bundle
@@ -868,6 +875,15 @@ test_that("bracket dashboard context builder enriches matchup evidence determini
     expect_identical(context_one$divergence_map_rows$total_count, context_two$divergence_map_rows$total_count)
     expect_identical(context_one$watchlist_rows$slot_key, context_two$watchlist_rows$slot_key)
     expect_identical(context_one$watchlist_rows$reason_surface, context_two$watchlist_rows$reason_surface)
+    expect_true(all(c("comparison_summary_label", "comparison_summary_value") %in% names(context_one$candidate_summary_rows)))
+    expect_identical(
+        context_one$candidate_summary_rows$comparison_summary_value[context_one$candidate_summary_rows$candidate_id == 1L][[1]],
+        "Baseline reference"
+    )
+    expect_identical(
+        context_one$candidate_summary_rows$comparison_summary_label[context_one$candidate_summary_rows$candidate_id == 2L][[1]],
+        "Changed slots from baseline"
+    )
 
     expected_delta_order <- context_one$candidate_delta_rows %>%
         dplyr::arrange(factor(round, levels = round_levels()), factor(region, levels = bracket_region_levels()), matchup_slot) %>%

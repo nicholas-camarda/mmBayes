@@ -79,9 +79,12 @@ Rscript scripts/update_data.R
 Rscript scripts/run_simulation.R
 
 # This writes the live dashboard bundle to ~/ProjectsRuntime/mmBayes/output.
-# The first file to open is bracket_dashboard.html.
+# The main file to open first is ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html.
+# Expect this step to take longer than the refresh step because it fits/loads models,
+# runs the backtest workflow, and then renders the dashboard bundle.
 
 # 3. Open the main bracket dashboard in your browser
+# macOS example:
 open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
 
@@ -96,7 +99,9 @@ Rscript scripts/run_simulation.R
 # 3. Regenerate only the dashboard HTML from the cached results bundle
 Rscript scripts/regenerate_dashboards.R
 
-# 4. Inspect the runtime dashboard HTML copies (macOS: use `open`)
+# 4. Inspect the runtime dashboard HTML copies in ~/ProjectsRuntime/mmBayes/output
+# macOS: use `open`
+# macOS example:
 open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
 

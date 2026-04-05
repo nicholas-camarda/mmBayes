@@ -225,6 +225,8 @@ test_that("bracket tree renders candidate-specific trees and maps evidence drawe
 
     expect_match(dashboard_html, "id='btree-svg-1'")
     expect_match(dashboard_html, "id='btree-svg-2'")
+    expect_match(dashboard_html, "<meta name='viewport' content='width=device-width, initial-scale=1'>")
+    expect_no_match(dashboard_html, "style='min-width:[0-9]+px;display:block;'")
     expect_match(dashboard_html, "St\\. John&#39;s")
     expect_match(dashboard_html, "Texas A&amp;M")
 
@@ -253,6 +255,7 @@ test_that("bracket tree renders candidate-specific trees and maps evidence drawe
 
     btree <- rvest::html_elements(doc, "svg.btree-svg")
     expect_equal(length(btree), 2L)
+    expect_true(all(is.na(rvest::html_attr(btree, "style")) | !grepl("min-width", rvest::html_attr(btree, "style"), fixed = TRUE)))
 
     expect_equal(length(rvest::html_elements(doc, ".btree-toggle[data-btree-target='candidate-1']")), 1L)
     expect_equal(length(rvest::html_elements(doc, ".btree-toggle[data-btree-target='candidate-2']")), 1L)

@@ -42,6 +42,16 @@ test_that("README documents the dashboard regeneration workflow and command role
     expect_match(readme_text, "macOS: use `open`")
 })
 
+test_that("README quick start explains the runtime output bundle and browser launch step", {
+    repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
+    readme_text <- paste(readLines(file.path(repo_root, "README.md"), warn = FALSE), collapse = "\n")
+
+    expect_match(readme_text, "The main file to open first is ~/ProjectsRuntime/mmBayes/output/bracket_dashboard\\.html")
+    expect_match(readme_text, "Expect this step to take longer than the refresh step")
+    expect_match(readme_text, "macOS example:")
+    expect_match(readme_text, "open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard\\.html")
+})
+
 test_that("README explains update_data refresh status outcomes", {
     repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
     readme_text <- paste(readLines(file.path(repo_root, "README.md"), warn = FALSE), collapse = "\n")
