@@ -250,6 +250,18 @@ test_that("parser keeps national 1-seed games out of First Four for affected yea
     }
 })
 
+test_that("tournament scoreboard dates stop at today for the active bracket year", {
+    active_dates <- tournament_scoreboard_dates(2026L, today = as.Date("2026-04-08"))
+    past_dates <- tournament_scoreboard_dates(2025L, today = as.Date("2026-04-08"))
+
+    expect_identical(active_dates[[1]], "20260315")
+    expect_identical(utils::tail(active_dates, 1), "20260408")
+    expect_false("20260409" %in% active_dates)
+
+    expect_identical(past_dates[[1]], "20250315")
+    expect_identical(utils::tail(past_dates, 1), "20250415")
+})
+
 test_that("quality gates reject score rows with inconsistent totals", {
     team_data <- make_fixture_team_features()
     results_data <- make_fixture_game_results(team_data) %>%
@@ -436,6 +448,173 @@ test_that("update_tournament_data returns degraded success for optional fallback
     expect_true(any(result$refresh_issues$step == "current_year_scoreboard_fallback"))
     expect_true(any(grepl("ESPN scoreboard temporarily unavailable", result$refresh_issues$message, fixed = TRUE)))
     expect_true(any(result$warning_summary$step == "current_year_scoreboard_fallback"))
+})
+
+test_that("update_tournament_data reuses complete historical years, refreshes incomplete years, and aligns the refresh window", {
+    team_data <- make_fixture_team_features(current_year = 2019, history_years = 2016:2018)
+    bart_ratings <- make_fixture_bart_ratings(team_data)
+    conf_assignments <- make_fixture_conf_assignments(team_data)
+    historical_results <- make_fixture_game_results(team_data, history_years = 2016:2018)
+    current_results <- make_fixture_current_year_completed_results(team_data, current_year = 2019)
+
+    existing_team_data <- team_data
+    existing_results <- dplyr::bind_rows(historical_results, current_results) %>%
+        dplyr::filter(Year != "2018" | round != "Championship")
+
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    config <- default_project_config()
+    config$data$team_features_path <- team_file
+    config$data$game_results_path <- results_file
+    config$output$refresh_log_path <- tempfile(fileext = ".log")
+    config$model$history_window <- 2L
+
+    write_fixture_data_files(
+        team_file,
+        results_file,
+        team_data = existing_team_data,
+        results_data = existing_results
+    )
+
+    scraped_bart_years <- integer()
+    scraped_roster_years <- integer()
+    scraped_result_years <- integer()
+
+    testthat::local_mocked_bindings(
+        scrape_bart_data = function(year) {
+            scraped_bart_years <<- c(scraped_bart_years, year)
+            bart_ratings %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_conf_assignments = function(year) {
+            scraped_roster_years <<- c(scraped_roster_years, year)
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_tournament_results = function(year) {
+            scraped_result_years <<- c(scraped_result_years, year)
+            historical_results %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_espn_tournament_results = function(...) {
+            current_results
+        }
+    )
+
+    result <- update_tournament_data(
+        config = config,
+        bracket_year = 2019L
+    )
+
+    expect_identical(sort(unique(scraped_bart_years)), c(2018L, 2019L))
+    expect_identical(sort(unique(scraped_roster_years)), c(2018L, 2019L))
+    expect_identical(sort(unique(scraped_result_years)), 2018L)
+    expect_true(file.exists(result$team_features))
+    expect_true(file.exists(result$game_results))
+    expect_identical(result$team_features, team_file)
+    expect_identical(result$game_results, results_file)
+
+    cache_decisions <- result$historical_cache_decisions %>%
+        dplyr::arrange(Year)
+    expect_equal(cache_decisions$Year, c("2017", "2018"))
+    expect_equal(cache_decisions$cache_action, c("reuse", "refresh"))
+    expect_true(is.na(cache_decisions$completeness_issue[[1]]))
+    expect_match(cache_decisions$completeness_issue[[2]], "unexpected completed round counts")
+
+    written_team_data <- readxl::read_excel(team_file)
+    written_results <- readxl::read_excel(results_file)
+    expect_equal(sort(unique(written_team_data$Year)), c("2017", "2018", "2019"))
+    expect_equal(sort(unique(written_results$Year)), c("2017", "2018", "2019"))
+    expect_false(any(written_team_data$Year == "2016"))
+    expect_false(any(written_results$Year == "2016"))
+
+    summary_lines <- format_refresh_status_summary(result, log_path = NULL)
+    expect_true(any(grepl("^- Reused historical years: 2017$", summary_lines)))
+    expect_true(any(grepl("^- Refreshed historical years: 2018$", summary_lines)))
+    expect_true(any(grepl("^- Refresh-required cache misses: 2018 \\(unexpected completed round counts\\)$", summary_lines)))
+})
+
+test_that("update_tournament_data returns blocked without rewrite when a required historical year cannot be refreshed", {
+    team_data <- make_fixture_team_features(current_year = 2019, history_years = 2016:2018)
+    bart_ratings <- make_fixture_bart_ratings(team_data)
+    conf_assignments <- make_fixture_conf_assignments(team_data)
+    historical_results <- make_fixture_game_results(team_data, history_years = 2016:2018)
+    current_results <- make_fixture_current_year_completed_results(team_data, current_year = 2019)
+    existing_team_data <- team_data %>%
+        dplyr::filter(Year %in% c("2018", "2019"))
+    existing_results <- dplyr::bind_rows(historical_results, current_results) %>%
+        dplyr::filter(Year %in% c("2018", "2019"))
+
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    config <- default_project_config()
+    config$data$team_features_path <- team_file
+    config$data$game_results_path <- results_file
+    config$output$refresh_log_path <- tempfile(fileext = ".log")
+
+    write_fixture_data_files(
+        team_file,
+        results_file,
+        team_data = existing_team_data,
+        results_data = existing_results
+    )
+
+    failed_conf_assignment <- function(year) {
+        conf_tbl <- conf_assignments %>%
+            dplyr::filter(Year == as.character(year)) %>%
+            dplyr::slice(0)
+        attr(conf_tbl, "refresh_issues") <- append_refresh_issue(
+            empty_refresh_issues_table(),
+            step = "conference_assignments",
+            source = "Bart Torvik Tourney Time",
+            severity = "warning",
+            message = sprintf(
+                "Skipping conference assignments for year %s: Could not pass browser verification for https://barttorvik.com/tourneytime.php?year=%s&sort=7&conlimit=All",
+                year,
+                year
+            )
+        )
+        conf_tbl
+    }
+
+    testthat::local_mocked_bindings(
+        scrape_bart_data = function(year) {
+            bart_ratings %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_conf_assignments = function(year) {
+            if (year %in% c(2016L, 2017L)) {
+                return(failed_conf_assignment(year))
+            }
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_tournament_results = function(year) {
+            historical_results %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_espn_tournament_results = function(...) {
+            current_results
+        }
+    )
+
+    original_team_data <- readxl::read_excel(team_file)
+    original_results <- readxl::read_excel(results_file)
+
+    result <- update_tournament_data(
+        config = config,
+        start_year = 2016L,
+        bracket_year = 2019L,
+        history_window = 3L
+    )
+
+    expect_identical(result$status, "blocked")
+    expect_true(any(result$warning_summary$step == "required_refresh_years_unavailable"))
+    expect_equal(result$blocked_years$Year, c("2016", "2017"))
+    expect_equal(result$blocked_years$first_missing_stage, c("conference_assignments", "conference_assignments"))
+
+    summary_lines <- format_refresh_status_summary(result, log_path = NULL)
+    expect_true(any(grepl("^Refresh status: Blocked$", summary_lines)))
+    expect_true(any(grepl("^- Blocked required years: 2016 \\(conference_assignments\\), 2017 \\(conference_assignments\\)$", summary_lines)))
+
+    written_team_data <- readxl::read_excel(team_file)
+    written_results <- readxl::read_excel(results_file)
+    expect_equal(written_team_data, original_team_data)
+    expect_equal(written_results, original_results)
 })
 
 test_that("update_tournament_data degrades when current-year fallback is empty but allowed", {

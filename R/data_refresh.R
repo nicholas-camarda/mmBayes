@@ -19,6 +19,32 @@ empty_refresh_issues_table <- function() {
     )
 }
 
+#' Return an empty canonical team-feature table
+#'
+#' @return A zero-row tibble with the canonical team-feature schema.
+#' @keywords internal
+empty_team_feature_table <- function() {
+    tibble::tibble(
+        Year = character(),
+        Team = character(),
+        Seed = integer(),
+        Region = character(),
+        Conf = character(),
+        Barthag = numeric(),
+        AdjOE = numeric(),
+        AdjDE = numeric(),
+        WAB = numeric(),
+        TOR = numeric(),
+        TORD = numeric(),
+        ORB = numeric(),
+        DRB = numeric(),
+        `3P%` = numeric(),
+        `3P%D` = numeric(),
+        `Adj T.` = numeric(),
+        barthag_logit = numeric()
+    )
+}
+
 #' Append a structured refresh issue
 #'
 #' @param issues Existing refresh issues tibble.
@@ -61,6 +87,294 @@ summarize_refresh_issues <- function(issues) {
         dplyr::count(step, source, severity, message, name = "count", sort = TRUE)
 }
 
+#' Count rows by tournament year
+#'
+#' @param data A data frame with a `Year` column.
+#' @param count_name Output count column name.
+#'
+#' @return A tibble of per-year row counts.
+#' @keywords internal
+count_rows_by_year <- function(data, count_name = "rows") {
+    if (is.null(data) || nrow(data) == 0 || !"Year" %in% names(data)) {
+        return(tibble::tibble(Year = character(), !!count_name := integer()))
+    }
+
+    data %>%
+        dplyr::transmute(Year = as.character(Year)) %>%
+        dplyr::count(Year, name = count_name) %>%
+        dplyr::arrange(suppressWarnings(as.integer(Year)), Year)
+}
+
+#' Read per-year row counts from an existing canonical file
+#'
+#' @param path Path to a canonical table file.
+#' @param count_name Output count column name.
+#'
+#' @return A tibble of per-year row counts.
+#' @keywords internal
+read_year_counts_from_file <- function(path, count_name = "rows") {
+    if (is.null(path) || !nzchar(path) || !file.exists(path)) {
+        return(tibble::tibble(Year = character(), !!count_name := integer()))
+    }
+
+    count_rows_by_year(read_table_file(path), count_name = count_name)
+}
+
+#' Format a per-year count table for logging
+#'
+#' @param counts A tibble from [count_rows_by_year()].
+#' @param count_name Name of the count column.
+#'
+#' @return A compact character scalar.
+#' @keywords internal
+format_year_count_summary <- function(counts, count_name = names(counts)[2] %||% "rows") {
+    counts <- counts %||% tibble::tibble()
+    if (nrow(counts) == 0) {
+        return("none")
+    }
+
+    count_name <- count_name %||% "rows"
+    paste(sprintf("%s=%s", counts$Year, counts[[count_name]]), collapse = ", ")
+}
+
+#' Format a vector of year labels for operator-facing output
+#'
+#' @param years A character or integer vector of years.
+#'
+#' @return A compact character scalar.
+#' @keywords internal
+format_year_labels <- function(years) {
+    years <- unique(as.character(years %||% character()))
+    years <- years[nzchar(years)]
+    if (length(years) == 0) {
+        return("none")
+    }
+
+    paste(years, collapse = ", ")
+}
+
+#' Derive the configured completed historical years for a bracket year
+#'
+#' @param bracket_year The active bracket year.
+#' @param history_window Number of completed historical tournaments to retain.
+#' @param min_year Minimum supported tournament year.
+#'
+#' @return An integer vector of completed historical years.
+#' @keywords internal
+configured_completed_historical_years <- function(bracket_year, history_window = 8L, min_year = 2008L) {
+    bracket_year <- suppressWarnings(as.integer(bracket_year))
+    history_window <- suppressWarnings(as.integer(history_window))
+    min_year <- suppressWarnings(as.integer(min_year))
+
+    if (is.na(bracket_year) || is.na(history_window) || is.na(min_year) || history_window < 1L) {
+        stop_with_message("Historical refresh window configuration is invalid")
+    }
+
+    eligible <- seq.int(min_year, bracket_year - 1L)
+    eligible <- eligible[eligible != 2020L]
+    if (length(eligible) == 0) {
+        return(integer())
+    }
+
+    utils::tail(eligible, history_window)
+}
+
+#' Assess whether an existing historical year is safe to reuse
+#'
+#' @param existing_team_features Existing canonical team features.
+#' @param existing_game_results Existing canonical game results.
+#' @param year Historical year to assess.
+#'
+#' @return A one-row tibble describing reuse eligibility.
+#' @keywords internal
+assess_historical_year_cache <- function(existing_team_features, existing_game_results, year) {
+    year <- as.character(year)
+    year_team_features <- existing_team_features %>%
+        dplyr::filter(Year == year)
+    year_game_results <- existing_game_results %>%
+        dplyr::filter(Year == year)
+
+    issues <- character()
+
+    if (nrow(year_team_features) == 0) {
+        issues <- c(issues, "missing team features")
+    } else {
+        roster_issue <- tryCatch(
+            {
+                validate_tournament_roster(
+                    year_team_features %>%
+                        dplyr::transmute(Year, Team, Seed, Region, Conf),
+                    require_seed = TRUE
+                )
+                NULL
+            },
+            error = function(err) err$message
+        )
+        if (!is.null(roster_issue)) {
+            issues <- c(issues, roster_issue)
+        }
+
+        missing_feature_rows <- year_team_features %>%
+            dplyr::filter(dplyr::if_any(dplyr::all_of(pre_tournament_feature_columns()), is.na))
+        if (nrow(missing_feature_rows) > 0) {
+            issues <- c(issues, "missing pre-tournament metrics")
+        }
+    }
+
+    if (nrow(year_game_results) == 0) {
+        issues <- c(issues, "missing completed tournament results")
+    } else {
+        round_counts <- year_game_results %>%
+            dplyr::count(round, name = "games")
+        expected_counts <- tibble::tibble(
+            round = names(expected_completed_round_counts(year)),
+            expected_games = unname(expected_completed_round_counts(year))
+        )
+        round_issues <- expected_counts %>%
+            dplyr::left_join(round_counts, by = "round") %>%
+            dplyr::mutate(games = dplyr::coalesce(games, 0L)) %>%
+            dplyr::filter(games != expected_games)
+        if (nrow(round_issues) > 0) {
+            issues <- c(issues, "unexpected completed round counts")
+        }
+
+        unresolved_teams <- if (nrow(year_team_features) > 0) {
+            find_unresolved_result_teams(year_team_features, year_game_results)
+        } else {
+            tibble::tibble()
+        }
+        if (nrow(unresolved_teams) > 0) {
+            issues <- c(issues, "result teams do not match team features")
+        }
+    }
+
+    issues <- unique(issues)
+
+    tibble::tibble(
+        Year = year,
+        reusable = length(issues) == 0,
+        pre_team_feature_rows = nrow(year_team_features),
+        pre_result_rows = nrow(year_game_results),
+        completeness_issue = if (length(issues) == 0) NA_character_ else paste(issues, collapse = "; ")
+    )
+}
+
+#' Build year-scoped refresh forensics for the current run
+#'
+#' @param intended_years Historical and current years requested for refresh.
+#' @param bracket_year Current bracket year.
+#' @param pre_team_counts Pre-refresh team-feature year counts.
+#' @param pre_result_counts Pre-refresh result year counts.
+#' @param bart_counts Bart rating year counts.
+#' @param roster_counts Conference-assignment year counts.
+#' @param feature_counts Post-build team-feature year counts.
+#' @param result_counts Post-build result year counts.
+#'
+#' @return A tibble summarizing year coverage across refresh stages.
+#' @keywords internal
+build_refresh_forensics <- function(intended_years,
+                                    bracket_year,
+                                    pre_team_counts,
+                                    pre_result_counts,
+                                    bart_counts,
+                                    roster_counts,
+                                    feature_counts,
+                                    result_counts) {
+    all_years <- sort(unique(c(
+        as.integer(intended_years),
+        suppressWarnings(as.integer(pre_team_counts$Year)),
+        suppressWarnings(as.integer(pre_result_counts$Year)),
+        suppressWarnings(as.integer(bart_counts$Year)),
+        suppressWarnings(as.integer(roster_counts$Year)),
+        suppressWarnings(as.integer(feature_counts$Year)),
+        suppressWarnings(as.integer(result_counts$Year))
+    )))
+    all_years <- all_years[!is.na(all_years)]
+
+    if (length(all_years) == 0) {
+        return(tibble::tibble())
+    }
+
+    year_table <- tibble::tibble(Year = as.character(all_years))
+    completed_years <- as.character(intended_years[intended_years < bracket_year])
+
+    year_table %>%
+        dplyr::left_join(pre_team_counts, by = "Year") %>%
+        dplyr::left_join(pre_result_counts, by = "Year") %>%
+        dplyr::left_join(bart_counts, by = "Year") %>%
+        dplyr::left_join(roster_counts, by = "Year") %>%
+        dplyr::left_join(feature_counts, by = "Year") %>%
+        dplyr::left_join(result_counts, by = "Year") %>%
+        dplyr::mutate(
+            dplyr::across(
+                c(
+                    pre_team_feature_rows,
+                    pre_result_rows,
+                    bart_rating_rows,
+                    conference_assignment_rows,
+                    team_feature_rows,
+                    post_result_rows
+                ),
+                ~ dplyr::coalesce(as.integer(.x), 0L)
+            ),
+            intended_year = Year %in% as.character(intended_years),
+            completed_year = Year %in% completed_years,
+            first_missing_stage = dplyr::case_when(
+                intended_year & team_feature_rows == 0L & bart_rating_rows == 0L ~ "bart_ratings",
+                intended_year & team_feature_rows == 0L & conference_assignment_rows == 0L ~ "conference_assignments",
+                intended_year & team_feature_rows == 0L ~ "team_features",
+                completed_year & post_result_rows == 0L ~ "completed_results",
+                TRUE ~ NA_character_
+            ),
+            dropped_existing_team_features = pre_team_feature_rows > 0L & team_feature_rows == 0L,
+            dropped_existing_results = pre_result_rows > 0L & post_result_rows == 0L
+        ) %>%
+        dplyr::arrange(suppressWarnings(as.integer(Year)), Year)
+}
+
+#' Summarize refresh forensics for operator-facing output
+#'
+#' @param forensics A tibble from [build_refresh_forensics()].
+#'
+#' @return A list of compact year summaries.
+#' @keywords internal
+summarize_refresh_forensics <- function(forensics) {
+    forensics <- forensics %||% tibble::tibble()
+    if (nrow(forensics) == 0) {
+        return(list())
+    }
+
+    list(
+        intended_years = forensics %>%
+            dplyr::filter(intended_year) %>%
+            dplyr::pull(Year),
+        pre_team_feature_years = forensics %>%
+            dplyr::filter(pre_team_feature_rows > 0L) %>%
+            dplyr::pull(Year),
+        pre_result_years = forensics %>%
+            dplyr::filter(pre_result_rows > 0L) %>%
+            dplyr::pull(Year),
+        post_team_feature_years = forensics %>%
+            dplyr::filter(team_feature_rows > 0L) %>%
+            dplyr::pull(Year),
+        post_result_years = forensics %>%
+            dplyr::filter(post_result_rows > 0L) %>%
+            dplyr::pull(Year),
+        omitted_years = forensics %>%
+            dplyr::filter(intended_year, !is.na(first_missing_stage)) %>%
+            dplyr::transmute(label = sprintf("%s (%s)", Year, first_missing_stage)) %>%
+            dplyr::pull(label),
+        overwritten_team_feature_years = forensics %>%
+            dplyr::filter(dropped_existing_team_features) %>%
+            dplyr::transmute(label = sprintf("%s (%s)", Year, dplyr::coalesce(first_missing_stage, "unknown"))) %>%
+            dplyr::pull(label),
+        overwritten_result_years = forensics %>%
+            dplyr::filter(dropped_existing_results) %>%
+            dplyr::transmute(label = sprintf("%s (%s)", Year, dplyr::coalesce(first_missing_stage, "unknown"))) %>%
+            dplyr::pull(label)
+    )
+}
+
 #' Derive the overall refresh status from structured issues
 #'
 #' @param issues Refresh issues tibble.
@@ -84,6 +398,7 @@ refresh_status_from_issues <- function(issues) {
 #' @keywords internal
 refresh_status_label <- function(status) {
     dplyr::case_when(
+        identical(status, "blocked") ~ "Blocked",
         identical(status, "degraded_success") ~ "Degraded success",
         identical(status, "success") ~ "Success",
         TRUE ~ "Failure"
@@ -103,8 +418,14 @@ format_refresh_status_summary <- function(refresh_result, log_path) {
     status_label <- refresh_status_label(status)
     warning_summary <- refresh_result$warning_summary %||% tibble::tibble()
     warning_count <- safe_numeric(refresh_result$warning_count %||% 0L, default = 0L)
+    log_path <- log_path %||% refresh_result$refresh_log %||% "n/a"
+    forensic_summary <- summarize_refresh_forensics(refresh_result$refresh_forensics)
+    cache_decisions <- refresh_result$historical_cache_decisions %||% tibble::tibble()
+    blocked_years <- refresh_result$blocked_years %||% tibble::tibble()
 
-    headline <- if (identical(status, "degraded_success")) {
+    headline <- if (identical(status, "blocked")) {
+        "Canonical files were not updated because one or more required refresh years could not be produced and no reusable cached copy was available."
+    } else if (identical(status, "degraded_success")) {
         "Canonical files were written and quality checks passed, but some optional refresh steps were skipped or downgraded."
     } else if (identical(status, "success")) {
         "Canonical files were written and all refresh steps completed cleanly."
@@ -117,8 +438,58 @@ format_refresh_status_summary <- function(refresh_result, log_path) {
         headline,
         sprintf("- Team features: %s", refresh_result$team_features %||% "n/a"),
         sprintf("- Tournament game results: %s", refresh_result$game_results %||% "n/a"),
-        sprintf("- Refresh log: %s", log_path %||% "n/a")
+        sprintf("- Refresh log: %s", log_path)
     )
+
+    if (length(forensic_summary) > 0) {
+        lines <- c(
+            lines,
+            sprintf("- Intended years: %s", format_year_labels(forensic_summary$intended_years)),
+            sprintf("- Pre-refresh team-feature years: %s", format_year_labels(forensic_summary$pre_team_feature_years)),
+            sprintf("- Pre-refresh result years: %s", format_year_labels(forensic_summary$pre_result_years)),
+            sprintf("- Post-refresh team-feature years: %s", format_year_labels(forensic_summary$post_team_feature_years)),
+            sprintf("- Post-refresh result years: %s", format_year_labels(forensic_summary$post_result_years))
+        )
+
+        if (length(forensic_summary$omitted_years) > 0) {
+            lines <- c(lines, sprintf("- Omitted years: %s", format_year_labels(forensic_summary$omitted_years)))
+        }
+        if (length(forensic_summary$overwritten_team_feature_years) > 0) {
+            lines <- c(lines, sprintf("- Overwritten team-feature years: %s", format_year_labels(forensic_summary$overwritten_team_feature_years)))
+        }
+        if (length(forensic_summary$overwritten_result_years) > 0) {
+            lines <- c(lines, sprintf("- Overwritten result years: %s", format_year_labels(forensic_summary$overwritten_result_years)))
+        }
+    }
+
+    if (nrow(cache_decisions) > 0) {
+        reused_years <- cache_decisions %>%
+            dplyr::filter(cache_action == "reuse") %>%
+            dplyr::pull(Year)
+        refreshed_years <- cache_decisions %>%
+            dplyr::filter(cache_action == "refresh") %>%
+            dplyr::pull(Year)
+        rejected_labels <- cache_decisions %>%
+            dplyr::filter(cache_action == "refresh", !is.na(completeness_issue)) %>%
+            dplyr::transmute(label = sprintf("%s (%s)", Year, completeness_issue)) %>%
+            dplyr::pull(label)
+
+        lines <- c(
+            lines,
+            sprintf("- Reused historical years: %s", format_year_labels(reused_years)),
+            sprintf("- Refreshed historical years: %s", format_year_labels(refreshed_years))
+        )
+        if (length(rejected_labels) > 0) {
+            lines <- c(lines, sprintf("- Refresh-required cache misses: %s", format_year_labels(rejected_labels)))
+        }
+    }
+
+    if (nrow(blocked_years) > 0) {
+        blocked_labels <- blocked_years %>%
+            dplyr::transmute(label = sprintf("%s (%s)", Year, dplyr::coalesce(first_missing_stage, "unknown"))) %>%
+            dplyr::pull(label)
+        lines <- c(lines, sprintf("- Blocked required years: %s", format_year_labels(blocked_labels)))
+    }
 
     if (warning_count > 0L && nrow(warning_summary) > 0) {
         warning_lines <- purrr::map_chr(seq_len(nrow(warning_summary)), function(index) {
@@ -239,28 +610,53 @@ scrape_conf_assignments <- function(year) {
     )
     logger::log_info("Scraping conference assignments from {url}")
 
-    page_result <- tryCatch(
-        list(
-            page = read_html_verified(url),
-            issues = empty_refresh_issues_table()
-        ),
-        error = function(error) {
-            issue_message <- sprintf(
-                "Skipping conference assignments for year %s: %s",
-                year,
-                error$message
-            )
-            logger::log_warn(issue_message)
-            issue_table <- empty_refresh_issues_table() %>%
-                append_refresh_issue(
-                    step = "conference_assignments",
-                    source = "Bart Torvik Tourney Time",
-                    severity = "warning",
-                    message = issue_message
-                )
-            list(page = NULL, issues = issue_table)
+    retry_delays <- c(5, 15, 30)
+    page_result <- NULL
+    last_error <- NULL
+    for (attempt in seq_len(length(retry_delays) + 1L)) {
+        page_result <- tryCatch(
+            list(
+                page = read_html_verified(url),
+                issues = empty_refresh_issues_table()
+            ),
+            error = function(error) {
+                last_error <<- error
+                NULL
+            }
+        )
+        if (!is.null(page_result)) {
+            break
         }
-    )
+
+        is_verification_error <- !is.null(last_error) &&
+            grepl("Could not pass browser verification", last_error$message, fixed = TRUE)
+        if (!is_verification_error || attempt > length(retry_delays)) {
+            break
+        }
+
+        delay_seconds <- retry_delays[[attempt]]
+        logger::log_warn(
+            "Conference assignments for year {year} hit browser verification on attempt {attempt}; retrying in {delay_seconds} seconds"
+        )
+        Sys.sleep(delay_seconds)
+    }
+
+    if (is.null(page_result)) {
+        issue_message <- sprintf(
+            "Skipping conference assignments for year %s: %s",
+            year,
+            last_error$message
+        )
+        logger::log_warn(issue_message)
+        issue_table <- empty_refresh_issues_table() %>%
+            append_refresh_issue(
+                step = "conference_assignments",
+                source = "Bart Torvik Tourney Time",
+                severity = "warning",
+                message = issue_message
+            )
+        page_result <- list(page = NULL, issues = issue_table)
+    }
     if (is.null(page_result$page)) {
         empty_tbl <- tibble::tibble(
             Year = character(),
@@ -869,15 +1265,21 @@ scrape_tournament_results <- function(year, allow_empty = FALSE) {
 #' Return candidate ESPN scoreboard dates for tournament fallback
 #'
 #' @param bracket_year The active bracket year.
+#' @param today Optional current date override for testing.
 #'
 #' @return A character vector of `YYYYMMDD` date keys covering the First Four
 #'   window.
 #' @keywords internal
-tournament_scoreboard_dates <- function(bracket_year) {
+tournament_scoreboard_dates <- function(bracket_year, today = Sys.Date()) {
+    end_date <- min(
+        as.Date(sprintf("%s-04-15", bracket_year)),
+        as.Date(today)
+    )
+
     format(
         seq.Date(
             as.Date(sprintf("%s-03-15", bracket_year)),
-            as.Date(sprintf("%s-04-15", bracket_year)),
+            end_date,
             by = "day"
         ),
         "%Y%m%d"
@@ -1355,17 +1757,21 @@ fill_current_year_first_four_results <- function(game_results, team_features, br
 #'
 #' @param start_year Optional starting year for the refresh window.
 #' @param bracket_year The active bracket year.
-#' @param history_window Number of historical tournaments to fetch by default.
+#' @param history_window Number of completed historical tournaments to fetch by
+#'   default. When omitted, the configured model history window is used.
 #'
 #' @param config Optional project configuration list. When omitted, the loaded
 #'   project config is used.
 #'
-#' @return A list containing the written team-feature and game-results file paths.
+#' @return A list containing the written team-feature and game-results file
+#'   paths.
 #' @export
-update_tournament_data <- function(config = NULL, start_year = NULL, bracket_year = as.integer(format(Sys.Date(), "%Y")), history_window = 8L) {
+update_tournament_data <- function(config = NULL, start_year = NULL, bracket_year = as.integer(format(Sys.Date(), "%Y")), history_window = NULL) {
     config <- config %||% load_project_config()
+    history_window <- history_window %||% config$model$history_window %||% 8L
     team_features_file <- config$data$team_features_path %||% file.path(default_cloud_data_root(), "pre_tournament_team_features.xlsx")
     game_results_file <- config$data$game_results_path %||% file.path(default_cloud_data_root(), "tournament_game_results.xlsx")
+    refresh_log <- config$output$refresh_log_path %||% file.path(config$output$path %||% default_runtime_output_root(), "logs", "data_refresh.log")
     dir.create(dirname(team_features_file), showWarnings = FALSE, recursive = TRUE)
     dir.create(dirname(game_results_file), showWarnings = FALSE, recursive = TRUE)
 
@@ -1378,43 +1784,109 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
         invisible(NULL)
     }
 
-    start_year <- start_year %||% max(2008L, bracket_year - history_window - 2L)
-    historical_years <- seq.int(start_year, bracket_year)
-    historical_years <- historical_years[historical_years != 2020L]
+    if (is.null(start_year)) {
+        historical_years <- c(
+            configured_completed_historical_years(bracket_year, history_window = history_window),
+            as.integer(bracket_year)
+        )
+    } else {
+        start_year <- as.integer(start_year)
+        historical_years <- seq.int(start_year, as.integer(bracket_year))
+    }
+    historical_years <- sort(unique(historical_years[historical_years != 2020L]))
+    required_historical_years <- historical_years[historical_years < bracket_year]
+    pre_team_counts <- read_year_counts_from_file(team_features_file, count_name = "pre_team_feature_rows")
+    pre_result_counts <- read_year_counts_from_file(game_results_file, count_name = "pre_result_rows")
+    existing_team_features <- if (file.exists(team_features_file)) {
+        normalize_team_features(read_table_file(team_features_file))
+    } else {
+        empty_team_feature_table()
+    }
+    existing_game_results <- if (file.exists(game_results_file)) {
+        normalize_game_results(read_table_file(game_results_file))
+    } else {
+        empty_game_results_table()
+    }
+    historical_cache_decisions <- if (length(required_historical_years) > 0) {
+        purrr::map_dfr(required_historical_years, function(year) {
+            assess_historical_year_cache(existing_team_features, existing_game_results, year)
+        }) %>%
+            dplyr::mutate(
+                cache_action = dplyr::if_else(reusable, "reuse", "refresh")
+            )
+    } else {
+        tibble::tibble(
+            Year = character(),
+            reusable = logical(),
+            pre_team_feature_rows = integer(),
+            pre_result_rows = integer(),
+            completeness_issue = character(),
+            cache_action = character()
+        )
+    }
+    reused_historical_years <- historical_cache_decisions %>%
+        dplyr::filter(cache_action == "reuse") %>%
+        dplyr::pull(Year)
+    refresh_historical_years <- historical_cache_decisions %>%
+        dplyr::filter(cache_action == "refresh") %>%
+        dplyr::pull(Year)
+    scrape_years <- sort(unique(c(suppressWarnings(as.integer(refresh_historical_years)), as.integer(bracket_year))))
 
     logger::log_info(
         "Starting canonical data refresh for bracket year {bracket_year} across years {min(historical_years)}-{max(historical_years)}"
     )
+    logger::log_info("Configured historical analysis window: {history_window}")
+    logger::log_info("Canonical team-feature path for this run: {team_features_file}")
+    logger::log_info("Canonical game-results path for this run: {game_results_file}")
+    logger::log_info("Refresh log path for this run: {refresh_log}")
+    logger::log_info("Pre-refresh team-feature year coverage: {format_year_count_summary(pre_team_counts, 'pre_team_feature_rows')}")
+    logger::log_info("Pre-refresh game-result year coverage: {format_year_count_summary(pre_result_counts, 'pre_result_rows')}")
+    logger::log_info("Reused historical years: {format_year_labels(reused_historical_years)}")
+    logger::log_info("Refreshed historical years: {format_year_labels(refresh_historical_years)}")
+    logger::log_info(
+        "Historical cache misses requiring refresh: {format_year_labels(historical_cache_decisions %>% dplyr::filter(cache_action == 'refresh', !is.na(completeness_issue)) %>% dplyr::transmute(label = sprintf('%s (%s)', Year, completeness_issue)) %>% dplyr::pull(label))}"
+    )
 
-    bart_data <- purrr::map_dfr(historical_years, function(year) {
+    bart_data <- purrr::map_dfr(scrape_years, function(year) {
         logger::log_info("Refreshing Bart ratings for {year}")
         scrape_bart_data(year)
     })
+    bart_counts <- count_rows_by_year(bart_data, count_name = "bart_rating_rows")
 
-    conf_assignments <- purrr::map_dfr(historical_years, function(year) {
+    conf_assignments <- purrr::map_dfr(scrape_years, function(year) {
         logger::log_info("Refreshing tournament roster for {year}")
         conf_tbl <- scrape_conf_assignments(year)
         register_refresh_issues(attr(conf_tbl, "refresh_issues", exact = TRUE))
         conf_tbl
     })
+    roster_counts <- count_rows_by_year(conf_assignments, count_name = "conference_assignment_rows")
 
     logger::log_info("Joining tournament rosters to year-wide Bart ratings")
-    team_features <- build_team_feature_dataset(bart_data, conf_assignments)
+    refreshed_team_features <- build_team_feature_dataset(bart_data, conf_assignments)
+    reused_team_features <- existing_team_features %>%
+        dplyr::filter(Year %in% reused_historical_years)
+    team_features <- dplyr::bind_rows(reused_team_features, refreshed_team_features) %>%
+        normalize_team_features() %>%
+        dplyr::arrange(suppressWarnings(as.integer(Year)), Region, Seed, Team)
     logger::log_info("Built canonical team feature dataset with {nrow(team_features)} rows")
+    feature_counts <- count_rows_by_year(team_features, count_name = "team_feature_rows")
+    logger::log_info("Post-build team-feature year coverage: {format_year_count_summary(feature_counts, 'team_feature_rows')}")
 
     available_feature_years <- unique(suppressWarnings(as.integer(team_features$Year)))
     available_feature_years <- available_feature_years[!is.na(available_feature_years)]
     completed_years <- intersect(
-        historical_years[historical_years < bracket_year],
+        suppressWarnings(as.integer(refresh_historical_years)),
         available_feature_years
     )
     logger::log_info(
         "Refreshing explicit tournament game results for completed years: {paste(completed_years, collapse = ', ')}"
     )
-    tournament_results <- purrr::map_dfr(completed_years, function(year) {
+    refreshed_historical_results <- purrr::map_dfr(completed_years, function(year) {
         logger::log_info("Refreshing tournament results for {year}")
         scrape_tournament_results(year)
     })
+    reused_historical_results <- existing_game_results %>%
+        dplyr::filter(Year %in% reused_historical_years)
 
     logger::log_info("Refreshing current-year results for {bracket_year} from the scoreboard monitoring feed")
     current_year_results <- empty_game_results_table()
@@ -1454,13 +1926,120 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
             )
         )
     }
-    tournament_results <- dplyr::bind_rows(tournament_results, current_year_results)
+    tournament_results <- dplyr::bind_rows(reused_historical_results, refreshed_historical_results, current_year_results)
     tournament_results <- merge_current_year_tournament_results(
         game_results = tournament_results,
         team_features = team_features,
         bracket_year = bracket_year,
         fallback_results = current_year_fallback
     )
+    result_counts <- count_rows_by_year(tournament_results, count_name = "post_result_rows")
+    logger::log_info("Post-build game-result year coverage: {format_year_count_summary(result_counts, 'post_result_rows')}")
+
+    refresh_forensics <- build_refresh_forensics(
+        intended_years = historical_years,
+        bracket_year = bracket_year,
+        pre_team_counts = pre_team_counts,
+        pre_result_counts = pre_result_counts,
+        bart_counts = bart_counts,
+        roster_counts = roster_counts,
+        feature_counts = feature_counts,
+        result_counts = result_counts
+    )
+    forensic_summary <- summarize_refresh_forensics(refresh_forensics)
+
+    omitted_years <- refresh_forensics %>%
+        dplyr::filter(intended_year, !is.na(first_missing_stage))
+    if (nrow(omitted_years) > 0) {
+        omission_message <- sprintf(
+            "Historical years omitted during refresh: %s",
+            paste(sprintf("%s (%s)", omitted_years$Year, omitted_years$first_missing_stage), collapse = ", ")
+        )
+        logger::log_warn(omission_message)
+        register_refresh_issues(
+            append_refresh_issue(
+                empty_refresh_issues_table(),
+                step = "historical_year_coverage",
+                source = "Canonical refresh coverage",
+                severity = "warning",
+                message = omission_message
+            )
+        )
+    }
+
+    unrecoverable_historical_years <- refresh_forensics %>%
+        dplyr::filter(
+            Year %in% as.character(required_historical_years),
+            team_feature_rows == 0L | post_result_rows == 0L
+        )
+    unrecoverable_current_years <- refresh_forensics %>%
+        dplyr::filter(
+            Year == as.character(bracket_year),
+            team_feature_rows == 0L
+        )
+    if (nrow(unrecoverable_historical_years) > 0 || nrow(unrecoverable_current_years) > 0) {
+        blocked_years <- dplyr::bind_rows(unrecoverable_historical_years, unrecoverable_current_years) %>%
+            dplyr::mutate(
+                label = sprintf("%s (%s)", Year, dplyr::coalesce(first_missing_stage, "unknown"))
+            )
+        blocked_message <- sprintf(
+            "Required refresh years could not be produced; canonical files were left unchanged: %s",
+            paste(blocked_years$label, collapse = ", ")
+        )
+        logger::log_warn(blocked_message)
+        register_refresh_issues(
+            append_refresh_issue(
+                empty_refresh_issues_table(),
+                step = "required_refresh_years_unavailable",
+                source = "Canonical refresh coverage",
+                severity = "warning",
+                message = blocked_message
+            )
+        )
+        warning_summary <- summarize_refresh_issues(refresh_issues)
+        return(list(
+            team_features = team_features_file,
+            game_results = game_results_file,
+            refresh_log = refresh_log,
+            status = "blocked",
+            warning_count = nrow(refresh_issues),
+            refresh_issues = refresh_issues,
+            warning_summary = warning_summary,
+            historical_cache_decisions = historical_cache_decisions,
+            refresh_forensics = refresh_forensics,
+            refresh_forensics_summary = forensic_summary,
+            blocked_years = blocked_years %>% dplyr::select(-label)
+        ))
+    }
+
+    overwritten_years <- refresh_forensics %>%
+        dplyr::filter(
+            intended_year,
+            dropped_existing_team_features | dropped_existing_results
+        )
+    if (nrow(overwritten_years) > 0) {
+        overwrite_message <- sprintf(
+            "Preexisting canonical coverage would be overwritten for years: %s",
+            sprintf(
+                "%s (team_features=%s, results=%s, first_missing_stage=%s)",
+                overwritten_years$Year,
+                overwritten_years$dropped_existing_team_features,
+                overwritten_years$dropped_existing_results,
+                dplyr::coalesce(overwritten_years$first_missing_stage, "unknown")
+            )
+            |> paste(collapse = ", ")
+        )
+        logger::log_warn(overwrite_message)
+        register_refresh_issues(
+            append_refresh_issue(
+                empty_refresh_issues_table(),
+                step = "historical_year_overwrite_risk",
+                source = "Canonical refresh coverage",
+                severity = "warning",
+                message = overwrite_message
+            )
+        )
+    }
 
     logger::log_info("Running canonical data quality checks")
     assert_canonical_data_quality(team_features, tournament_results)
@@ -1478,9 +2057,13 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
     list(
         team_features = team_features_file,
         game_results = game_results_file,
+        refresh_log = refresh_log,
         status = status,
         warning_count = nrow(refresh_issues),
         refresh_issues = refresh_issues,
-        warning_summary = warning_summary
+        warning_summary = warning_summary,
+        historical_cache_decisions = historical_cache_decisions,
+        refresh_forensics = refresh_forensics,
+        refresh_forensics_summary = forensic_summary
     )
 }

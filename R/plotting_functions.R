@@ -4039,10 +4039,20 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
-    render_team_card <- function(row, prefix, fallback_name) {
+    render_team_card <- function(row, prefix, fallback_name, role_label = NA_character_) {
         team_name <- row_value(row, paste0(prefix, "_Team"), fallback_name)
         seed <- row_value(row, paste0(prefix, "_Seed"), row_value(row, paste0(prefix, "_seed"), NA_integer_))
         conf <- row_value(row, paste0(prefix, "_Conf"), row_value(row, paste0(prefix, "_conf"), "n/a"))
+        role_slug <- tolower(gsub("[^a-z0-9]+", "-", as.character(role_label %||% "")))
+        role_badge <- if (!is.na(role_label) && nzchar(role_label)) {
+            paste0(
+                "<span class='team-card__role team-card__role--", html_escape(role_slug), "'>",
+                html_escape(role_label),
+                "</span>"
+            )
+        } else {
+            ""
+        }
         core_metrics <- tibble::tibble(
             Metric = c("Barthag", "AdjOE", "AdjDE", "WAB"),
             Value = c(
@@ -4072,7 +4082,10 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             "<div class='team-card__eyebrow'>", html_escape(fallback_name), "</div>",
             "<h4>", html_escape(team_name), "</h4>",
             "</div>",
+            "<div class='team-card__badges'>",
+            role_badge,
             "<div class='team-card__seed'>Seed ", html_escape(display_value(seed, digits = 0L)), "</div>",
+            "</div>",
             "</div>",
             "<p class='team-card__meta'><strong>Conference:</strong> ", html_escape(conf), "</p>",
             render_value_table("Core metrics", core_metrics),
@@ -4081,7 +4094,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
-    render_diff_table <- function(row) {
+    render_matchup_comparison <- function(row) {
         team_a_name <- row_value(row, "teamA", row_value(row, "teamA_Team", "Team A"))
         team_b_name <- row_value(row, "teamB", row_value(row, "teamB_Team", "Team B"))
         feature_specs <- tibble::tibble(
@@ -4118,6 +4131,12 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         team_b_values <- purrr::map2_chr(feature_specs$team_b_column, feature_specs$digits, function(column_name, digits) {
             display_value(row_value(row, column_name, NA_real_), digits = digits)
         })
+        team_a_numeric <- purrr::map_dbl(feature_specs$team_a_column, function(column_name) {
+            safe_numeric(row_value(row, column_name, NA_real_), default = NA_real_)
+        })
+        team_b_numeric <- purrr::map_dbl(feature_specs$team_b_column, function(column_name) {
+            safe_numeric(row_value(row, column_name, NA_real_), default = NA_real_)
+        })
         diff_numeric <- purrr::map_dbl(feature_specs$diff_column, function(column_name) {
             safe_numeric(row_value(row, column_name, NA_real_), default = NA_real_)
         })
@@ -4133,7 +4152,88 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             `Diff favors` = purrr::map2_chr(diff_numeric, feature_specs$preferred_direction, favor_label)
         )
 
-        render_value_table("Model-facing matchup diffs", metric_rows)
+        advantage_rows <- metric_rows %>%
+            dplyr::mutate(
+                direction = dplyr::case_when(
+                    `Diff favors` == team_a_name ~ "left",
+                    `Diff favors` == team_b_name ~ "right",
+                    `Diff favors` == "Even" ~ "even",
+                    TRUE ~ "neutral"
+                ),
+                track_width = purrr::pmap_dbl(
+                    list(diff_numeric, team_a_numeric, team_b_numeric, direction),
+                    function(diff_value, team_a_value, team_b_value, direction) {
+                        if (!identical(direction, "left") && !identical(direction, "right")) {
+                            return(0)
+                        }
+                        denominator <- max(abs(team_a_value), abs(team_b_value), abs(diff_value), 1, na.rm = TRUE)
+                        if (!is.finite(denominator) || denominator <= 0) {
+                            denominator <- 1
+                        }
+                        strength <- abs(diff_value) / denominator
+                        min(45, max(18, 45 * strength))
+                    }
+                ),
+                favor_text = dplyr::case_when(
+                    direction == "left" ~ paste("Favors", team_a_name),
+                    direction == "right" ~ paste("Favors", team_b_name),
+                    direction == "even" ~ "Even",
+                    TRUE ~ "Context only"
+                )
+            )
+
+        chart_html <- paste(
+            purrr::map_chr(seq_len(nrow(advantage_rows)), function(index) {
+                row_data <- advantage_rows[index, , drop = FALSE]
+                direction <- row_data$direction[[1]]
+                fill_html <- if (identical(direction, "left") || identical(direction, "right")) {
+                    paste0(
+                        "<div class='advantage-track__fill advantage-track__fill--", html_escape(direction),
+                        "' style='width:", html_escape(sprintf("%.1f%%", row_data$track_width[[1]])), ";'></div>"
+                    )
+                } else if (identical(direction, "even")) {
+                    "<div class='advantage-track__marker'></div>"
+                } else {
+                    ""
+                }
+
+                paste0(
+                    "<div class='advantage-row advantage-row--", html_escape(direction), "'>",
+                    "<div class='advantage-row__metric'>", html_escape(row_data$Feature[[1]]), "</div>",
+                    "<div class='advantage-row__value advantage-row__value--left'>", html_escape(team_a_values[[index]]), "</div>",
+                    "<div class='advantage-track'>",
+                    "<div class='advantage-track__center'></div>",
+                    fill_html,
+                    "</div>",
+                    "<div class='advantage-row__value advantage-row__value--right'>", html_escape(team_b_values[[index]]), "</div>",
+                    "<div class='advantage-row__favor'>", html_escape(row_data$favor_text[[1]]), "</div>",
+                    "</div>"
+                )
+            }),
+            collapse = ""
+        )
+
+        paste0(
+            "<div class='mini-table-card matchup-comparison-card'>",
+            "<div class='mini-table-title'>Model-facing matchup comparison</div>",
+            "<div class='advantage-chart'>",
+            "<div class='advantage-chart__header'>",
+            "<span>Metric</span>",
+            "<span>", html_escape(team_a_name), "</span>",
+            "<span>Advantage</span>",
+            "<span>", html_escape(team_b_name), "</span>",
+            "<span>Read</span>",
+            "</div>",
+            chart_html,
+            "</div>",
+            "</div>",
+            "<details class='comparison-details'>",
+            "<summary>Raw model inputs</summary>",
+            "<div class='comparison-details__body'>",
+            render_value_table("Raw model inputs", metric_rows),
+            "</div>",
+            "</details>"
+        )
     }
 
     render_candidate_card <- function(summary_row) {
@@ -4412,6 +4512,16 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         } else {
             row_context <- row_context[1, , drop = FALSE]
         }
+        favorite_name <- row_value(row, "posterior_favorite", team_a_name)
+        underdog_name <- row_value(
+            row,
+            "underdog",
+            if (!identical(favorite_name, team_a_name)) team_a_name else team_b_name
+        )
+        row_context_team_a <- row_value(row_context, "teamA_Team", team_a_name)
+        row_context_team_b <- row_value(row_context, "teamB_Team", team_b_name)
+        favorite_prefix <- if (identical(favorite_name, row_context_team_b)) "teamB" else "teamA"
+        underdog_prefix <- if (identical(favorite_prefix, "teamA")) "teamB" else "teamA"
 
         usage_table <- tibble::tibble(
             Candidate = c("Candidate 1", "Candidate 2"),
@@ -4444,15 +4554,15 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                 "<p class='evidence-panel__implication muted'>No downstream implication text is attached because this row does not change the path.</p>"
             },
             "<div class='evidence-summary-grid'>",
-            "<div class='summary-chip'><span>Favorite probability</span><strong>", html_escape(favorite_prob), "</strong><small>", html_escape(favorite_interval), "</small></div>",
-            "<div class='summary-chip'><span>Underdog probability</span><strong>", html_escape(underdog_prob), "</strong><small>Leverage ", html_escape(leverage), "</small></div>",
+            "<div class='summary-chip'><span>Favorite: ", html_escape(favorite_name), "</span><strong>", html_escape(favorite_prob), "</strong><small>", html_escape(favorite_interval), "</small></div>",
+            "<div class='summary-chip'><span>Underdog: ", html_escape(underdog_name), "</span><strong>", html_escape(underdog_prob), "</strong><small>Leverage ", html_escape(leverage), "</small></div>",
             "<div class='summary-chip'><span>Candidate usage</span><strong>", html_escape(row_value(row, "candidate_usage", "n/a")), "</strong><small>", html_escape(row_value(row, "difference_mode", "n/a")), "</small></div>",
             "</div>",
             "<div class='team-grid'>",
-            render_team_card(row_context, "teamA", team_a_name),
-            render_team_card(row_context, "teamB", team_b_name),
+            render_team_card(row_context, favorite_prefix, favorite_name, role_label = "Favorite"),
+            render_team_card(row_context, underdog_prefix, underdog_name, role_label = "Underdog"),
             "</div>",
-            render_diff_table(row_context),
+            render_matchup_comparison(row_context),
             render_value_table("Candidate usage", usage_table),
             "<p class='evidence-panel__note'>This is the matchup evidence the model saw, not a decomposition of why the model caused the pick.</p>",
             "</div>",
@@ -4802,11 +4912,35 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".team-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin:14px 0;}",
         ".team-card{border:1px solid #e7e5e4;border-radius:16px;padding:14px;background:#fffaf4;}",
         ".team-card__head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}",
+        ".team-card__badges{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center;}",
+        ".team-card__role{display:inline-flex;align-items:center;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;}",
+        ".team-card__role--favorite{background:#dbeafe;color:#1d4ed8;}",
+        ".team-card__role--underdog{background:#fef3c7;color:#b45309;}",
         ".team-card__seed{font-weight:800;color:#0f172a;background:#fff;border:1px solid #e7e5e4;border-radius:999px;padding:6px 10px;}",
         ".team-card__meta{margin:8px 0 12px;color:#374151;}",
         ".mini-table-title{text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;}",
         ".mini-table-card{margin-top:12px;}",
         ".mini-table-card .dashboard-table{min-width:0;}",
+        ".advantage-chart{display:grid;gap:10px;}",
+        ".advantage-chart__header,.advantage-row{display:grid;grid-template-columns:minmax(96px,1.1fr) minmax(70px,0.7fr) minmax(140px,1.2fr) minmax(70px,0.7fr) minmax(90px,0.9fr);gap:10px;align-items:center;}",
+        ".advantage-chart__header{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;font-weight:700;padding:0 12px;}",
+        ".advantage-row{padding:10px 12px;border:1px solid #e7e5e4;border-radius:14px;background:#fff;}",
+        ".advantage-row__metric{font-weight:700;color:#0f172a;}",
+        ".advantage-row__value{font-variant-numeric:tabular-nums;color:#1f2937;}",
+        ".advantage-row__value--left{text-align:right;}",
+        ".advantage-row__value--right{text-align:left;}",
+        ".advantage-row__favor{font-size:12px;color:#475569;}",
+        ".advantage-track{position:relative;height:14px;border-radius:999px;background:#eef2f7;overflow:hidden;}",
+        ".advantage-track__center{position:absolute;left:50%;top:1px;bottom:1px;width:2px;background:#cbd5e1;transform:translateX(-50%);}",
+        ".advantage-track__fill{position:absolute;top:2px;bottom:2px;border-radius:999px;}",
+        ".advantage-track__fill--left{right:50%;background:#2563eb;}",
+        ".advantage-track__fill--right{left:50%;background:#d97706;}",
+        ".advantage-track__marker{position:absolute;left:50%;top:50%;width:12px;height:12px;border-radius:999px;background:#64748b;transform:translate(-50%,-50%);}",
+        ".advantage-row--neutral .advantage-track,.advantage-row--even .advantage-track{background:#f8fafc;}",
+        ".comparison-details{margin-top:12px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;overflow:hidden;}",
+        ".comparison-details > summary{cursor:pointer;list-style:none;padding:12px 14px;font-weight:700;color:#0f172a;}",
+        ".comparison-details > summary::-webkit-details-marker{display:none;}",
+        ".comparison-details__body{padding:0 14px 14px;}",
         ".metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}",
         ".metric-pill{display:flex;flex-direction:column;gap:2px;}",
         ".path-panel{margin-top:14px;}",
@@ -4839,7 +4973,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".btree-legend-swatch{display:inline-block;width:14px;height:14px;border-radius:3px;flex-shrink:0;}",
         dashboard_disclosure_css(),
         "@media (max-width: 1024px){.page{padding:20px 18px 40px;}.hero,.section{padding:18px;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary,.divergence-map-panel__head{flex-wrap:wrap;}.candidate-card__facts,.summary-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.candidate-card__links,.appendix-links,.jump-nav,.watchlist-toolbar,.filter-toolbar,.bracket-tree-controls{gap:8px;}.table-shell .dashboard-table{min-width:680px;}}",
-        "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.section-grid,.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid,.divergence-map{grid-template-columns:1fr;}.candidate-card__facts,.summary-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.table-shell .dashboard-table{min-width:620px;}.btree-svg{min-width:900px;}}",
+        "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.section-grid,.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid,.divergence-map{grid-template-columns:1fr;}.candidate-card__facts,.summary-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.table-shell .dashboard-table{min-width:620px;}.btree-svg{min-width:900px;}.advantage-chart__header{display:none;}.advantage-row{grid-template-columns:repeat(2,minmax(0,1fr));}.advantage-row__metric,.advantage-track,.advantage-row__favor{grid-column:1 / -1;}.advantage-row__value--left{text-align:left;}.advantage-row__value--right{text-align:right;}}",
         "@media (max-width: 640px){.page{padding:14px 12px 28px;}h1{font-size:29px;}h2{font-size:21px;}h3{font-size:17px;}.hero,.section,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout{padding:14px;}.jump-nav,.watchlist-toolbar,.filter-toolbar,.candidate-card__links,.appendix-links,.bracket-tree-controls{flex-direction:column;align-items:stretch;}.jump-nav a,.filter-chip,.show-more-button,.jump-button,.btree-toggle{justify-content:center;width:100%;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary{flex-direction:column;align-items:flex-start;}.candidate-card__facts,.summary-strip{grid-template-columns:1fr;}.table-shell .dashboard-table{min-width:560px;}.btree-svg{min-width:760px;}.candidate-card__mini{font-size:18px;}}"
     )
 

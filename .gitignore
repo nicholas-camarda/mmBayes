@@ -19,6 +19,7 @@ priors/*.rds
 scripts/.Rhistory
 tests/testthat/*.log
 
+.codex
 .DS_Store
 .history/
 .lintr

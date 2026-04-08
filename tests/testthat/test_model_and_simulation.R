@@ -458,9 +458,14 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(dashboard_html, "Candidate 2 full path")
     expect_match(dashboard_html, "Need more diagnostics?")
     expect_match(dashboard_html, "Core metrics")
-    expect_match(dashboard_html, "Model-facing matchup diffs")
+    expect_match(dashboard_html, "Model-facing matchup comparison")
+    expect_match(dashboard_html, "Raw model inputs")
+    expect_match(dashboard_html, "Favorite:")
+    expect_match(dashboard_html, "Underdog:")
+    expect_match(dashboard_html, "advantage-row")
     expect_match(dashboard_html, "Diff favors")
-    expect_match(dashboard_html, "Favorite probability")
+    expect_no_match(dashboard_html, "Favorite probability")
+    expect_no_match(dashboard_html, "Underdog probability")
     expect_match(dashboard_html, "Candidate usage")
     divergence_map_pos <- regexpr("Divergence Map", dashboard_html, fixed = TRUE)[[1]]
     diff_reference_pos <- regexpr("Candidate 2 changes from the baseline", dashboard_html, fixed = TRUE)[[1]]
@@ -475,7 +480,15 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(reference_panel_text, "Candidate usage")
     expect_match(reference_panel_text, "C1:")
     expect_match(reference_panel_text, "C2:")
+    expect_match(reference_panel_text, "Favorite:")
+    expect_match(reference_panel_text, "Underdog:")
+    expect_match(reference_panel_text, "Raw model inputs")
     expect_match(reference_panel_text, "Diff favors")
+
+    reference_roles <- rvest::html_text2(rvest::html_elements(reference_panels[[1]], ".team-card__role"))
+    expect_equal(reference_roles, c("Favorite", "Underdog"))
+    expect_true(length(rvest::html_elements(reference_panels[[1]], ".advantage-row")) > 0)
+    expect_equal(length(rvest::html_elements(reference_panels[[1]], "details.comparison-details")), 1L)
 
     technical_html <- create_technical_dashboard_html(
         bracket_year = 2026L,
