@@ -1152,6 +1152,7 @@ augment_matchup_decisions <- function(matchups, round_weights = default_round_we
             favorite_seed = ifelse(win_prob_A >= 0.5, teamA_seed, teamB_seed),
             underdog = ifelse(win_prob_A >= 0.5, teamB, teamA),
             underdog_seed = ifelse(win_prob_A >= 0.5, teamB_seed, teamA_seed),
+            upset = winner == underdog,
             win_prob_favorite = favorite_prob,
             win_prob_underdog = underdog_prob,
             favorite_ci_lower = favorite_ci_lower,

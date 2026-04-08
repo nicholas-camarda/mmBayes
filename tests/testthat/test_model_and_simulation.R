@@ -1005,6 +1005,44 @@ test_that("candidate usage helper formats picks consistently", {
     )
 })
 
+test_that("posterior favorites are not mislabeled as underdogs when seed order disagrees", {
+    matchup <- tibble::tibble(
+        region = "East",
+        round = "Round of 32",
+        matchup_number = 2L,
+        teamA = "Saint John's",
+        teamA_seed = 5L,
+        teamA_strength = 90,
+        teamB = "Kansas",
+        teamB_seed = 4L,
+        teamB_strength = 88,
+        win_prob_A = 0.793,
+        model_win_prob_A = 0.793,
+        line_prob_A = NA_real_,
+        betting_blend_weight = NA_real_,
+        used_betting_line = FALSE,
+        ci_lower = 0.639,
+        ci_upper = 0.895,
+        prediction_sd = 0.1,
+        winner = "Saint John's",
+        upset = TRUE
+    )
+
+    augmented <- augment_matchup_decisions(matchup)
+
+    expect_identical(augmented$posterior_favorite[[1]], "Saint John's")
+    expect_false(augmented$upset[[1]])
+    expect_identical(
+        build_candidate_usage_label(
+            augmented$winner[[1]],
+            augmented$winner[[1]],
+            augmented$upset[[1]],
+            augmented$upset[[1]]
+        ),
+        "C1: Saint John's (Favorite); C2: Saint John's (Favorite)"
+    )
+})
+
 test_that("actual First Four winners replace stale Round of 64 opponents", {
     team_file <- tempfile(fileext = ".xlsx")
     results_file <- tempfile(fileext = ".xlsx")

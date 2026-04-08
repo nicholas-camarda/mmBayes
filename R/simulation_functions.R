@@ -130,8 +130,8 @@ create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_
         ci_upper = win_probs$ci_upper,
         prediction_sd = win_probs$sd,
         winner = winner,
-        upset = (winner == team_a_name && team_a_seed > team_b_seed) ||
-            (winner == team_b_name && team_b_seed > team_a_seed)
+        upset = (win_probs$mean >= 0.5 && winner == team_b_name) ||
+            (win_probs$mean < 0.5 && winner == team_a_name)
     )
 }
 
