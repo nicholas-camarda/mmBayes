@@ -506,7 +506,12 @@ load_tournament_data <- function(config, include_betting_history = TRUE) {
     historical_games <- game_results %>%
         dplyr::filter(Year %in% historical_years)
 
-    historical_closing_lines <- load_historical_closing_lines(config$betting$history_dir %||% NULL)
+    historical_cfg <- resolve_oddspapi_historical_config(config)
+    historical_closing_lines <- load_historical_closing_lines(
+        config$betting$history_dir %||% NULL,
+        min_year = historical_cfg$archive_start_year %||% NULL,
+        require_usable_lines = TRUE
+    )
     historical_betting_features <- build_historical_betting_feature_table(historical_closing_lines)
 
     historical_matchups <- build_explicit_matchup_history(historical_teams, historical_games)

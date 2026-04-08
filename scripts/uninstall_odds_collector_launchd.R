@@ -35,6 +35,8 @@ setwd(project_root)
 
 pkgload::load_all(project_root, export_all = TRUE, helpers = FALSE, quiet = TRUE)
 
+stop_with_message(deprecated_live_betting_workflow_message())
+
 label <- "com.ncamarda.mmBayes.odds_collector"
 uid_result <- run_command("/usr/bin/id", c("-u"))
 if (length(uid_result$output) == 0) {

@@ -166,19 +166,19 @@ After a pipeline run the following files are generated in the runtime output dir
 | `Rscript scripts/run_bracket_candidates.R` | Lighter rerun without the full backtest, but it still fits or reloads models and regenerates candidates |
 | `Rscript scripts/regenerate_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds HTML from the saved full results bundle and syncs repo `output/` copies |
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
-| `Rscript scripts/run_odds_collector.R` | Seasonal Odds API collector for the tournament odds archive |
-| `Rscript scripts/capture_odds_snapshot.R` | Capture a private Odds API snapshot |
-| `Rscript scripts/build_closing_lines.R` | Derive closing-line estimates from saved snapshots |
+| `Rscript scripts/import_historical_odds_papi.R` | Supported OddsPapi v4 seasonal closing-line archive workflow for eligible current-season data |
+| `Rscript scripts/evaluate_historical_betting_impact.R` | Compare the baseline bracket model against the historical-betting-feature model on the 2026 tournament |
 | `Rscript scripts/publish_release.R` | Copy approved deliverables and the odds-history snapshot into the dated release folder |
 | `Rscript scripts/publish_github_pages.R` | Lower-level sync helper that copies already-rendered dashboard HTML into tracked repo `output/` files |
 | `Rscript scripts/evaluate_odds_blend.R` | Compare model-only vs blended probabilities against closing lines |
 
 Notes:
 
-- `scripts/run_simulation.R`, `scripts/run_bracket_candidates.R`, and odds scripts load `.env` when present via `load_dotenv_file()`.
+- `scripts/run_simulation.R`, `scripts/run_bracket_candidates.R`, and the betting-history scripts load `.env` when present via `load_dotenv_file()`.
 - Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
-- Odds workflows keep local history under `data/odds_history/` (gitignored), and the seasonal collector only runs during tournament months.
+- Historical betting workflows keep local history under `data/odds_history/` (gitignored), including raw OddsPapi response caches for reproducibility.
 - `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_dashboards.R` when the saved full results bundle already exists.
+- `scripts/run_odds_collector.R`, `scripts/capture_odds_snapshot.R`, `scripts/build_closing_lines.R`, `scripts/install_odds_collector_launchd.R`, and `scripts/uninstall_odds_collector_launchd.R` are deprecated and now fail fast with migration guidance.
 
 ---
 
@@ -189,7 +189,7 @@ The pipeline runs in seven steps:
 1. Load `config.yml` and read team features plus historical results from `data/`
 2. Build one training row per historical tournament game at the matchup level
 3. Fit a Bayesian logistic regression for game-winner probability
-4. Run the seasonal odds collector as a sidecar when you want to archive tournament market data
+4. Optionally import historical closing lines as a sidecar archive when you want to evaluate betting-feature effects
 5. Run a rolling held-out-tournament backtest to validate calibration
 6. Simulate the current bracket forward round by round using posterior draws
 7. Export dashboards, the decision sheet, and candidate bracket files
@@ -204,25 +204,7 @@ Data sources:
 Current-year monitoring rows are not used to retrain the bracket model or alter the pre-tournament matchup features. They exist so the live performance panels can report how the model is doing as the tournament unfolds.
 
 The default configuration uses the eight most recent completed tournaments, skips 2020, and backtests on rolling held-out years.
-The core winner model and championship total-points model do not require betting inputs; betting is handled separately as an archive/evaluation sidecar.
-
-To install and start the seasonal collector on this Mac:
-
-```sh
-Rscript scripts/install_odds_collector_launchd.R
-```
-
-To inspect the loaded agent:
-
-```sh
-launchctl print gui/$(id -u)/com.ncamarda.mmBayes.odds_collector
-```
-
-To remove it later:
-
-```sh
-Rscript scripts/uninstall_odds_collector_launchd.R
-```
+The core winner model and championship total-points model do not require betting inputs; betting is handled separately as a historical import and evaluation sidecar.
 
 ---
 
@@ -269,20 +251,20 @@ A separate total-points model estimates championship points, powering the tiebre
 
 ---
 
-## Betting Data (Sidecar)
+## Betting Data (Historical Sidecar)
 
-Betting data is now a separate archive and evaluation workflow rather than a default model input. The core prediction pipeline stays betting-free, and the odds collector is only meant to run during the tournament window so you can build a season-by-season closing-line history.
+Betting data is now a historical import and evaluation workflow rather than a live collector pipeline. The core prediction pipeline stays betting-free, and the supported path is to archive `closing_lines.csv` from OddsPapi v4 during each tournament season while the data are still within the provider's documented retention window, then let those archived seasons accumulate for future modeling work.
 
-- The Odds API key is read from `ODDS_API_KEY` and is never written to disk.
-- Bookmakers default to `draftkings`, `fanduel`, `betmgm`, and `betrivers`.
-- Markets default to `h2h` moneyline and `spreads`.
-- Runtime odds history lives under `data/odds_history`.
-- `Rscript scripts/install_odds_collector_launchd.R` installs the seasonal collector into `~/Library/LaunchAgents` on a Mac.
-- `scripts/run_odds_collector.R` is the LaunchAgent entrypoint that performs each seasonal collection pass.
-- `Rscript scripts/uninstall_odds_collector_launchd.R` removes the LaunchAgent when you want to stop seasonal capture.
-- Historical training rows use time-appropriate closing or last-pre-commence lines when available.
-- Current prediction rows use the latest reusable snapshot only in the sidecar/evaluation workflow.
-- `Rscript scripts/evaluate_odds_blend.R` now runs a betting-feature ablation that compares a no-betting baseline, the betting-enhanced model, and a market-only benchmark.
+- The OddsPapi key is read from `ODDS_PAPI_API_KEY` in the repo-root `.env` file.
+- The default verified bookmaker recovery sets are `pinnacle`, `bet365`, `caesars` and `draftkings`, `fanduel`, `betmgm`.
+- The supported archive starts in `2026` and is forward-only by default.
+- OddsPapi v4 historical odds are treated as a short-retention source, so `Rscript scripts/import_historical_odds_papi.R` imports only eligible seasons still inside the configured retention window and documents skipped stale or future years explicitly.
+- Runtime odds history lives under `data/odds_history`, with raw OddsPapi response caches stored locally under each year directory and excluded from release publishing.
+- `Rscript scripts/import_historical_odds_papi.R` writes repo-compatible `closing_lines.csv` files plus import summaries and provider-gap reports for eligible seasons, and skips stale pre-archive seasons gracefully.
+- `Rscript scripts/evaluate_historical_betting_impact.R` compares the 2026 baseline bracket against the historical-betting-feature bracket and reports whether betting improved, matched, or worsened performance.
+- Years before archived betting coverage are handled gracefully in modeling by keeping betting predictors at neutral defaults with `betting_line_available = 0`, rather than pretending those seasons had real lines.
+- `Rscript scripts/evaluate_odds_blend.R` remains available for matchup-level ablations, but it is no longer the primary betting-workflow entrypoint.
+- The old live collector and launchd scripts are deprecated and unsupported.
 
 ---
 
