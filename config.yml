@@ -39,58 +39,33 @@ default:
     n_draws: 1000
   betting:
     enabled: false
+    provider: "odds_api"
+    api_key_env: "ODDS_API_KEY"
+    sport_key: "basketball_ncaab"
+    regions: "us"
+    markets:
+      - "h2h"
+      - "spreads"
+    bookmakers:
+      - "draftkings"
+      - "fanduel"
+      - "betmgm"
+      - "betrivers"
+    odds_format: "american"
+    date_format: "iso"
     history_dir: "~/ProjectsRuntime/mmBayes/data/odds_history"
+    fetch_policy: "if_missing"
+    snapshot_cooldown_minutes: 10
     require_for_production: false
     allow_missing_fallback: true
     evaluation_mode: "ablation"
-    historical:
-      enabled: true
-      provider: "oddspapi_v4"
-      api_key_env: "ODDS_PAPI_API_KEY"
-      sport_id: 11
-      tournament_id: 28370
-      target_years: []
-      archive_start_year: 2026
-      documented_retention_days: 92
-      season_close_month_day: "04-15"
-      bookmaker_sets:
-        - ["pinnacle", "bet365", "caesars"]
-        - ["draftkings", "fanduel", "betmgm"]
-      date_windows:
-        - { from: "03-01", to: "04-15" }
-        - { from: "02-15", to: "04-20" }
-        - { from: "02-01", to: "04-30" }
-      status_id_finished: 2
-      timeout_seconds: 20
-      cache_raw_responses: true
-      continue_on_provider_gaps: true
-      release_raw_cache: false
-    live_collector:
-      supported: false
-      deprecated: true
-      provider: "odds_api"
-      api_key_env: "ODDS_API_KEY"
-      sport_key: "basketball_ncaab"
-      regions: "us"
-      markets:
-        - "h2h"
-        - "spreads"
-      bookmakers:
-        - "draftkings"
-        - "fanduel"
-        - "betmgm"
-        - "betrivers"
-      odds_format: "american"
-      date_format: "iso"
-      fetch_policy: "if_missing"
-      snapshot_cooldown_minutes: 10
-      quota_cap: 500
-      reserve_floor: 100
-      schedule_refresh_minutes: 30
-      poll_interval_minutes: 30
-      lead_minutes: 90
-      tail_minutes: 45
-      slate_gap_minutes: 180
+    quota_cap: 500
+    reserve_floor: 100
+    schedule_refresh_minutes: 30
+    poll_interval_minutes: 30
+    lead_minutes: 90
+    tail_minutes: 45
+    slate_gap_minutes: 180
   output:
     path: "~/ProjectsRuntime/mmBayes/output"
     prefix: "tournament_sim"

@@ -30,13 +30,10 @@ build_odds_history_paths <- function(year, history_dir = default_runtime_history
     list(
         year_dir = year_dir,
         snapshots_dir = file.path(year_dir, "snapshots"),
-        oddspapi_raw_dir = file.path(year_dir, "oddspapi_raw"),
         lines_long = file.path(year_dir, "lines_long.csv"),
         lines_matchups = file.path(year_dir, "lines_matchups.csv"),
         latest_lines_matchups = file.path(year_dir, "latest_lines_matchups.csv"),
         closing_lines = file.path(year_dir, "closing_lines.csv"),
-        import_summary = file.path(year_dir, "historical_import_summary.csv"),
-        import_report = file.path(year_dir, "historical_import_report.json"),
         schedule_events = file.path(year_dir, "schedule_events.csv"),
         schedule_windows = file.path(year_dir, "schedule_windows.csv"),
         collector_state = file.path(year_dir, "collector_state.json")
@@ -52,7 +49,6 @@ build_odds_history_paths <- function(year, history_dir = default_runtime_history
 ensure_odds_history_dirs <- function(paths) {
     dir.create(paths$year_dir, recursive = TRUE, showWarnings = FALSE)
     dir.create(paths$snapshots_dir, recursive = TRUE, showWarnings = FALSE)
-    dir.create(paths$oddspapi_raw_dir, recursive = TRUE, showWarnings = FALSE)
     invisible(TRUE)
 }
 
@@ -849,15 +845,10 @@ resolve_latest_matchup_lines <- function(config, bracket_year, current_teams) {
 #' Load all historical closing lines from the cloud history root
 #'
 #' @param history_dir Base directory for odds history storage.
-#' @param min_year Optional minimum tournament year to keep.
-#' @param require_usable_lines Whether to drop rows with no usable implied probability,
-#'   spread, or bookmaker count.
 #'
 #' @return A tibble of combined closing lines across available years.
 #' @export
-load_historical_closing_lines <- function(history_dir,
-                                          min_year = NULL,
-                                          require_usable_lines = TRUE) {
+load_historical_closing_lines <- function(history_dir) {
     base_dir <- path.expand(history_dir %||% default_runtime_history_root())
     if (!dir.exists(base_dir)) {
         return(tibble::tibble())
@@ -873,47 +864,7 @@ load_historical_closing_lines <- function(history_dir,
         if (is.null(tbl)) {
             return(tibble::tibble())
         }
-        tbl <- dplyr::as_tibble(tbl)
-
-        if (!is.null(min_year) && "Year" %in% names(tbl)) {
-            tbl <- tbl %>%
-                dplyr::mutate(Year = suppressWarnings(as.integer(Year))) %>%
-                dplyr::filter(!is.na(Year) & Year >= as.integer(min_year))
-        }
-
-        if (isTRUE(require_usable_lines) && nrow(tbl) > 0L) {
-            implied_prob <- suppressWarnings(as.numeric(tbl$implied_prob_teamA %||% NA_real_))
-            spread <- suppressWarnings(as.numeric(tbl$spread_teamA %||% NA_real_))
-            n_books <- suppressWarnings(as.numeric(tbl$n_bookmakers %||% NA_real_))
-            usable_row <- is.finite(implied_prob) | is.finite(spread) | (is.finite(n_books) & n_books > 0)
-            tbl <- tbl[usable_row %in% TRUE, , drop = FALSE]
-        }
-
-        if (nrow(tbl) == 0L) {
-            return(tibble::tibble())
-        }
-
-        if ("Year" %in% names(tbl)) tbl$Year <- suppressWarnings(as.integer(tbl$Year))
-        if ("region" %in% names(tbl)) tbl$region <- as.character(tbl$region)
-        if ("round" %in% names(tbl)) tbl$round <- as.character(tbl$round)
-        if ("game_index" %in% names(tbl)) tbl$game_index <- suppressWarnings(as.integer(tbl$game_index))
-        if ("teamA" %in% names(tbl)) tbl$teamA <- as.character(tbl$teamA)
-        if ("teamB" %in% names(tbl)) tbl$teamB <- as.character(tbl$teamB)
-        if ("winner" %in% names(tbl)) tbl$winner <- as.character(tbl$winner)
-        if ("implied_prob_teamA" %in% names(tbl)) tbl$implied_prob_teamA <- suppressWarnings(as.numeric(tbl$implied_prob_teamA))
-        if ("spread_teamA" %in% names(tbl)) tbl$spread_teamA <- suppressWarnings(as.numeric(tbl$spread_teamA))
-        if ("n_bookmakers" %in% names(tbl)) tbl$n_bookmakers <- suppressWarnings(as.integer(tbl$n_bookmakers))
-        if ("closing_snapshot_time_utc" %in% names(tbl)) tbl$closing_snapshot_time_utc <- as.character(tbl$closing_snapshot_time_utc)
-        if ("commence_time_utc" %in% names(tbl)) tbl$commence_time_utc <- as.character(tbl$commence_time_utc)
-        if ("prob_dispersion_a" %in% names(tbl)) tbl$prob_dispersion_a <- suppressWarnings(as.numeric(tbl$prob_dispersion_a))
-        if ("spread_dispersion_a" %in% names(tbl)) tbl$spread_dispersion_a <- suppressWarnings(as.numeric(tbl$spread_dispersion_a))
-        if ("bookmakers" %in% names(tbl)) tbl$bookmakers <- as.character(tbl$bookmakers)
-        if ("closing_before_commence" %in% names(tbl)) tbl$closing_before_commence <- as.logical(tbl$closing_before_commence)
-        if ("provider_fixture_id" %in% names(tbl)) tbl$provider_fixture_id <- as.character(tbl$provider_fixture_id)
-        if ("provider_gap_reason" %in% names(tbl)) tbl$provider_gap_reason <- as.character(tbl$provider_gap_reason)
-        if ("provider_recovery_attempt" %in% names(tbl)) tbl$provider_recovery_attempt <- suppressWarnings(as.integer(tbl$provider_recovery_attempt))
-
-        tbl
+        dplyr::as_tibble(tbl)
     })
 }
 
@@ -936,12 +887,10 @@ build_historical_betting_feature_table <- function(closing_lines) {
             teamA = canonicalize_team_name(teamA),
             teamB = canonicalize_team_name(teamB),
             matchup_key = purrr::map2_chr(teamA, teamB, build_matchup_key),
-            implied_prob_teamA_raw = suppressWarnings(as.numeric(implied_prob_teamA)),
-            spread_teamA_raw = suppressWarnings(as.numeric(spread_teamA)),
+            implied_prob_teamA = safe_numeric(implied_prob_teamA, default = 0.5),
+            spread_teamA = safe_numeric(spread_teamA, default = 0),
             n_bookmakers = safe_numeric(n_bookmakers, default = 0),
-            line_available = as.integer(is.finite(implied_prob_teamA_raw)),
-            implied_prob_teamA = dplyr::if_else(line_available == 1L, implied_prob_teamA_raw, 0.5),
-            spread_teamA = dplyr::if_else(is.finite(spread_teamA_raw), spread_teamA_raw, 0),
+            line_available = as.integer(is.finite(implied_prob_teamA)),
             minutes_before_commence = dplyr::if_else(
                 !is.na(closing_snapshot_time_utc) & !is.na(commence_time_utc),
                 as.numeric(difftime(parse_utc_timestamp(commence_time_utc), parse_utc_timestamp(closing_snapshot_time_utc), units = "mins")),

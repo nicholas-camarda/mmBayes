@@ -91,23 +91,17 @@ Interpretation:
 - Candidate scoring still uses the same bracket-probability framework; only matchup-level win probabilities change when blending is active.
 - Odds history remains local under `data/odds_history/` (gitignored), while outputs continue to be written under `output/`.
 
-## Historical Betting Sidecar
+## Odds Collector Sidecar
 
-The supported betting workflow is now historical-only. `import_historical_oddspapi_closing_lines()` archives repo-compatible `closing_lines.csv` files from OddsPapi v4 under `data/odds_history/<year>/`, writes raw response caches locally for reproducibility, and records provider-gap summaries when fixtures or markets are missing. The importer is forward-only by default, starting in `2026`, because OddsPapi v4 historical odds are treated as a short-retention source rather than a multi-year backfill archive; requested stale or future seasons are documented and skipped. The old live Odds API collector and its `launchd` wrapper are deprecated.
+`run_tournament_odds_collector()` is the seasonal archive builder. It refreshes the free Odds API `/events` schedule oracle, groups games into slates, and only spends Odds API credits inside narrow windows around the next slate. The collector writes its schedule cache and collector state under `data/odds_history/<year>/` and is intended to run on a tournament-season `launchd` heartbeat.
 
-To run the supported backfill:
-
-```sh
-Rscript scripts/import_historical_odds_papi.R
-```
-
-Years before archived betting coverage are handled gracefully in model fitting and evaluation by using neutral betting predictors with `betting_line_available = 0`, so pre-2026 seasons remain usable instead of being dropped.
-
-To measure whether those historical betting features improve bracket selection for the 2026 tournament example:
+To install the Mac LaunchAgent that runs it:
 
 ```sh
-Rscript scripts/evaluate_historical_betting_impact.R
+Rscript scripts/install_odds_collector_launchd.R
 ```
+
+The installed agent lives at `~/Library/LaunchAgents/com.ncamarda.mmBayes.odds_collector.plist`, and you can remove it later with `Rscript scripts/uninstall_odds_collector_launchd.R`.
 
 ## Source Data
 

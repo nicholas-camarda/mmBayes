@@ -322,8 +322,6 @@ team_name_aliases <- function() {
         "stpeters" = "Saint Peter's",
         "tennesseestate" = "Tennessee St.",
         "tennesseest" = "Tennessee St.",
-        "texasam" = "Texas A&M",
-        "texasamaggies" = "Texas A&M",
         "texasaandmcorpuschris" = "Texas A&M Corpus Christi",
         "texasaandmcorpuschristi" = "Texas A&M Corpus Christi",
         "uconn" = "Connecticut",
@@ -2856,22 +2854,10 @@ save_results <- function(results, output_config) {
 #' @return A list containing game-level comparison rows and a one-row summary.
 #' @export
 score_bracket_against_results <- function(predicted_matchups, actual_results, round_weights = default_round_weights()) {
-    normalize_bracket_scoring_region <- function(region, round) {
-        region <- as.character(region)
-        round <- as.character(round)
-        dplyr::if_else(
-            (is.na(region) | !nzchar(region)) & round %in% c("Final Four", "Championship"),
-            "National",
-            region
-        )
-    }
-
     actual_lookup <- actual_results %>%
-        dplyr::mutate(region = normalize_bracket_scoring_region(region, round)) %>%
         dplyr::select(region, round, matchup_number = game_index, actual_winner = winner)
 
     comparison <- predicted_matchups %>%
-        dplyr::mutate(region = normalize_bracket_scoring_region(region, round)) %>%
         dplyr::select(region, round, matchup_number, predicted_winner = winner) %>%
         dplyr::left_join(actual_lookup, by = c("region", "round", "matchup_number")) %>%
         dplyr::mutate(

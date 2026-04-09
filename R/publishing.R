@@ -46,49 +46,6 @@ copy_release_artifact <- function(source, destination_dir) {
     destination_path
 }
 
-#' Copy odds-history files while excluding raw provider caches
-#'
-#' @param history_dir Runtime odds-history root.
-#' @param destination_dir Destination directory inside the release snapshot.
-#'
-#' @return The destination history path that was written.
-#' @keywords internal
-copy_release_odds_history_snapshot <- function(history_dir, destination_dir) {
-    history_dir <- path.expand(history_dir)
-    if (!dir.exists(history_dir)) {
-        stop_with_message(sprintf("Runtime odds-history directory does not exist: %s", history_dir))
-    }
-
-    destination_path <- file.path(destination_dir, basename(history_dir))
-    dir.create(destination_path, recursive = TRUE, showWarnings = FALSE)
-
-    candidates <- list.files(history_dir, recursive = TRUE, all.files = TRUE, full.names = TRUE, no.. = TRUE)
-    if (length(candidates) == 0L) {
-        return(destination_path)
-    }
-
-    rel_paths <- substring(candidates, nchar(history_dir) + 2L)
-    keep <- !startsWith(rel_paths, "oddspapi_raw/") &
-        !grepl("(^|/)oddspapi_raw(/|$)", rel_paths)
-
-    for (index in which(keep)) {
-        source <- candidates[[index]]
-        rel_path <- rel_paths[[index]]
-        target <- file.path(destination_path, rel_path)
-        if (dir.exists(source)) {
-            dir.create(target, recursive = TRUE, showWarnings = FALSE)
-        } else if (file.exists(source)) {
-            dir.create(dirname(target), recursive = TRUE, showWarnings = FALSE)
-            copied <- file.copy(source, target, overwrite = FALSE)
-            if (!isTRUE(copied)) {
-                stop_with_message(sprintf("Failed to copy release odds-history artifact from %s to %s", source, target))
-            }
-        }
-    }
-
-    destination_path
-}
-
 #' Publish a dated release bundle to the cloud-backup root
 #'
 #' @param config Optional project configuration list.
@@ -128,7 +85,7 @@ publish_release_bundle <- function(config = NULL,
         copy_release_artifact(source, deliverables_dir)
     }, character(1))
 
-    snapshot_path <- copy_release_odds_history_snapshot(history_dir, data_snapshot_dir)
+    snapshot_path <- copy_release_artifact(history_dir, data_snapshot_dir)
     manifest_path <- file.path(release_root, "release_manifest.txt")
     manifest_lines <- c(
         sprintf("release_date: %s", format(as.Date(release_date), "%Y-%m-%d")),
