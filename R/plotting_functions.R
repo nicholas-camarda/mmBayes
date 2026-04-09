@@ -1357,6 +1357,7 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
         "</div>",
         "</div>",
         "<div class='quality-card'><h3>Backtest By Round</h3>",
+        "<p class='panel-caption'>Empirical rate is the share of held-out games in that round where the team the model favored actually won.</p>",
         "<table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Log loss</th><th>Brier</th><th>Empirical rate</th></tr></thead><tbody>", round_rows, "</tbody></table>",
         "</div>",
         "</div>",
@@ -2827,7 +2828,7 @@ render_live_performance_html <- function(live_performance, model_label = NULL) {
         "<p class='quality-note'>", html_escape(monitoring_note), "</p>",
         overview_cards,
         "<div class='two-column'>",
-        "<div class='quality-card'><h3>Live By Round</h3><p class='panel-caption'>Current-year completed games grouped by tournament round.</p><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Mean predicted</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
+        "<div class='quality-card'><h3>Live By Round</h3><p class='panel-caption'>Current-year completed games grouped by tournament round.</p><p class='panel-caption'>Mean predicted is the model's average win probability for the side it picked in that round.</p><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Mean predicted</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
         "<div class='quality-card'><h3>", html_escape(recent_games_title), "</h3><p class='panel-caption'>", html_escape(recent_games_note), "</p><table class='dashboard-table'><thead><tr><th>Round</th><th>Matchup</th><th>Winner</th><th>Model pick</th><th>Model P(win)</th><th>Status</th></tr></thead><tbody>", recent_rows, "</tbody></table></div>",
         "</div>",
         "</div>"
@@ -3234,10 +3235,10 @@ render_calibration_svg <- function(calibration_tbl) {
         return("<p class='empty-state'>Backtest calibration was not available for this run.</p>")
     }
 
-    width <- 640
+    width <- 660
     height <- 300
     plot_top <- 18
-    margin_left <- 56
+    margin_left <- 74
     margin_right <- 18
     margin_bottom <- 42
     plot_width <- width - margin_left - margin_right
@@ -3297,7 +3298,7 @@ render_calibration_svg <- function(calibration_tbl) {
         "<text x='", margin_left, "' y='", height - 8, "' font-size='11' fill='#6b7280'>0%</text>",
         "<text x='", margin_left + plot_width, "' y='", height - 8, "' text-anchor='end' font-size='11' fill='#6b7280'>100%</text>",
         "<text x='", margin_left + (plot_width / 2), "' y='", height - 8, "' text-anchor='middle' font-size='11' fill='#6b7280'>Average predicted win probability</text>",
-        "<text x='16' y='", plot_top + (plot_height / 2), "' font-size='11' fill='#6b7280' transform='rotate(-90 16 ", plot_top + (plot_height / 2), ")'>Observed win rate in bucket</text>",
+        "<text x='26' y='", plot_top + (plot_height / 2), "' font-size='11' fill='#6b7280' transform='rotate(-90 26 ", plot_top + (plot_height / 2), ")'>Observed win rate in bucket</text>",
         "</svg>"
     )
 }
@@ -3312,7 +3313,7 @@ render_calibration_help_html <- function() {
         "<div class='legend-chip'><span class='legend-swatch' style='background:#457b9d;'></span>Observed win rate in that probability range</div>",
         "<div class='legend-chip'><span class='legend-swatch' style='background:transparent;border:1px dashed #d6d3d1;box-sizing:border-box;'></span>Perfect line</div>",
         "</div>",
-        "<p class='legend-copy calibration-note'><strong>How to read this chart:</strong> each point groups held-out games into a probability range, such as 30% to 40%. The x-axis is the model's average pregame win probability in that range, and the y-axis is how often that side actually won. So if a point sits near 35% on the x-axis, read it as: among games where the model gave one side about a 35% chance to win, how often did that side actually win? If the observed rate is also about 35%, that range is well calibrated. This is about long-run frequency matching, not whether those were the easiest or 'best' individual predictions. Points below the dashed line mean the model was too optimistic; points above it mean the model was too pessimistic.</p>"
+        "<p class='legend-copy calibration-note'><strong>How to read this chart:</strong> each point groups held-out games into a probability range, such as 30% to 40%. Mean predicted is the model's average pregame win probability in that range, and empirical rate is how often that side actually won. So if a point sits near 35% on the x-axis, read it as: among games where the model gave one side about a 35% chance to win, how often did that side actually win? If the observed rate is also about 35%, that range is well calibrated. This is about long-run frequency matching, not whether those were the easiest or 'best' individual predictions. Points below the dashed line mean the model was too optimistic; points above it mean the model was too pessimistic.</p>"
     )
 }
 
