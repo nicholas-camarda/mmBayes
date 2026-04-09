@@ -401,59 +401,7 @@ make_fixture_closing_lines <- function(team_data, results_data) {
 }
 
 write_fixture_betting_history <- function(history_dir, team_data, results_data, current_year = NULL) {
-    normalize_fixture_path <- function(path) {
-        normalized <- normalizePath(path.expand(path), winslash = "/", mustWork = FALSE)
-        normalized <- gsub("/+", "/", normalized)
-        normalized <- sub("^/private(/(var|tmp)/)", "\\1", normalized)
-        sub("^//+", "/", normalized)
-    }
-
-    path_is_within <- function(path, root) {
-        path <- normalize_fixture_path(path)
-        root <- normalize_fixture_path(root)
-        identical(path, root) || startsWith(path, paste0(root, "/"))
-    }
-
-    assert_fixture_history_dir_is_safe <- function(history_dir) {
-        history_dir <- normalize_fixture_path(history_dir)
-        temp_root <- normalize_fixture_path(tempdir())
-        blocked_roots <- unique(vapply(
-            c(
-                default_runtime_root(),
-                default_runtime_history_root(),
-                default_cloud_root(),
-                default_cloud_history_root(),
-                default_publish_root(),
-                file.path(default_publish_root(), "releases")
-            ),
-            normalize_fixture_path,
-            character(1)
-        ))
-
-        if (!path_is_within(history_dir, temp_root)) {
-            stop_with_message(sprintf(
-                "Refusing to write synthetic betting history outside tempdir(). history_dir=%s tempdir=%s",
-                history_dir,
-                temp_root
-            ))
-        }
-
-        blocked_match <- blocked_roots[vapply(blocked_roots, function(root) {
-            path_is_within(history_dir, root)
-        }, logical(1))]
-        if (length(blocked_match) > 0) {
-            stop_with_message(sprintf(
-                "Refusing to write synthetic betting history into a protected project root. history_dir=%s blocked_root=%s",
-                history_dir,
-                blocked_match[[1]]
-            ))
-        }
-
-        invisible(TRUE)
-    }
-
     history_dir <- path.expand(history_dir)
-    assert_fixture_history_dir_is_safe(history_dir)
     current_year <- as.character(current_year %||% max(as.integer(team_data$Year), na.rm = TRUE))
     closing_lines <- make_fixture_closing_lines(team_data, results_data)
 

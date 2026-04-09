@@ -55,12 +55,12 @@ Optional diagnostics:
 
 ## Working Roots
 
-- Code checkout: the local source checkout
-- Runtime scratch: the configured runtime output directory
-- Synced project root: the configured synced project home
-- Canonical data: `data/`
-- Published outputs: `output/`
-- Dated release bundles: `releases/<YYYY-MM-DD>/`
+- Code checkout: `~/Projects/mmBayes`
+- Runtime scratch: `~/ProjectsRuntime/mmBayes`
+- Cloud project root: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes`
+- Cloud data: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/`
+- Cloud outputs: published copies under `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output/`
+- Cloud publish drops: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/releases/<YYYY-MM-DD>/`
 
 The checkout is a local workspace. The cloud project root holds the canonical input data and published release bundles. The runtime root stays available for local scratch artifacts and live generated outputs.
 
@@ -78,14 +78,14 @@ Rscript scripts/update_data.R
 # 2. Run the full simulation and generate all outputs
 Rscript scripts/run_simulation.R
 
-# This writes the live dashboard bundle to the configured runtime output directory.
-# The main file to open first is output/bracket_dashboard.html inside that runtime root.
+# This writes the live dashboard bundle to ~/ProjectsRuntime/mmBayes/output.
+# The main file to open first is ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html.
 # Expect this step to take longer than the refresh step because it fits/loads models,
 # runs the backtest workflow, and then renders the dashboard bundle.
 
 # 3. Open the main bracket dashboard in your browser
 # macOS example:
-open output/bracket_dashboard.html
+open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
 
 For dashboard or CSS/layout iteration after the full results bundle already exists:
@@ -99,20 +99,20 @@ Rscript scripts/run_simulation.R
 # 3. Regenerate only the dashboard HTML from the cached results bundle
 Rscript scripts/regenerate_dashboards.R
 
-# 4. Inspect the runtime dashboard HTML copies in the configured runtime output directory
+# 4. Inspect the runtime dashboard HTML copies in ~/ProjectsRuntime/mmBayes/output
 # macOS: use `open`
 # macOS example:
-open output/bracket_dashboard.html
+open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
 
 Then scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) to identify the highest-leverage picks before filling out your entry.
-The pipeline writes its live outputs under the configured runtime output directory by default. The tracked files under `output/` in this repo are reference snapshots, not the live run directory. Publish scripts can copy approved artifacts into the synced project tree when you want a shared release bundle.
+The pipeline writes its live outputs under `~/ProjectsRuntime/mmBayes/output` by default. The tracked files under `output/` in this repo are reference snapshots, not the live run directory. Publish scripts can copy approved artifacts into the cloud project tree when you want a shared release bundle.
 
 ---
 
 ## Outputs
 
-After a pipeline run the following files are generated in the runtime output directory. The repository keeps example outputs for reference only. The synced project root holds the canonical input data and dated release bundles, while the runtime root holds the active run outputs and scratch files.
+After a pipeline run the following files are generated in the runtime output directory, which defaults to `~/ProjectsRuntime/mmBayes/output`. The repository keeps example outputs for reference only. The cloud project root holds the canonical input data and dated release bundles, while the runtime root holds the active run outputs and scratch files.
 
 ### Primary Dashboard (HTML)
 
@@ -168,10 +168,10 @@ After a pipeline run the following files are generated in the runtime output dir
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
 | `Rscript scripts/run_odds_collector.R` | Seasonal Odds API collector for the tournament odds archive |
 | `Rscript scripts/capture_odds_snapshot.R` | Capture a private Odds API snapshot |
-| `Rscript scripts/build_closing_lines.R` | Derive closing-line estimates from saved snapshots |
-| `Rscript scripts/publish_release.R` | Copy approved deliverables and the odds-history snapshot into the dated release folder |
+| `Rscript scripts/build_closing_lines.R --year=2026` | Derive closing-line estimates from saved snapshots |
+| `Rscript scripts/publish_release.R` | Copy approved deliverables and the odds-history snapshot into the dated OneDrive release folder |
 | `Rscript scripts/publish_github_pages.R` | Lower-level sync helper that copies already-rendered dashboard HTML into tracked repo `output/` files |
-| `Rscript scripts/evaluate_odds_blend.R` | Compare model-only vs blended probabilities against closing lines |
+| `Rscript scripts/evaluate_odds_blend.R --year=2026` | Compare model-only vs blended probabilities against closing lines |
 
 Notes:
 
@@ -198,8 +198,8 @@ The model estimates game-by-game win probabilities rather than predicting the wh
 
 Data sources:
 
-- `data/pre_tournament_team_features.xlsx` - Bart Torvik pre-tournament season metrics and tournament-field construction
-- `data/tournament_game_results.xlsx` - historical tournament game results plus current-year monitoring rows
+- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` - Bart Torvik pre-tournament season metrics and tournament-field construction
+- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` - historical tournament game results plus current-year monitoring rows
 
 Current-year monitoring rows are not used to retrain the bracket model or alter the pre-tournament matchup features. They exist so the live performance panels can report how the model is doing as the tournament unfolds.
 
@@ -276,7 +276,7 @@ Betting data is now a separate archive and evaluation workflow rather than a def
 - The Odds API key is read from `ODDS_API_KEY` and is never written to disk.
 - Bookmakers default to `draftkings`, `fanduel`, `betmgm`, and `betrivers`.
 - Markets default to `h2h` moneyline and `spreads`.
-- Runtime odds history lives under `data/odds_history`.
+- Runtime odds history lives under `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/odds_history`.
 - `Rscript scripts/install_odds_collector_launchd.R` installs the seasonal collector into `~/Library/LaunchAgents` on a Mac.
 - `scripts/run_odds_collector.R` is the LaunchAgent entrypoint that performs each seasonal collection pass.
 - `Rscript scripts/uninstall_odds_collector_launchd.R` removes the LaunchAgent when you want to stop seasonal capture.
@@ -300,7 +300,7 @@ mmBayes/
 └── config.yml          # Pipeline configuration
 ```
 
-Local runtime artifacts such as transient logs and scratch caches live under the configured runtime root. The canonical data live under the synced project root, and published release bundles are written there as dated releases.
+Local runtime artifacts such as transient logs and scratch caches live under `~/ProjectsRuntime/mmBayes`. The canonical data live under the cloud project root, and published release bundles are written there as dated releases.
 
 ---
 

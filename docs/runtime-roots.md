@@ -6,19 +6,19 @@
 
 | Role | Path |
 |------|------|
-| Code | the local source checkout |
-| Runtime | the configured runtime output directory |
-| Synced project root | the configured synced project home |
-| Canonical data | `data/` |
-| Published outputs | `output/` |
-| Published releases | `releases/<YYYY-MM-DD>/` |
+| Code | `~/Projects/mmBayes` |
+| Runtime | `~/ProjectsRuntime/mmBayes` |
+| Cloud project root | `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/` |
+| Cloud data | `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/` |
+| Cloud outputs | `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output/` |
+| Published releases | `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/releases/<YYYY-MM-DD>/` |
 
 ## Runtime Policy
 
-- Active runs may still use the configured runtime root for scratch artifacts.
+- Active runs may still use `~/ProjectsRuntime/mmBayes` for scratch artifacts.
 - The repository checkout is a local non-synced working tree.
 - Cloud storage holds the canonical input data and published release bundles.
-- Live generated outputs belong in `output/` under the runtime root during active runs.
+- Live generated outputs belong in `~/ProjectsRuntime/mmBayes/output` during active runs.
 - Release drops must be append-only and split into `deliverables/` and `data_snapshot/`.
 
 ## Publish Layout
