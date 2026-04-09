@@ -12,13 +12,9 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     config$model$history_window <- 3L
     config$model$n_draws <- 25L
     config$runtime$root <- runtime_root
-    config$betting$history_dir <- file.path(runtime_root, "data", "odds_history")
     config$output$path <- output_dir
     config <- normalize_project_paths(config)
     config$output$prefix <- "fixture"
-    team_data <- read_table_file(fixture_paths$team_path)
-    results_data <- read_table_file(fixture_paths$results_path)
-    write_fixture_betting_history(config$betting$history_dir, team_data, results_data, current_year = 2025)
 
     old_options <- options(
         mmBayes.stan_chains = 1L,
@@ -49,7 +45,6 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     expect_true(file.exists(results$output$model_quality_archive))
     expect_identical(results$output$model_quality_archive, results$output$model_quality_latest)
     expect_true(file.exists(results$output$model_comparison_dashboard))
-    expect_equal(nrow(results$model$betting_feature_context$current_betting_features), 0L)
     expect_false(any(startsWith(results$model$predictor_columns, "betting_")))
     expect_false(any(startsWith(results$total_points_model$predictor_columns, "betting_")))
     expect_null(results$visualization)

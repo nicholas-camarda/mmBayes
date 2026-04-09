@@ -259,8 +259,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         model = model_results,
         data = list(
             historical_teams = loaded$historical_teams,
-            historical_actual_results = loaded$historical_actual_results,
-            historical_betting_features = loaded$historical_betting_features
+            historical_actual_results = loaded$historical_actual_results
         )
     ))
     model_overview <- list(
@@ -304,8 +303,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         data = list(
             bracket_year = 2025L,
             current_completed_results = live_current_results,
-            current_teams = live_team_data %>% dplyr::filter(Year == "2025"),
-            historical_betting_features = tibble::tibble()
+            current_teams = live_team_data %>% dplyr::filter(Year == "2025")
         ),
         model_results = model_results,
         draws = 25L
@@ -355,8 +353,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         data = list(
             bracket_year = 2025L,
             current_completed_results = first_four_only_results,
-            current_teams = live_team_data %>% dplyr::filter(Year == "2025"),
-            historical_betting_features = tibble::tibble()
+            current_teams = live_team_data %>% dplyr::filter(Year == "2025")
         ),
         model_results = model_results,
         draws = 25L
@@ -372,8 +369,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         data = list(
             bracket_year = 2025L,
             current_completed_results = live_without_timestamps,
-            current_teams = live_team_data %>% dplyr::filter(Year == "2025"),
-            historical_betting_features = tibble::tibble()
+            current_teams = live_team_data %>% dplyr::filter(Year == "2025")
         ),
         model_results = model_results,
         draws = 25L
@@ -385,8 +381,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         data = list(
             bracket_year = 2025L,
             current_completed_results = tibble::tibble(),
-            current_teams = live_team_data %>% dplyr::filter(Year == "2025"),
-            historical_betting_features = tibble::tibble()
+            current_teams = live_team_data %>% dplyr::filter(Year == "2025")
         ),
         model_results = model_results,
         draws = 25L

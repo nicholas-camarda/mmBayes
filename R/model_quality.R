@@ -947,11 +947,7 @@ summarize_live_tournament_performance <- function(data, model_results, draws = 1
     }
 
     current_reference <- build_actual_game_reference(data$current_teams, current_completed_results)
-    matchup_rows <- actual_results_to_matchup_rows(
-        current_reference,
-        historical_betting_features = data$historical_betting_features %||% tibble::tibble(),
-        current_betting_features = model_results$betting_feature_context$current_betting_features %||% tibble::tibble()
-    )
+    matchup_rows <- actual_results_to_matchup_rows(current_reference)
 
     if (nrow(matchup_rows) == 0) {
         return(list(

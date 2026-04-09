@@ -58,12 +58,6 @@ calculate_win_probabilities <- function(teamA, teamB, round_name, model_results,
     model_draw_probs <- predict_matchup_probabilities(teamA, teamB, round_name, model_results, draws)
     model_mean <- mean(model_draw_probs)
 
-    betting <- model_results$betting_feature_context %||% list()
-    line_prob <- NA_real_
-    if (!is.null(betting$current_lines_matchups) && nrow(betting$current_lines_matchups) > 0) {
-        line_prob <- lookup_line_prob_for_team_a(betting$current_lines_matchups, teamA$Team[1], teamB$Team[1])
-    }
-
     list(
         mean = mean(model_draw_probs),
         ci_lower = as.numeric(stats::quantile(model_draw_probs, 0.025)),
@@ -71,7 +65,7 @@ calculate_win_probabilities <- function(teamA, teamB, round_name, model_results,
         sd = stats::sd(model_draw_probs),
         draws = model_draw_probs,
         model_mean = model_mean,
-        line_prob = line_prob,
+        line_prob = NA_real_,
         blend_weight = 0,
         used_betting_line = FALSE
     )

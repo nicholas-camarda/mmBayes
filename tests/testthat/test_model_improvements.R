@@ -308,8 +308,7 @@ test_that("build_model_comparison_bundle sanitizes BART options and renders the 
                                         cache_dir = NULL,
                                         use_cache = TRUE,
                                         interaction_terms = NULL,
-                                        prior_type = "normal",
-                                        historical_betting_features = NULL) {
+                                        prior_type = "normal") {
             captured$run_rolling_backtest <- list(
                 engine = engine,
                 interaction_terms = interaction_terms,

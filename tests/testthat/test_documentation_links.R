@@ -21,13 +21,12 @@ test_that("GitHub Pages landing page links to the public dashboards", {
     expect_no_match(index_text, "output/model_comparison_dashboard\\.html")
 })
 
-test_that("methods guide documents betting-line integration", {
+test_that("methods guide documents that betting work is parked off master", {
     repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
     methods_text <- paste(readLines(file.path(repo_root, "docs", "methods-and-interpretation.md"), warn = FALSE), collapse = "\n")
 
-    expect_match(methods_text, "Betting-Line Integration")
-    expect_match(methods_text, "blend_rounds")
-    expect_match(methods_text, "p_\\{\\\\text\\{blend\\}\\}")
+    expect_match(methods_text, "betting-line experimentation is not part of the supported workflow")
+    expect_match(methods_text, "betting-lines-spike")
 })
 
 test_that("README documents the dashboard regeneration workflow and command roles", {

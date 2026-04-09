@@ -59,7 +59,6 @@ publish_release_bundle <- function(config = NULL,
                                    publish_root = default_publish_root()) {
     config <- config %||% load_project_config()
     output_dir <- path.expand(config$output$path %||% default_cloud_output_root())
-    history_dir <- path.expand(config$betting$history_dir %||% default_cloud_history_root())
     release_root <- project_publish_release_root(release_date, publish_root = publish_root)
 
     if (dir.exists(release_root)) {
@@ -68,14 +67,9 @@ publish_release_bundle <- function(config = NULL,
     if (!dir.exists(output_dir)) {
         stop_with_message(sprintf("Runtime output directory does not exist: %s", output_dir))
     }
-    if (!dir.exists(history_dir)) {
-        stop_with_message(sprintf("Runtime odds-history directory does not exist: %s", history_dir))
-    }
 
     deliverables_dir <- file.path(release_root, "deliverables")
-    data_snapshot_dir <- file.path(release_root, "data_snapshot")
     dir.create(deliverables_dir, recursive = TRUE, showWarnings = FALSE)
-    dir.create(data_snapshot_dir, recursive = TRUE, showWarnings = FALSE)
 
     deliverable_paths <- vapply(release_deliverable_manifest(), function(filename) {
         source <- file.path(output_dir, filename)
@@ -85,26 +79,20 @@ publish_release_bundle <- function(config = NULL,
         copy_release_artifact(source, deliverables_dir)
     }, character(1))
 
-    snapshot_path <- copy_release_artifact(history_dir, data_snapshot_dir)
     manifest_path <- file.path(release_root, "release_manifest.txt")
     manifest_lines <- c(
         sprintf("release_date: %s", format(as.Date(release_date), "%Y-%m-%d")),
         sprintf("output_dir: %s", output_dir),
-        sprintf("history_dir: %s", history_dir),
         "deliverables:",
-        paste0("  - ", release_deliverable_manifest()),
-        sprintf("data_snapshot: %s", snapshot_path)
+        paste0("  - ", release_deliverable_manifest())
     )
     writeLines(manifest_lines, manifest_path, useBytes = TRUE)
 
     list(
         release_root = release_root,
         deliverables_dir = deliverables_dir,
-        data_snapshot_dir = data_snapshot_dir,
         manifest_path = manifest_path,
         deliverables = unname(deliverable_paths),
-        snapshot_path = snapshot_path,
-        output_dir = output_dir,
-        history_dir = history_dir
+        output_dir = output_dir
     )
 }

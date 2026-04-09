@@ -9,8 +9,6 @@ This document describes the active `mmBayes` runtime as implemented in:
 - `R/model_fitting.R`
 - `R/simulation_functions.R`
 - `R/utils.R`
-- `R/betting_lines.R`
-- `R/betting_evaluation.R`
 - `R/model_quality.R`
 - `R/plotting_functions.R`
 

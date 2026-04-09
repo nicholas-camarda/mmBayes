@@ -3357,11 +3357,6 @@ render_model_overview_html_legacy <- function(model_overview) {
     } else {
         "None"
     }
-    betting_text <- if (safe_numeric(model_overview$betting_predictor_count, default = 0) > 0) {
-        sprintf("%s betting-derived predictors", safe_numeric(model_overview$betting_predictor_count, default = 0))
-    } else {
-        "No betting-derived predictors"
-    }
     engine_detail <- if (identical(model_overview$engine, "bart")) {
         paste0(
             "Trees ", safe_numeric(bart_config$n_trees, default = NA_real_),
@@ -3382,7 +3377,6 @@ render_model_overview_html_legacy <- function(model_overview) {
         "<div class='summary-card'><div class='summary-label'>Engine</div><div class='summary-value'>", html_escape(engine_label), "</div><p class='summary-note'>", html_escape(model_overview$engine %||% "unknown"), "</p></div>",
         "<div class='summary-card'><div class='summary-label'>Draw budget</div><div class='summary-value'>", html_escape(draws_text), "</div><p class='summary-note'>Posterior samples used for scoring and simulation.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(as.character(safe_numeric(model_overview$predictor_count, default = 0))), "</div><p class='summary-note'>", html_escape(predictor_text), "</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Betting features</div><div class='summary-value'>", html_escape(betting_text), "</div><p class='summary-note'>Whether market-derived predictors are in play.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Extra structure</div><div class='summary-value'>", html_escape(interaction_text), "</div><p class='summary-note'>Interactions or other model terms beyond the base predictors.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Engine settings</div><div class='summary-value'>", html_escape(engine_label), "</div><p class='summary-note'>", html_escape(engine_detail), "</p></div>",
         "</div>",

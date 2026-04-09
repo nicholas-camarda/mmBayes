@@ -65,28 +65,12 @@ default_runtime_output_root <- function() {
     file.path(default_runtime_root(), "output")
 }
 
-#' Return the local runtime odds-history root
-#'
-#' @return A normalized path to the runtime odds-history directory.
-#' @keywords internal
-default_runtime_history_root <- function() {
-    file.path(default_runtime_data_root(), "odds_history")
-}
-
 #' Return the canonical cloud output root
 #'
 #' @return A normalized path to the shared cloud output directory.
 #' @keywords internal
 default_cloud_output_root <- function() {
     file.path(default_cloud_root(), "output")
-}
-
-#' Return the canonical cloud odds-history root
-#'
-#' @return A normalized path to the shared cloud odds-history directory.
-#' @keywords internal
-default_cloud_history_root <- function() {
-    file.path(default_cloud_data_root(), "odds_history")
 }
 
 #' Return the dated publish folder for a release
@@ -115,7 +99,6 @@ project_roots <- function(release_date = Sys.Date()) {
         cloud_root = default_cloud_root(),
         data_root = default_cloud_data_root(),
         output_root = default_runtime_output_root(),
-        history_root = default_runtime_history_root(),
         publish_root = publish_root,
         release_root = project_publish_release_root(release_date, publish_root = publish_root)
     )
@@ -130,9 +113,7 @@ project_roots <- function(release_date = Sys.Date()) {
 normalize_project_paths <- function(config) {
     runtime_root <- path.expand(config$runtime$root %||% default_runtime_root())
     cloud_data_root <- default_cloud_data_root()
-    runtime_data_root <- file.path(runtime_root, "data")
     runtime_output_root <- file.path(runtime_root, "output")
-    runtime_history_root <- file.path(runtime_data_root, "odds_history")
     config$runtime <- merge_config_lists(
         list(
             slug = project_slug(),
@@ -158,7 +139,6 @@ normalize_project_paths <- function(config) {
     default_log_path <- file.path(default_runtime_output_root(), "logs", "tournament_simulation.log")
     default_refresh_log_path <- file.path(default_runtime_output_root(), "logs", "data_refresh.log")
 
-    config$betting$history_dir <- path.expand(config$betting$history_dir %||% runtime_history_root)
     config$output$path <- path.expand(config$output$path %||% runtime_output_root)
     config$output$model_cache_path <- path.expand(
         if (is.null(config$output$model_cache_path) ||
@@ -238,30 +218,6 @@ default_project_config <- function() {
             prior_type = "normal",
             random_seed = 42,
             n_draws = 1000
-        ),
-        betting = list(
-            enabled = FALSE,
-            provider = "odds_api",
-            api_key_env = "ODDS_API_KEY",
-            sport_key = "basketball_ncaab",
-            regions = "us",
-            markets = c("h2h", "spreads"),
-            bookmakers = c("draftkings", "fanduel", "betmgm", "betrivers"),
-            odds_format = "american",
-            date_format = "iso",
-            history_dir = default_runtime_history_root(),
-            fetch_policy = "if_missing",
-            snapshot_cooldown_minutes = 10L,
-            require_for_production = FALSE,
-            allow_missing_fallback = TRUE,
-            evaluation_mode = "ablation",
-            quota_cap = 500L,
-            reserve_floor = 100L,
-            schedule_refresh_minutes = 30L,
-            poll_interval_minutes = 30L,
-            lead_minutes = 90L,
-            tail_minutes = 45L,
-            slate_gap_minutes = 180L
         ),
         output = list(
             path = runtime_output_root,

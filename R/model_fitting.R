@@ -725,11 +725,10 @@ configure_total_points_priors <- function() {
 #'
 #' @param actual_results A score-bearing historical tournament result table with
 #'   team A and team B features already joined.
-#' @param historical_betting_features Optional historical betting feature table.
 #'
 #' @return A matchup-level training table for total-points modeling.
 #' @export
-build_total_points_training_rows <- function(actual_results, historical_betting_features = NULL) {
+build_total_points_training_rows <- function(actual_results) {
     if (nrow(actual_results) == 0) {
         return(tibble::tibble())
     }
@@ -775,10 +774,7 @@ build_total_points_training_rows <- function(actual_results, historical_betting_
     ) %>%
         dplyr::mutate(round = factor(round, levels = round_levels()))
 
-    augment_total_points_rows_with_betting_features(
-        rows,
-        historical_betting_features = historical_betting_features
-    )
+    rows
 }
 
 #' Fit the tournament total-points model
@@ -1014,14 +1010,10 @@ perform_model_diagnostics <- function(model, engine = "bayes") {
 #'
 #' @param actual_results A game-results table with team A and team B features
 #'   already joined.
-#' @param historical_betting_features Optional historical betting feature table.
-#' @param current_betting_features Optional current/latest betting feature table.
 #'
 #' @return A matchup-level table suitable for holdout scoring.
 #' @keywords internal
-actual_results_to_matchup_rows <- function(actual_results,
-                                           historical_betting_features = NULL,
-                                           current_betting_features = NULL) {
+actual_results_to_matchup_rows <- function(actual_results) {
     if (nrow(actual_results) == 0) {
         return(tibble::tibble())
     }
@@ -1068,11 +1060,7 @@ actual_results_to_matchup_rows <- function(actual_results,
     ) %>%
         dplyr::mutate(round = factor(round, levels = round_levels()))
 
-    augment_matchup_rows_with_betting_features(
-        rows,
-        historical_betting_features = historical_betting_features,
-        current_betting_features = current_betting_features
-    )
+    rows
 }
 
 #' Predict posterior win probabilities for matchup rows
@@ -1084,11 +1072,6 @@ actual_results_to_matchup_rows <- function(actual_results,
 #' @return A draw-by-game matrix of posterior expected win probabilities.
 #' @keywords internal
 predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
-    matchup_rows <- augment_matchup_rows_with_betting_features(
-        matchup_rows,
-        historical_betting_features = model_results$betting_feature_context$historical_betting_features %||% NULL,
-        current_betting_features = model_results$betting_feature_context$current_betting_features %||% NULL
-    )
     engine <- model_results$engine %||% "stan_glm"
     if (engine %in% c("bayes", "bayes_glm")) {
         engine <- "stan_glm"
@@ -1182,11 +1165,6 @@ predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
 #' @return A draw-by-game matrix of posterior predictive total points.
 #' @export
 predict_total_points_rows <- function(matchup_rows, model_results, draws = 1000) {
-    matchup_rows <- augment_total_points_rows_with_betting_features(
-        matchup_rows,
-        historical_betting_features = model_results$betting_feature_context$historical_betting_features %||% NULL,
-        current_betting_features = model_results$betting_feature_context$current_betting_features %||% NULL
-    )
     engine <- model_results$engine %||% "stan_glm"
     if (engine %in% c("bayes", "bayes_glm")) {
         engine <- "stan_glm"
@@ -1283,8 +1261,6 @@ predict_total_points_rows <- function(matchup_rows, model_results, draws = 1000)
 #' @param interaction_terms Optional character vector of interaction terms
 #'   forwarded to [fit_tournament_model()].
 #' @param prior_type Prior type forwarded to [fit_tournament_model()].
-#' @param historical_betting_features Optional historical betting feature table
-#'   used to augment training and holdout rows.
 #'
 #' @return A list of year-level metrics, predictions, calibration, bracket
 #'   scores, and summary metrics.
@@ -1300,8 +1276,7 @@ run_rolling_backtest <- function(historical_teams,
                                  cache_dir = NULL,
                                  use_cache = TRUE,
                                  interaction_terms = NULL,
-                                 prior_type = "normal",
-                                 historical_betting_features = NULL) {
+                                 prior_type = "normal") {
     engine <- match.arg(engine)
     years <- sort(unique(as.character(historical_actual_results$Year)))
     if (length(years) < 2) {
@@ -1338,10 +1313,7 @@ run_rolling_backtest <- function(historical_teams,
             dplyr::filter(Year == holdout_year)
 
         model_results <- fit_tournament_model(
-            historical_matchups = build_explicit_matchup_history(train_teams, train_results) %>%
-                augment_matchup_rows_with_betting_features(
-                    historical_betting_features = historical_betting_features
-                ),
+            historical_matchups = build_explicit_matchup_history(train_teams, train_results),
             predictor_columns = predictor_columns,
             engine = engine,
             bart_config = bart_config,
@@ -1352,16 +1324,8 @@ run_rolling_backtest <- function(historical_teams,
             interaction_terms = interaction_terms,
             prior_type = prior_type
         )
-        model_results$betting_feature_context <- list(
-            historical_betting_features = historical_betting_features %||% tibble::tibble(),
-            current_betting_features = tibble::tibble(),
-            current_lines_matchups = tibble::tibble()
-        )
 
-        holdout_rows <- actual_results_to_matchup_rows(
-            holdout_results,
-            historical_betting_features = historical_betting_features
-        )
+        holdout_rows <- actual_results_to_matchup_rows(holdout_results)
         draw_matrix <- predict_matchup_rows(holdout_rows, model_results, draws = draws)
         predicted_prob <- colMeans(draw_matrix)
 
@@ -1468,8 +1432,7 @@ compare_model_configurations <- function(
             cache_dir = cache_dir,
             use_cache = !is.null(cache_dir),
             interaction_terms = cfg$interaction_terms,
-            prior_type = cfg$prior_type %||% "normal",
-            historical_betting_features = cfg$historical_betting_features %||% NULL
+            prior_type = cfg$prior_type %||% "normal"
         )
     }
 

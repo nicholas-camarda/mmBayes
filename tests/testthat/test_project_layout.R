@@ -9,7 +9,6 @@ test_that("project roots point at the local code, runtime, cloud, and publish pa
     )
     expect_equal(roots$data_root, file.path(roots$cloud_root, "data"))
     expect_equal(roots$output_root, file.path(roots$runtime_root, "output"))
-    expect_equal(roots$history_root, file.path(roots$runtime_root, "data", "odds_history"))
     expect_equal(
         roots$publish_root,
         path.expand("~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes")
@@ -17,15 +16,12 @@ test_that("project roots point at the local code, runtime, cloud, and publish pa
     expect_equal(roots$release_root, file.path(roots$publish_root, "releases", "2026-03-27"))
 })
 
-test_that("publish_release_bundle copies only approved deliverables and the odds-history snapshot", {
+test_that("publish_release_bundle copies only approved deliverables", {
     runtime_root <- tempfile(pattern = "mmBayes-runtime-")
     output_dir <- file.path(runtime_root, "output")
-    history_dir <- file.path(runtime_root, "data", "odds_history")
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
     dir.create(file.path(output_dir, "model_cache"), recursive = TRUE, showWarnings = FALSE)
     dir.create(file.path(output_dir, "logs"), recursive = TRUE, showWarnings = FALSE)
-    dir.create(file.path(history_dir, "2026", "snapshots"), recursive = TRUE, showWarnings = FALSE)
-    dir.create(file.path(history_dir, "2025"), recursive = TRUE, showWarnings = FALSE)
 
     for (filename in release_deliverable_manifest()) {
         writeLines(sprintf("fixture:%s", filename), file.path(output_dir, filename))
@@ -34,15 +30,8 @@ test_that("publish_release_bundle copies only approved deliverables and the odds
     writeLines("cache", file.path(output_dir, "model_cache", "cached-fit.rds"))
     writeLines("log", file.path(output_dir, "logs", "tournament_simulation.log"))
 
-    writeLines("lines", file.path(history_dir, "2026", "lines_matchups.csv"))
-    writeLines("latest", file.path(history_dir, "2026", "latest_lines_matchups.csv"))
-    writeLines("closing", file.path(history_dir, "2026", "closing_lines.csv"))
-    writeLines("snapshot", file.path(history_dir, "2026", "snapshots", "odds_api_20260327_120000.json"))
-    writeLines("history", file.path(history_dir, "2025", "closing_lines.csv"))
-
     config <- default_project_config()
     config$output$path <- output_dir
-    config$betting$history_dir <- history_dir
 
     publish_root <- tempfile(pattern = "mmBayes-publish-")
     result <- publish_release_bundle(
@@ -60,9 +49,7 @@ test_that("publish_release_bundle copies only approved deliverables and the odds
     expect_false(file.exists(file.path(result$deliverables_dir, "tournament_sim.rds")))
     expect_false(dir.exists(file.path(result$deliverables_dir, "model_cache")))
     expect_false(dir.exists(file.path(result$deliverables_dir, "logs")))
-    expect_true(file.exists(file.path(result$data_snapshot_dir, "odds_history", "2026", "lines_matchups.csv")))
-    expect_true(file.exists(file.path(result$data_snapshot_dir, "odds_history", "2026", "snapshots", "odds_api_20260327_120000.json")))
-    expect_true(file.exists(file.path(result$data_snapshot_dir, "odds_history", "2025", "closing_lines.csv")))
+    expect_false(dir.exists(file.path(result$release_root, "data_snapshot")))
 })
 
 test_that("regenerate_dashboards_from_saved_results fails clearly when the saved results bundle is missing", {

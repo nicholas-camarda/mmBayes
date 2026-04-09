@@ -68,5 +68,4 @@ result <- publish_release_bundle(
 cat("Published release bundle\n")
 cat(sprintf("- Release root: %s\n", result$release_root))
 cat(sprintf("- Deliverables: %s\n", result$deliverables_dir))
-cat(sprintf("- Data snapshot: %s\n", result$data_snapshot_dir))
 cat(sprintf("- Manifest: %s\n", result$manifest_path))

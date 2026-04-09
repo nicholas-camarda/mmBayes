@@ -37,8 +37,7 @@ initialize_logging(log_path)
 
 logger::log_info("Running fast bracket-candidate pipeline")
 
-data <- load_tournament_data(config, include_betting_history = FALSE)
-data$historical_betting_features <- tibble::tibble()
+data <- load_tournament_data(config)
 matchup_predictors <- core_matchup_predictor_columns(config$model$required_predictors)
 model_results <- fit_tournament_model(
     historical_matchups = data$historical_matchups,
@@ -49,15 +48,6 @@ model_results <- fit_tournament_model(
     cache_dir = model_cache_dir,
     use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
 )
-model_results$betting_feature_context <- list(
-    current_lines_matchups = tibble::tibble(),
-    current_betting_features = tibble::tibble(),
-    historical_betting_features = tibble::tibble(),
-    source_label = NULL,
-    used_api_call = FALSE,
-    latest_lines_matchups_path = NULL,
-    snapshot_path = NULL
-)
 total_points_model <- fit_total_points_model(
     historical_total_points = build_total_points_training_rows(data$historical_actual_results),
     engine = engine,
@@ -66,7 +56,6 @@ total_points_model <- fit_total_points_model(
     cache_dir = model_cache_dir,
     use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
 )
-total_points_model$betting_feature_context <- model_results$betting_feature_context
 model_overview <- list(
     matchup = summarize_model_overview(model_results, draws = draws_budget),
     totals = summarize_model_overview(total_points_model, draws = draws_budget)

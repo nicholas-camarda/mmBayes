@@ -275,8 +275,7 @@ run_tournament_simulation <- function(config = NULL) {
 
     logger::log_info("Pipeline started")
     logger::log_info("Loading tournament data")
-    data <- load_tournament_data(config, include_betting_history = FALSE)
-    data$historical_betting_features <- tibble::tibble()
+    data <- load_tournament_data(config)
     logger::log_info("Fitting tournament model")
     interaction_terms <- as.character(unlist(config$model$interaction_terms %||% character(0)))
     if (length(interaction_terms) == 0L) interaction_terms <- NULL
@@ -292,15 +291,6 @@ run_tournament_simulation <- function(config = NULL) {
         interaction_terms = interaction_terms,
         prior_type = config$model$prior_type %||% "normal"
     )
-    model_results$betting_feature_context <- list(
-        current_lines_matchups = tibble::tibble(),
-        current_betting_features = tibble::tibble(),
-        historical_betting_features = tibble::tibble(),
-        source_label = NULL,
-        used_api_call = FALSE,
-        latest_lines_matchups_path = NULL,
-        snapshot_path = NULL
-    )
     logger::log_info("Fitting total-points model")
     total_points_model <- fit_total_points_model(
         historical_total_points = build_total_points_training_rows(data$historical_actual_results),
@@ -310,7 +300,6 @@ run_tournament_simulation <- function(config = NULL) {
         cache_dir = model_cache_dir,
         use_cache = use_model_cache
     )
-    total_points_model$betting_feature_context <- model_results$betting_feature_context
     logger::log_info("Running backtest")
     backtest_results <- if (isTRUE(config$model$backtest)) {
         run_rolling_backtest(
@@ -405,7 +394,6 @@ run_tournament_simulation <- function(config = NULL) {
         total_points_predictions = total_points_predictions,
         live_performance = live_performance,
         final_four = simulation_results$final_four,
-        betting = model_results$betting_feature_context,
         output = list(log_path = run_log_path)
     )
 
