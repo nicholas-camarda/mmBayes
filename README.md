@@ -260,8 +260,11 @@ Betting data is now a historical import and evaluation workflow rather than a li
 - The supported archive starts in `2026` and is forward-only by default.
 - OddsPapi v4 historical odds are treated as a short-retention source, so `Rscript scripts/import_historical_odds_papi.R` imports only eligible seasons still inside the configured retention window and documents skipped stale or future years explicitly.
 - Runtime odds history lives under `data/odds_history`, with raw OddsPapi response caches stored locally under each year directory and excluded from release publishing.
-- `Rscript scripts/import_historical_odds_papi.R` writes repo-compatible `closing_lines.csv` files plus import summaries and provider-gap reports for eligible seasons, and skips stale pre-archive seasons gracefully.
-- `Rscript scripts/evaluate_historical_betting_impact.R` compares the 2026 baseline bracket against the historical-betting-feature bracket and reports whether betting improved, matched, or worsened performance.
+- `Rscript scripts/import_historical_odds_papi.R` writes repo-compatible `closing_lines.csv` files plus import summaries and provider-gap reports for eligible seasons. Full seasonal success means every completed game has both moneyline and spread; operator output now reports `season_status` plus separate moneyline, spread, and full completeness rates.
+- Partial or provider-limited `closing_lines.csv` files remain usable as local artifacts, but they are not treated as a successful seasonal archive.
+- `Rscript scripts/evaluate_historical_betting_impact.R` now reports two different things:
+  - deployable evidence from prior archived seasons only
+  - non-deployable hindsight studies for `2026`, including both direct line-driven matchup substitution and candidate-pool overlay reranking
 - Years before archived betting coverage are handled gracefully in modeling by keeping betting predictors at neutral defaults with `betting_line_available = 0`, rather than pretending those seasons had real lines.
 - `Rscript scripts/evaluate_odds_blend.R` remains available for matchup-level ablations, but it is no longer the primary betting-workflow entrypoint.
 - The old live collector and launchd scripts are deprecated and unsupported.

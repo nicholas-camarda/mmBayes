@@ -275,7 +275,50 @@ test_that("historical closing-lines loader ignores empty stale years with mismat
     expect_true(is.character(loaded$closing_snapshot_time_utc))
 })
 
-test_that("historical betting impact evaluation writes a 2026 comparison report", {
+test_that("import-summary coverage reports provider-limited gaps and separate market rates", {
+    import_summary <- tibble::tibble(
+        provider_fixture_id = c("fixture-1", "fixture-2", NA_character_),
+        recovered_moneyline = c(TRUE, TRUE, FALSE),
+        recovered_spread = c(TRUE, FALSE, FALSE),
+        provider_gap_reason = c(NA_character_, "spread_not_found", "fixture_not_found")
+    )
+
+    coverage <- summarize_import_summary_coverage(import_summary)
+
+    expect_equal(coverage$target_games, 3L)
+    expect_equal(coverage$matched_games, 2L)
+    expect_equal(coverage$recovered_moneyline_games, 2L)
+    expect_equal(coverage$recovered_spread_games, 1L)
+    expect_equal(coverage$recovered_both_games, 1L)
+    expect_equal(coverage$season_status, "provider-limited")
+    expect_equal(coverage$moneyline_completeness_rate, 2 / 3)
+    expect_equal(coverage$spread_completeness_rate, 1 / 3)
+    expect_equal(coverage$full_completeness_rate, 1 / 3)
+    expect_equal(coverage$provider_gap_reasons$fixture_not_found, 1L)
+})
+
+test_that("current-year closing-line coverage requires both moneyline and spread for complete status", {
+    team_data <- make_fixture_team_features(current_year = 2026, history_years = 2024:2025)
+    actual_results <- make_fixture_current_year_completed_results(team_data, current_year = 2026)
+    complete_lines <- make_fixture_closing_lines(team_data, actual_results) %>%
+        dplyr::filter(Year == "2026")
+
+    complete_coverage <- summarize_current_year_closing_line_coverage(complete_lines, actual_results)
+    expect_equal(complete_coverage$season_status, "complete")
+    expect_equal(complete_coverage$moneyline_completeness_rate, 1)
+    expect_equal(complete_coverage$spread_completeness_rate, 1)
+    expect_equal(complete_coverage$full_completeness_rate, 1)
+
+    partial_lines <- complete_lines
+    partial_lines$spread_teamA[[1]] <- NA_real_
+    partial_coverage <- summarize_current_year_closing_line_coverage(partial_lines, actual_results)
+    expect_equal(partial_coverage$season_status, "partial")
+    expect_equal(partial_coverage$moneyline_completeness_rate, 1)
+    expect_lt(partial_coverage$spread_completeness_rate, 1)
+    expect_lt(partial_coverage$full_completeness_rate, 1)
+})
+
+test_that("historical betting impact evaluation reports deployable and retrospective analyses when complete coverage exists", {
     team_file <- tempfile(fileext = ".xlsx")
     results_file <- tempfile(fileext = ".xlsx")
     runtime_root <- tempfile(pattern = "mmBayes-runtime-")
@@ -292,11 +335,19 @@ test_that("historical betting impact evaluation writes a 2026 comparison report"
     config$data$game_results_path <- fixture_paths$results_path
     config$runtime$root <- runtime_root
     config$betting$history_dir <- file.path(runtime_root, "data", "odds_history")
+    config$betting$historical$archive_start_year <- 2024L
     config$output$path <- file.path(runtime_root, "output")
     config$output$use_model_cache <- FALSE
     config <- normalize_project_paths(config)
 
     write_fixture_betting_history(config$betting$history_dir, team_data, results_data, current_year = 2026)
+    current_paths <- build_odds_history_paths(2026L, history_dir = config$betting$history_dir)
+    ensure_odds_history_dirs(current_paths)
+    utils::write.csv(
+        make_fixture_closing_lines(team_data, results_data) %>% dplyr::filter(Year == "2026"),
+        current_paths$closing_lines,
+        row.names = FALSE
+    )
 
     old_options <- options(
         mmBayes.stan_chains = 1L,
@@ -312,13 +363,23 @@ test_that("historical betting impact evaluation writes a 2026 comparison report"
         n_simulations = 10L
     )
 
+    expect_true(all(c(
+        "deployable_historical_training",
+        "retrospective_current_year_direct_substitution",
+        "retrospective_current_year_candidate_overlay"
+    ) %in% evaluation$summary$analysis))
     expect_true(all(c("baseline_no_betting", "historical_betting_features") %in% evaluation$summary$model))
+    expect_true(all(c(
+        "baseline_candidate_pool",
+        "current_year_closing_lines_overlay"
+    ) %in% evaluation$summary$model))
+    expect_true(all(evaluation$summary$current_year_season_status == "complete"))
     expect_true(file.exists(evaluation$output_paths$summary))
     expect_true(file.exists(evaluation$output_paths$differences))
     expect_true(file.exists(evaluation$output_paths$report))
 })
 
-test_that("historical betting impact evaluation exits cleanly when only current-year lines exist", {
+test_that("historical betting impact evaluation keeps retrospective studies when only current-year lines exist", {
     team_file <- tempfile(fileext = ".xlsx")
     results_file <- tempfile(fileext = ".xlsx")
     runtime_root <- tempfile(pattern = "mmBayes-runtime-")
@@ -345,6 +406,13 @@ test_that("historical betting impact evaluation exits cleanly when only current-
         dplyr::filter(Year == "2026")
     utils::write.csv(current_closing_lines, current_paths$closing_lines, row.names = FALSE)
 
+    old_options <- options(
+        mmBayes.stan_chains = 1L,
+        mmBayes.stan_iter = 60L,
+        mmBayes.stan_refresh = 0L
+    )
+    on.exit(options(old_options), add = TRUE)
+
     evaluation <- evaluate_historical_betting_bracket_impact(
         config = config,
         draws = 20L,
@@ -352,11 +420,76 @@ test_that("historical betting impact evaluation exits cleanly when only current-
         n_simulations = 10L
     )
 
-    expect_true(all(is.na(evaluation$summary$bracket_score)))
-    expect_true(all(evaluation$summary$outcome_vs_baseline == "unknown"))
+    deployable_rows <- evaluation$summary %>%
+        dplyr::filter(analysis == "deployable_historical_training")
+    retrospective_rows <- evaluation$summary %>%
+        dplyr::filter(analysis != "deployable_historical_training")
+
+    expect_true(any(is.na(deployable_rows$bracket_score[deployable_rows$model == "historical_betting_features"])))
+    expect_true(any(retrospective_rows$model == "current_year_closing_lines_direct"))
+    expect_true(any(retrospective_rows$model == "current_year_closing_lines_overlay"))
+    expect_true(all(retrospective_rows$current_year_season_status == "complete"))
+    expect_true(any(!is.na(retrospective_rows$bracket_score)))
     expect_match(
-        unique(stats::na.omit(evaluation$summary$note)),
+        unique(stats::na.omit(deployable_rows$note)),
         "outside the training seasons"
     )
     expect_true(file.exists(evaluation$output_paths$report))
+})
+
+test_that("historical betting impact evaluation marks retrospective analyses unavailable when current-year coverage is partial", {
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    runtime_root <- tempfile(pattern = "mmBayes-runtime-")
+
+    team_data <- make_fixture_team_features(current_year = 2026, history_years = 2024:2025)
+    results_data <- dplyr::bind_rows(
+        make_fixture_game_results(team_data, history_years = 2024:2025),
+        make_fixture_current_year_completed_results(team_data, current_year = 2026)
+    )
+    fixture_paths <- write_fixture_data_files(team_file, results_file, team_data = team_data, results_data = results_data)
+
+    config <- default_project_config()
+    config$data$team_features_path <- fixture_paths$team_path
+    config$data$game_results_path <- fixture_paths$results_path
+    config$runtime$root <- runtime_root
+    config$betting$history_dir <- file.path(runtime_root, "data", "odds_history")
+    config$output$path <- file.path(runtime_root, "output")
+    config$output$use_model_cache <- FALSE
+    config <- normalize_project_paths(config)
+
+    current_paths <- build_odds_history_paths(2026L, history_dir = config$betting$history_dir)
+    ensure_odds_history_dirs(current_paths)
+    partial_lines <- make_fixture_closing_lines(team_data, results_data) %>%
+        dplyr::filter(Year == "2026")
+    partial_lines$spread_teamA[[1]] <- NA_real_
+    utils::write.csv(partial_lines, current_paths$closing_lines, row.names = FALSE)
+
+    old_options <- options(
+        mmBayes.stan_chains = 1L,
+        mmBayes.stan_iter = 60L,
+        mmBayes.stan_refresh = 0L
+    )
+    on.exit(options(old_options), add = TRUE)
+
+    evaluation <- evaluate_historical_betting_bracket_impact(
+        config = config,
+        draws = 20L,
+        n_candidates = 2L,
+        n_simulations = 10L
+    )
+
+    retrospective_rows <- evaluation$summary %>%
+        dplyr::filter(analysis %in% c(
+            "retrospective_current_year_direct_substitution",
+            "retrospective_current_year_candidate_overlay"
+        ))
+
+    expect_true(all(is.na(retrospective_rows$bracket_score)))
+    expect_true(all(retrospective_rows$outcome_vs_baseline == "unknown"))
+    expect_true(all(retrospective_rows$current_year_season_status == "partial"))
+    expect_match(
+        paste(stats::na.omit(retrospective_rows$note), collapse = " "),
+        "could not run"
+    )
 })

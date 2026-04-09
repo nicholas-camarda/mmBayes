@@ -1,12 +1,18 @@
 ## ADDED Requirements
 
 ### Requirement: Current-season archive completeness SHALL define operational success
-The system SHALL define operational success for the supported betting-line workflow as a complete current-season `closing_lines.csv` archive for the target tournament year, where completeness is measured against the set of completed games present in the local tournament results workbook for that same year.
+The system SHALL define operational success for the supported betting-line workflow as a complete current-season `closing_lines.csv` archive for the target tournament year, where completeness is measured against the set of completed games present in the local tournament results workbook for that same year, and where full success requires both moneyline and spread coverage for every completed game.
 
 #### Scenario: A current-season archive is complete
 - **WHEN** the importer finishes for a supported target season in the forward archive window
 - **THEN** the workflow SHALL compare the written `closing_lines.csv` rows against the completed-game rows in the local results workbook for that season
-- **THEN** the season SHALL only be labeled successful when every completed local game has a corresponding closing-line row with usable betting values
+- **THEN** the season SHALL only be labeled successful when every completed local game has a corresponding closing-line row with usable moneyline and spread values
+
+#### Scenario: Season reporting exposes separate market completeness rates
+- **WHEN** the workflow summarizes a supported target season
+- **THEN** it SHALL report a season-level status using the full both-markets success rule
+- **THEN** it SHALL also report separate moneyline completeness and spread completeness rates across completed games
+- **THEN** those separate rates SHALL not override the stricter definition of full season success
 
 #### Scenario: A current-season archive is only partial
 - **WHEN** the importer writes a usable but incomplete `closing_lines.csv` for the current supported season
@@ -20,6 +26,7 @@ The system SHALL define a separate retrospective evaluation that asks whether a 
 #### Scenario: The repository has complete current-year closing lines
 - **WHEN** the supported current tournament year has complete closing-line coverage for its completed games
 - **THEN** the workflow SHALL run an explicit bracket-impact analysis using that complete current-year closing-line set
+- **THEN** the analysis SHALL include both a direct line-driven matchup substitution study and a candidate-ranking overlay study
 - **THEN** the resulting report SHALL state whether those complete current-year lines improved, matched, or worsened bracket outcomes relative to the baseline comparison being tested
 - **THEN** the report SHALL explicitly identify the analysis as a retrospective upper-bound or hindsight study rather than a deployable bracket-submission workflow
 
@@ -74,7 +81,9 @@ The system SHALL include an explicit evaluation that compares baseline bracket s
 #### Scenario: Complete 2026 closing lines are used for a retrospective current-year test
 - **WHEN** the repository has complete closing-line coverage for the completed `2026` tournament games
 - **THEN** the workflow SHALL run a distinct retrospective evaluation that uses those complete `2026` closing lines to assess whether current-year closing-line information would have improved bracket prediction for the completed `2026` tournament
-- **THEN** the evaluation output SHALL report the scoring comparison and changed bracket decisions under that same-year complete-lines design
+- **THEN** that retrospective evaluation SHALL include a direct line-driven matchup substitution analysis that measures the informational value of complete `2026` closing lines on realized `2026` matchups
+- **THEN** that retrospective evaluation SHALL also include a candidate-ranking overlay analysis that measures whether the existing candidate-selection workflow would have chosen a better bracket using the same complete `2026` line signal
+- **THEN** the evaluation output SHALL report the scoring comparison and changed bracket decisions for both retrospective analysis types under that same-year complete-lines design
 - **THEN** the workflow SHALL identify that result as retrospective and non-deployable for upfront bracket submission
 
 #### Scenario: Only partial or current-year-only betting coverage exists

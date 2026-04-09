@@ -1322,6 +1322,290 @@ derive_oddspapi_fixture_closing_line <- function(result_row,
     )
 }
 
+#' Filter completed tournament results for one season
+#'
+#' @param game_results Normalized game results.
+#' @param year Tournament year.
+#'
+#' @return A canonicalized tibble of completed games for the season.
+#' @keywords internal
+completed_tournament_results_for_year <- function(game_results, year) {
+    game_results %>%
+        dplyr::filter(
+            Year == as.character(year),
+            !is.na(winner),
+            !is.na(teamA_score),
+            !is.na(teamB_score)
+        ) %>%
+        dplyr::mutate(
+            teamA = canonicalize_team_name(teamA),
+            teamB = canonicalize_team_name(teamB),
+            winner = canonicalize_team_name(winner)
+        )
+}
+
+#' Summarize season-level closing-line coverage from an import summary
+#'
+#' @param import_summary Per-game import summary rows.
+#'
+#' @return A named list of coverage counts, rates, and season status.
+#' @keywords internal
+summarize_import_summary_coverage <- function(import_summary) {
+    import_summary <- dplyr::as_tibble(import_summary %||% tibble::tibble())
+    target_games <- nrow(import_summary)
+    matched_games <- sum(!is.na(import_summary$provider_fixture_id) & nzchar(import_summary$provider_fixture_id), na.rm = TRUE)
+    recovered_moneyline_games <- sum(import_summary$recovered_moneyline %in% TRUE, na.rm = TRUE)
+    recovered_spread_games <- sum(import_summary$recovered_spread %in% TRUE, na.rm = TRUE)
+    recovered_both_games <- sum(import_summary$recovered_moneyline %in% TRUE & import_summary$recovered_spread %in% TRUE, na.rm = TRUE)
+
+    moneyline_completeness_rate <- if (target_games > 0L) recovered_moneyline_games / target_games else NA_real_
+    spread_completeness_rate <- if (target_games > 0L) recovered_spread_games / target_games else NA_real_
+    full_completeness_rate <- if (target_games > 0L) recovered_both_games / target_games else NA_real_
+
+    provider_gap_values <- import_summary$provider_gap_reason %||% character(0)
+    provider_gap_values <- provider_gap_values[!is.na(provider_gap_values) & nzchar(provider_gap_values)]
+    provider_gap_reasons <- as.list(sort(table(provider_gap_values), decreasing = TRUE))
+
+    season_status <- dplyr::case_when(
+        target_games == 0L ~ "no_completed_games",
+        recovered_both_games == target_games ~ "complete",
+        matched_games < target_games || length(provider_gap_values) > 0L ~ "provider-limited",
+        TRUE ~ "partial"
+    )
+
+    list(
+        target_games = target_games,
+        matched_games = matched_games,
+        recovered_moneyline_games = recovered_moneyline_games,
+        recovered_spread_games = recovered_spread_games,
+        recovered_both_games = recovered_both_games,
+        unresolved_games = max(target_games - recovered_both_games, 0L),
+        moneyline_completeness_rate = moneyline_completeness_rate,
+        spread_completeness_rate = spread_completeness_rate,
+        full_completeness_rate = full_completeness_rate,
+        season_status = season_status,
+        provider_gap_reasons = provider_gap_reasons
+    )
+}
+
+#' Normalize a region value for bracket scoring joins
+#'
+#' @param region Region label.
+#' @param round Round label.
+#'
+#' @return A normalized character vector.
+#' @keywords internal
+normalize_bracket_region <- function(region, round) {
+    region <- as.character(region)
+    round <- as.character(round)
+    dplyr::if_else(
+        (is.na(region) | !nzchar(region)) & round %in% c("Final Four", "Championship"),
+        "National",
+        region
+    )
+}
+
+#' Summarize current-year closing-line coverage against completed results
+#'
+#' @param closing_lines Current-year closing lines.
+#' @param actual_results Completed current-year results.
+#'
+#' @return A list with joined slot rows, season status, and completeness metrics.
+#' @keywords internal
+summarize_current_year_closing_line_coverage <- function(closing_lines, actual_results) {
+    closing_lines <- dplyr::as_tibble(closing_lines %||% tibble::tibble())
+    actual_results <- dplyr::as_tibble(actual_results %||% tibble::tibble())
+
+    if (nrow(actual_results) == 0L) {
+        return(list(
+            slots = tibble::tibble(),
+            season_status = "no_completed_games",
+            target_games = 0L,
+            recovered_moneyline_games = 0L,
+            recovered_spread_games = 0L,
+            recovered_both_games = 0L,
+            moneyline_completeness_rate = NA_real_,
+            spread_completeness_rate = NA_real_,
+            full_completeness_rate = NA_real_
+        ))
+    }
+
+    actual_prepped <- actual_results %>%
+        dplyr::mutate(
+            Year = suppressWarnings(as.integer(Year)),
+            region = normalize_bracket_region(region, round),
+            round = as.character(round),
+            game_index = suppressWarnings(as.integer(game_index)),
+            teamA = canonicalize_team_name(teamA),
+            teamB = canonicalize_team_name(teamB),
+            winner = canonicalize_team_name(winner)
+        ) %>%
+        dplyr::select(Year, region, round, game_index, teamA, teamB, winner)
+
+    closing_prepped <- closing_lines %>%
+        dplyr::mutate(
+            .closing_row_present = TRUE,
+            Year = suppressWarnings(as.integer(Year)),
+            region = normalize_bracket_region(region, round),
+            round = as.character(round),
+            game_index = suppressWarnings(as.integer(game_index)),
+            teamA = canonicalize_team_name(teamA),
+            teamB = canonicalize_team_name(teamB),
+            implied_prob_teamA = suppressWarnings(as.numeric(implied_prob_teamA)),
+            spread_teamA = suppressWarnings(as.numeric(spread_teamA)),
+            n_bookmakers = suppressWarnings(as.integer(n_bookmakers))
+        ) %>%
+        dplyr::select(
+            Year,
+            region,
+            round,
+            game_index,
+            teamA,
+            teamB,
+            .closing_row_present,
+            implied_prob_teamA,
+            spread_teamA,
+            n_bookmakers
+        )
+
+    slots <- actual_prepped %>%
+        dplyr::left_join(
+            closing_prepped,
+            by = c("Year", "region", "round", "game_index", "teamA", "teamB")
+        ) %>%
+        dplyr::mutate(
+            recovered_moneyline = is.finite(implied_prob_teamA),
+            recovered_spread = is.finite(spread_teamA),
+            recovered_both = recovered_moneyline & recovered_spread
+        )
+
+    target_games <- nrow(slots)
+    recovered_moneyline_games <- sum(slots$recovered_moneyline %in% TRUE, na.rm = TRUE)
+    recovered_spread_games <- sum(slots$recovered_spread %in% TRUE, na.rm = TRUE)
+    recovered_both_games <- sum(slots$recovered_both %in% TRUE, na.rm = TRUE)
+
+    moneyline_completeness_rate <- recovered_moneyline_games / target_games
+    spread_completeness_rate <- recovered_spread_games / target_games
+    full_completeness_rate <- recovered_both_games / target_games
+
+    season_status <- dplyr::case_when(
+        target_games == 0L ~ "no_completed_games",
+        recovered_both_games == target_games ~ "complete",
+        TRUE ~ "partial"
+    )
+
+    list(
+        slots = slots,
+        season_status = season_status,
+        target_games = target_games,
+        recovered_moneyline_games = recovered_moneyline_games,
+        recovered_spread_games = recovered_spread_games,
+        recovered_both_games = recovered_both_games,
+        moneyline_completeness_rate = moneyline_completeness_rate,
+        spread_completeness_rate = spread_completeness_rate,
+        full_completeness_rate = full_completeness_rate
+    )
+}
+
+#' Build actual-slot line picks for retrospective current-year analysis
+#'
+#' @param coverage_summary Output from [summarize_current_year_closing_line_coverage()].
+#' @param round_weights Optional round scoring weights.
+#'
+#' @return A tibble of actual slots with line-driven picks and weighted scores.
+#' @keywords internal
+build_current_year_line_lookup <- function(coverage_summary,
+                                           round_weights = default_round_weights()) {
+    slots <- dplyr::as_tibble((coverage_summary %||% list())$slots %||% tibble::tibble())
+    if (nrow(slots) == 0L) {
+        return(tibble::tibble())
+    }
+
+    slots %>%
+        dplyr::mutate(
+            region = normalize_bracket_region(region, round),
+            matchup_number = game_index,
+            implied_prob_teamA = suppressWarnings(as.numeric(implied_prob_teamA)),
+            implied_prob_teamB = 1 - implied_prob_teamA,
+            line_pick = dplyr::if_else(implied_prob_teamA >= 0.5, teamA, teamB),
+            line_pick_probability = dplyr::if_else(implied_prob_teamA >= 0.5, implied_prob_teamA, implied_prob_teamB),
+            round_weight = unname(round_weights[round]),
+            round_weight = dplyr::coalesce(round_weight, 0)
+        ) %>%
+        dplyr::select(
+            Year,
+            region,
+            round,
+            matchup_number,
+            teamA,
+            teamB,
+            winner,
+            line_pick,
+            line_pick_probability,
+            implied_prob_teamA,
+            implied_prob_teamB,
+            round_weight
+        )
+}
+
+#' Score candidate brackets against current-year closing-line picks
+#'
+#' @param candidates Candidate brackets from [generate_bracket_candidates()].
+#' @param current_line_lookup Lookup from [build_current_year_line_lookup()].
+#' @param model_label Human-readable pool label.
+#'
+#' @return A tibble with one row per candidate and overlay scores.
+#' @keywords internal
+score_candidate_list_against_current_year_lines <- function(candidates,
+                                                            current_line_lookup,
+                                                            model_label) {
+    current_line_lookup <- dplyr::as_tibble(current_line_lookup %||% tibble::tibble())
+    if (nrow(current_line_lookup) == 0L) {
+        return(tibble::tibble())
+    }
+    lookup <- current_line_lookup %>%
+        dplyr::rename(
+            line_teamA = teamA,
+            line_teamB = teamB,
+            line_round_weight = round_weight
+        )
+
+    purrr::imap_dfr(candidates, function(candidate, index) {
+        matchups <- dplyr::as_tibble(candidate$matchups %||% tibble::tibble())
+        comparison <- matchups %>%
+            dplyr::mutate(
+                region = normalize_bracket_region(region, round),
+                matchup_number = suppressWarnings(as.integer(matchup_number)),
+                candidate_pick = canonicalize_team_name(winner)
+            ) %>%
+            dplyr::left_join(
+                lookup,
+                by = c("region", "round", "matchup_number")
+            ) %>%
+            dplyr::mutate(
+                overlay_pick_probability = dplyr::case_when(
+                    candidate_pick == line_teamA ~ implied_prob_teamA,
+                    candidate_pick == line_teamB ~ implied_prob_teamB,
+                    TRUE ~ 0
+                ),
+                line_pick_match = candidate_pick == line_pick
+            )
+
+        tibble::tibble(
+            analysis = "retrospective_current_year_candidate_overlay",
+            model = model_label,
+            candidate_id = as.integer(index),
+            candidate_type = candidate$type %||% if (index == 1L) "deterministic" else "simulation",
+            champion = candidate$champion %||% NA_character_,
+            line_overlay_score = sum(comparison$line_round_weight * comparison$overlay_pick_probability, na.rm = TRUE),
+            line_pick_matches = sum(comparison$line_pick_match %in% TRUE, na.rm = TRUE),
+            overlay_slots_scored = sum(!is.na(comparison$line_pick)),
+            line_pick_match_rate = mean(comparison$line_pick_match %in% TRUE, na.rm = TRUE)
+        )
+    }) %>%
+        dplyr::arrange(dplyr::desc(line_overlay_score), dplyr::desc(line_pick_matches), candidate_id)
+}
+
 #' Run an authenticated OddsPapi preflight
 #'
 #' @param config Project configuration list.
@@ -1477,13 +1761,7 @@ import_historical_oddspapi_closing_lines <- function(config, years = NULL, prefl
 
     results <- list()
     for (year in target_years) {
-        results_year <- game_results %>%
-            dplyr::filter(Year == as.character(year)) %>%
-            dplyr::mutate(
-                teamA = canonicalize_team_name(teamA),
-                teamB = canonicalize_team_name(teamB),
-                winner = canonicalize_team_name(winner)
-            )
+        results_year <- completed_tournament_results_for_year(game_results, year)
         paths <- build_odds_history_paths(year, history_dir = history_dir)
         ensure_odds_history_dirs(paths)
 
@@ -1601,16 +1879,24 @@ import_historical_oddspapi_closing_lines <- function(config, years = NULL, prefl
         utils::write.csv(closing_lines, paths$closing_lines, row.names = FALSE)
         utils::write.csv(import_summary, paths$import_summary, row.names = FALSE)
 
+        coverage <- summarize_import_summary_coverage(import_summary)
+
         report <- list(
             year = year,
-            target_games = nrow(results_year),
-            matched_games = sum(!is.na(matched_table$fixture_id) & nzchar(matched_table$fixture_id)),
-            recovered_moneyline_games = sum(import_summary$recovered_moneyline, na.rm = TRUE),
-            recovered_spread_games = sum(import_summary$recovered_spread, na.rm = TRUE),
-            unresolved_games = sum(!import_summary$recovered_moneyline, na.rm = TRUE),
+            target_games = coverage$target_games,
+            completed_game_count = coverage$target_games,
+            matched_games = coverage$matched_games,
+            recovered_moneyline_games = coverage$recovered_moneyline_games,
+            recovered_spread_games = coverage$recovered_spread_games,
+            recovered_both_games = coverage$recovered_both_games,
+            unresolved_games = coverage$unresolved_games,
+            season_status = coverage$season_status,
+            moneyline_completeness_rate = coverage$moneyline_completeness_rate,
+            spread_completeness_rate = coverage$spread_completeness_rate,
+            full_completeness_rate = coverage$full_completeness_rate,
             documented_historical_retention_months = 3L,
             requested_year_outside_documented_retention = as.Date(sprintf("%d-04-15", year)) < (Sys.Date() - 92),
-            provider_gap_reasons = as.list(sort(table(import_summary$provider_gap_reason), decreasing = TRUE)),
+            provider_gap_reasons = coverage$provider_gap_reasons,
             recovery_attempts = attempt_reports,
             generated_at = format(Sys.time(), tz = "UTC", usetz = TRUE)
         )
@@ -1695,79 +1981,196 @@ evaluate_historical_betting_bracket_impact <- function(config,
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
     bracket_year <- loaded$bracket_year
-    actual_results <- loaded$game_results %>%
-        dplyr::filter(
-            Year == bracket_year,
-            !is.na(winner),
-            !is.na(teamA_score),
-            !is.na(teamB_score)
-        )
+    actual_results <- completed_tournament_results_for_year(loaded$game_results, bracket_year)
 
     summary_path <- file.path(output_dir, sprintf("betting_bracket_impact_%s_summary.csv", bracket_year))
     differences_path <- file.path(output_dir, sprintf("betting_bracket_impact_%s_differences.csv", bracket_year))
     report_path <- file.path(output_dir, sprintf("betting_bracket_impact_%s_report.md", bracket_year))
+
+    history_dir <- path.expand((config$betting %||% list())$history_dir %||% default_runtime_history_root())
+    historical_cfg <- resolve_oddspapi_historical_config(config)
+    closing_lines_archive <- load_historical_closing_lines(
+        history_dir,
+        min_year = historical_cfg$archive_start_year %||% NULL,
+        require_usable_lines = TRUE
+    )
+    current_year_closing_lines <- closing_lines_archive %>%
+        dplyr::filter(Year == suppressWarnings(as.integer(bracket_year)))
+    current_year_coverage <- summarize_current_year_closing_line_coverage(current_year_closing_lines, actual_results)
+    actual_champion <- unique(actual_results$winner[actual_results$round == "Championship"])
+    actual_champion <- if (length(actual_champion) > 0L) actual_champion[[1]] else NA_character_
+
+    attach_coverage_metadata <- function(tbl) {
+        tbl %>%
+            dplyr::mutate(
+                current_year_season_status = current_year_coverage$season_status %||% "no_completed_games",
+                current_year_target_games = current_year_coverage$target_games %||% 0L,
+                current_year_recovered_moneyline_games = current_year_coverage$recovered_moneyline_games %||% 0L,
+                current_year_recovered_spread_games = current_year_coverage$recovered_spread_games %||% 0L,
+                current_year_recovered_both_games = current_year_coverage$recovered_both_games %||% 0L,
+                moneyline_completeness_rate = current_year_coverage$moneyline_completeness_rate %||% NA_real_,
+                spread_completeness_rate = current_year_coverage$spread_completeness_rate %||% NA_real_,
+                full_completeness_rate = current_year_coverage$full_completeness_rate %||% NA_real_
+            )
+    }
+
+    build_note_row <- function(analysis, model, selection_method, note) {
+        attach_coverage_metadata(tibble::tibble(
+            analysis = analysis,
+            model = model,
+            selection_method = selection_method,
+            candidate_id = NA_integer_,
+            candidate_type = NA_character_,
+            champion = NA_character_,
+            correct_picks = NA_integer_,
+            total_games = nrow(actual_results),
+            bracket_score = NA_real_,
+            champion_correct = NA,
+            outcome_vs_baseline = "unknown",
+            note = note
+        ))
+    }
+
+    score_candidate_summary <- function(candidate, analysis, model, selection_method, note = NA_character_) {
+        if (is.null(candidate)) {
+            return(build_note_row(analysis, model, "not_available", note %||% "Candidate was not available."))
+        }
+
+        scored <- score_bracket_against_results(candidate$matchups, actual_results)
+        champion_value <- candidate$champion %||% NA_character_
+        attach_coverage_metadata(tibble::tibble(
+            analysis = analysis,
+            model = model,
+            selection_method = selection_method,
+            candidate_id = suppressWarnings(as.integer(candidate$candidate_id %||% NA_integer_)),
+            candidate_type = candidate$type %||% NA_character_,
+            champion = champion_value,
+            correct_picks = scored$summary$correct_picks[[1]],
+            total_games = scored$summary$total_games[[1]],
+            bracket_score = scored$summary$bracket_score[[1]],
+            champion_correct = if (is.na(actual_champion)) NA else isTRUE(champion_value == actual_champion),
+            outcome_vs_baseline = NA_character_,
+            note = note
+        ))
+    }
+
+    score_matchup_summary <- function(matchups, analysis, model, selection_method, note = NA_character_) {
+        if (nrow(matchups %||% tibble::tibble()) == 0L) {
+            return(build_note_row(analysis, model, "not_available", note %||% "No matchups were available for scoring."))
+        }
+
+        scored <- score_bracket_against_results(matchups, actual_results)
+        champion_value <- matchups %>%
+            dplyr::filter(round == "Championship") %>%
+            dplyr::pull(winner)
+        champion_value <- if (length(champion_value) > 0L) champion_value[[1]] else NA_character_
+
+        attach_coverage_metadata(tibble::tibble(
+            analysis = analysis,
+            model = model,
+            selection_method = selection_method,
+            candidate_id = NA_integer_,
+            candidate_type = "direct_substitution",
+            champion = champion_value,
+            correct_picks = scored$summary$correct_picks[[1]],
+            total_games = scored$summary$total_games[[1]],
+            bracket_score = scored$summary$bracket_score[[1]],
+            champion_correct = if (is.na(actual_champion)) NA else isTRUE(champion_value == actual_champion),
+            outcome_vs_baseline = NA_character_,
+            note = note
+        ))
+    }
+
+    build_difference_table <- function(base_matchups, alt_matchups, analysis, alternative_label) {
+        if (is.null(base_matchups) || is.null(alt_matchups)) {
+            return(tibble::tibble())
+        }
+
+        required_columns <- c("region", "round", "matchup_number", "teamA", "teamB", "winner")
+        if (!all(required_columns %in% names(base_matchups)) || !all(required_columns %in% names(alt_matchups))) {
+            return(tibble::tibble())
+        }
+
+        base_tbl <- dplyr::as_tibble(base_matchups)
+        alt_tbl <- dplyr::as_tibble(alt_matchups)
+        if (!"confidence_tier" %in% names(base_tbl)) {
+            base_tbl$confidence_tier <- NA_character_
+        }
+        if (!"upset_leverage" %in% names(base_tbl)) {
+            base_tbl$upset_leverage <- NA_real_
+        }
+
+        base_tbl %>%
+            dplyr::mutate(
+                region = normalize_bracket_region(region, round),
+                matchup_number = suppressWarnings(as.integer(matchup_number)),
+                candidate_1_matchup = sprintf("%s vs %s", teamA, teamB),
+                baseline_pick = winner
+            ) %>%
+            dplyr::select(
+                region,
+                round,
+                matchup_number,
+                candidate_1_matchup,
+                baseline_pick,
+                confidence_tier,
+                upset_leverage
+            ) %>%
+            dplyr::left_join(
+                alt_tbl %>%
+                    dplyr::mutate(
+                        region = normalize_bracket_region(region, round),
+                        matchup_number = suppressWarnings(as.integer(matchup_number)),
+                        candidate_2_matchup = sprintf("%s vs %s", teamA, teamB),
+                        alternative_pick = winner
+                    ) %>%
+                    dplyr::select(region, round, matchup_number, candidate_2_matchup, alternative_pick),
+                by = c("region", "round", "matchup_number")
+            ) %>%
+            dplyr::mutate(
+                candidate_2_matchup = dplyr::coalesce(candidate_2_matchup, candidate_1_matchup),
+                alternative_pick = dplyr::coalesce(alternative_pick, baseline_pick),
+                candidate_diff_flag = baseline_pick != alternative_pick |
+                    candidate_1_matchup != candidate_2_matchup
+            ) %>%
+            dplyr::filter(candidate_diff_flag) %>%
+            dplyr::left_join(
+                actual_results %>%
+                    dplyr::mutate(region = normalize_bracket_region(region, round)) %>%
+                    dplyr::select(region, round, matchup_number = game_index, actual_winner = winner),
+                by = c("region", "round", "matchup_number")
+            ) %>%
+            dplyr::mutate(
+                analysis = analysis,
+                alternative_label = alternative_label,
+                baseline_correct = baseline_pick == actual_winner,
+                alternative_correct = alternative_pick == actual_winner
+            ) %>%
+            dplyr::select(
+                analysis,
+                alternative_label,
+                region,
+                round,
+                matchup_number,
+                candidate_1_matchup,
+                candidate_2_matchup,
+                baseline_pick,
+                alternative_pick,
+                actual_winner,
+                baseline_correct,
+                alternative_correct,
+                confidence_tier,
+                upset_leverage
+            )
+    }
+
     training_years <- unique(as.character(loaded$historical_matchups$Year %||% character(0)))
     training_betting_features <- loaded$historical_betting_features %||% tibble::tibble()
     if (nrow(training_betting_features) > 0L && "Year" %in% names(training_betting_features)) {
         training_betting_features <- training_betting_features %>%
             dplyr::filter(Year %in% training_years)
     }
-
-    if (nrow(loaded$historical_betting_features %||% tibble::tibble()) == 0L) {
-        empty_summary <- tibble::tibble(
-            model = c("baseline_no_betting", "historical_betting_features"),
-            candidate_id = NA_integer_,
-            candidate_type = NA_character_,
-            champion = NA_character_,
-            correct_picks = NA_integer_,
-            total_games = nrow(actual_results),
-            bracket_score = NA_real_,
-            champion_correct = NA,
-            outcome_vs_baseline = "unknown",
-            note = "No historical closing_lines.csv archive was available."
-        )
-        utils::write.csv(empty_summary, summary_path, row.names = FALSE)
-        utils::write.csv(tibble::tibble(), differences_path, row.names = FALSE)
-        writeLines(c(
-            sprintf("# Betting impact for %s", bracket_year),
-            "",
-            "No historical betting archive was available, so the bracket-impact comparison could not be run."
-        ), report_path, useBytes = TRUE)
-        return(list(
-            bracket_year = bracket_year,
-            summary = empty_summary,
-            differences = tibble::tibble(),
-            output_paths = list(summary = summary_path, differences = differences_path, report = report_path)
-        ))
-    }
-
-    if (nrow(training_betting_features) == 0L) {
-        empty_summary <- tibble::tibble(
-            model = c("baseline_no_betting", "historical_betting_features"),
-            candidate_id = NA_integer_,
-            candidate_type = NA_character_,
-            champion = NA_character_,
-            correct_picks = NA_integer_,
-            total_games = nrow(actual_results),
-            bracket_score = NA_real_,
-            champion_correct = NA,
-            outcome_vs_baseline = "unknown",
-            note = sprintf("Historical closing lines were available only outside the training seasons for %s.", bracket_year)
-        )
-        utils::write.csv(empty_summary, summary_path, row.names = FALSE)
-        utils::write.csv(tibble::tibble(), differences_path, row.names = FALSE)
-        writeLines(c(
-            sprintf("# Betting impact for %s", bracket_year),
-            "",
-            sprintf("Historical closing lines existed, but none overlapped the model training seasons before %s, so the bracket-impact comparison could not estimate a real betting-signal effect.", bracket_year)
-        ), report_path, useBytes = TRUE)
-        return(list(
-            bracket_year = bracket_year,
-            summary = empty_summary,
-            differences = tibble::tibble(),
-            output_paths = list(summary = summary_path, differences = differences_path, report = report_path)
-        ))
-    }
+    can_train_enhanced <- nrow(training_betting_features) > 0L
 
     engine <- config$model$engine %||% "stan_glm"
     bart_config <- config$model$bart %||% list()
@@ -1792,17 +2195,20 @@ evaluate_historical_betting_bracket_impact <- function(config,
         interaction_terms = interaction_terms,
         prior_type = config$model$prior_type %||% "normal"
     )
-    enhanced_model <- fit_tournament_model(
-        historical_matchups = loaded$historical_matchups,
-        predictor_columns = betting_predictors,
-        engine = engine,
-        bart_config = bart_config,
-        random_seed = config$model$random_seed,
-        cache_dir = model_cache_dir,
-        use_cache = use_model_cache,
-        interaction_terms = interaction_terms,
-        prior_type = config$model$prior_type %||% "normal"
-    )
+    enhanced_model <- NULL
+    if (isTRUE(can_train_enhanced)) {
+        enhanced_model <- fit_tournament_model(
+            historical_matchups = loaded$historical_matchups,
+            predictor_columns = betting_predictors,
+            engine = engine,
+            bart_config = bart_config,
+            random_seed = config$model$random_seed,
+            cache_dir = model_cache_dir,
+            use_cache = use_model_cache,
+            interaction_terms = interaction_terms,
+            prior_type = config$model$prior_type %||% "normal"
+        )
+    }
 
     empty_context <- list(
         current_lines_matchups = tibble::tibble(),
@@ -1814,7 +2220,9 @@ evaluate_historical_betting_bracket_impact <- function(config,
         snapshot_path = NULL
     )
     baseline_model$betting_feature_context <- empty_context
-    enhanced_model$betting_feature_context <- empty_context
+    if (!is.null(enhanced_model)) {
+        enhanced_model$betting_feature_context <- empty_context
+    }
 
     baseline_candidates <- generate_bracket_candidates(
         all_teams = loaded$current_teams,
@@ -1825,100 +2233,264 @@ evaluate_historical_betting_bracket_impact <- function(config,
         n_simulations = n_simulations,
         random_seed = config$model$random_seed
     )
-    enhanced_candidates <- generate_bracket_candidates(
-        all_teams = loaded$current_teams,
-        model_results = enhanced_model,
-        draws = draws_budget,
-        actual_play_in_results = loaded$current_play_in_results,
-        n_candidates = n_candidates,
-        n_simulations = n_simulations,
-        random_seed = config$model$random_seed
+    enhanced_candidates <- NULL
+    if (!is.null(enhanced_model)) {
+        enhanced_candidates <- generate_bracket_candidates(
+            all_teams = loaded$current_teams,
+            model_results = enhanced_model,
+            draws = draws_budget,
+            actual_play_in_results = loaded$current_play_in_results,
+            n_candidates = n_candidates,
+            n_simulations = n_simulations,
+            random_seed = config$model$random_seed
+        )
+    }
+
+    baseline_selected <- score_candidate_summary(
+        baseline_candidates[[1]],
+        analysis = "deployable_historical_training",
+        model = "baseline_no_betting",
+        selection_method = "top_ranked_model",
+        note = if (isTRUE(can_train_enhanced)) {
+            "Deployable comparison using only prior archived seasons."
+        } else if (nrow(closing_lines_archive) == 0L) {
+            "No usable archived closing-line history was available for training seasons."
+        } else {
+            sprintf("Archived closing lines existed only outside the training seasons before %s.", bracket_year)
+        }
     )
 
-    baseline_scores <- score_candidate_list_against_results(baseline_candidates, actual_results, "baseline_no_betting")
-    enhanced_scores <- score_candidate_list_against_results(enhanced_candidates, actual_results, "historical_betting_features")
-    summary_tbl <- dplyr::bind_rows(baseline_scores, enhanced_scores)
+    summary_rows <- list(baseline_selected)
+    difference_rows <- list()
 
-    baseline_best <- baseline_scores %>% dplyr::arrange(dplyr::desc(bracket_score), dplyr::desc(correct_picks)) %>% dplyr::slice(1)
-    enhanced_best <- enhanced_scores %>% dplyr::arrange(dplyr::desc(bracket_score), dplyr::desc(correct_picks)) %>% dplyr::slice(1)
-    outcome <- classify_betting_impact(baseline_best$bracket_score[[1]], enhanced_best$bracket_score[[1]])
-
-    summary_tbl <- summary_tbl %>%
-        dplyr::mutate(
-            outcome_vs_baseline = ifelse(model == "baseline_no_betting", "baseline", outcome)
+    if (isTRUE(can_train_enhanced)) {
+        enhanced_selected <- score_candidate_summary(
+            enhanced_candidates[[1]],
+            analysis = "deployable_historical_training",
+            model = "historical_betting_features",
+            selection_method = "top_ranked_model",
+            note = "Deployable comparison using only prior archived seasons."
         )
+        deployable_outcome <- classify_betting_impact(
+            baseline_selected$bracket_score[[1]],
+            enhanced_selected$bracket_score[[1]]
+        )
+        baseline_selected$outcome_vs_baseline <- "baseline"
+        enhanced_selected$outcome_vs_baseline <- deployable_outcome
+        summary_rows[[1]] <- baseline_selected
+        summary_rows[[length(summary_rows) + 1L]] <- enhanced_selected
+        difference_rows[[length(difference_rows) + 1L]] <- build_difference_table(
+            baseline_candidates[[1]]$matchups,
+            enhanced_candidates[[1]]$matchups,
+            analysis = "deployable_historical_training",
+            alternative_label = "historical_betting_features"
+        )
+    } else {
+        baseline_selected$outcome_vs_baseline <- "baseline"
+        summary_rows[[1]] <- baseline_selected
+        summary_rows[[length(summary_rows) + 1L]] <- build_note_row(
+            analysis = "deployable_historical_training",
+            model = "historical_betting_features",
+            selection_method = "not_available",
+            note = if (nrow(closing_lines_archive) == 0L) {
+                "No usable archived closing-line history was available for training seasons."
+            } else {
+                sprintf("Archived closing lines existed only outside the training seasons before %s.", bracket_year)
+            }
+        )
+    }
 
-    deterministic_diff <- compare_candidate_matchups(
-        baseline_candidates[[1]]$matchups,
-        enhanced_candidates[[1]]$matchups
-    ) %>%
-        dplyr::mutate(
-            region = dplyr::if_else(
-                (is.na(region) | !nzchar(as.character(region))) & round %in% c("Final Four", "Championship"),
-                "National",
-                as.character(region)
+    if (identical(current_year_coverage$season_status, "complete")) {
+        current_line_lookup <- build_current_year_line_lookup(current_year_coverage)
+        direct_matchups <- current_line_lookup %>%
+            dplyr::transmute(
+                region = region,
+                round = round,
+                matchup_number = matchup_number,
+                teamA = teamA,
+                teamB = teamB,
+                winner = line_pick
             )
-        ) %>%
-        dplyr::filter(candidate_diff_flag) %>%
-        dplyr::left_join(
-            actual_results %>%
-                dplyr::mutate(
-                    region = dplyr::if_else(
-                        (is.na(region) | !nzchar(as.character(region))) & round %in% c("Final Four", "Championship"),
-                        "National",
-                        as.character(region)
-                    )
-                ) %>%
-                dplyr::select(region, round, matchup_number = game_index, actual_winner = winner),
-            by = c("region", "round", "matchup_number")
-        ) %>%
-        dplyr::mutate(
-            baseline_pick = candidate_1_pick,
-            betting_pick = candidate_2_pick,
-            baseline_correct = baseline_pick == actual_winner,
-            betting_correct = betting_pick == actual_winner
-        ) %>%
-        dplyr::select(
-            region,
-            round,
-            matchup_number,
-            candidate_1_matchup,
-            baseline_pick,
-            betting_pick,
-            actual_winner,
-            baseline_correct,
-            betting_correct,
-            confidence_tier,
-            upset_leverage
+        direct_summary <- score_matchup_summary(
+            direct_matchups,
+            analysis = "retrospective_current_year_direct_substitution",
+            model = "current_year_closing_lines_direct",
+            selection_method = "realized_matchup_lines",
+            note = sprintf(
+                "Non-deployable hindsight upper bound using complete %s closing lines on realized matchups.",
+                bracket_year
+            )
         )
+        direct_summary$outcome_vs_baseline <- classify_betting_impact(
+            baseline_selected$bracket_score[[1]],
+            direct_summary$bracket_score[[1]]
+        )
+        summary_rows[[length(summary_rows) + 1L]] <- direct_summary
+        difference_rows[[length(difference_rows) + 1L]] <- build_difference_table(
+            baseline_candidates[[1]]$matchups,
+            direct_matchups,
+            analysis = "retrospective_current_year_direct_substitution",
+            alternative_label = "current_year_closing_lines_direct"
+        )
+
+        overlay_baseline <- score_candidate_summary(
+            baseline_candidates[[1]],
+            analysis = "retrospective_current_year_candidate_overlay",
+            model = "baseline_candidate_pool",
+            selection_method = "top_ranked_model",
+            note = sprintf(
+                "Non-deployable hindsight reranking of the baseline candidate pool using complete %s closing lines.",
+                bracket_year
+            )
+        )
+        overlay_baseline$outcome_vs_baseline <- "baseline"
+        summary_rows[[length(summary_rows) + 1L]] <- overlay_baseline
+
+        overlay_scores <- score_candidate_list_against_current_year_lines(
+            baseline_candidates,
+            current_line_lookup,
+            model_label = "baseline_candidate_pool"
+        )
+        overlay_choice_id <- if (nrow(overlay_scores) > 0L) overlay_scores$candidate_id[[1]] else NA_integer_
+        overlay_candidate <- if (is.finite(overlay_choice_id)) {
+            baseline_candidates[[overlay_choice_id]]
+        } else {
+            NULL
+        }
+        overlay_selected <- score_candidate_summary(
+            overlay_candidate,
+            analysis = "retrospective_current_year_candidate_overlay",
+            model = "current_year_closing_lines_overlay",
+            selection_method = "top_ranked_overlay",
+            note = sprintf(
+                "Non-deployable hindsight reranking of the baseline candidate pool using complete %s closing lines.",
+                bracket_year
+            )
+        )
+        overlay_selected$outcome_vs_baseline <- classify_betting_impact(
+            overlay_baseline$bracket_score[[1]],
+            overlay_selected$bracket_score[[1]]
+        )
+        summary_rows[[length(summary_rows) + 1L]] <- overlay_selected
+        difference_rows[[length(difference_rows) + 1L]] <- build_difference_table(
+            baseline_candidates[[1]]$matchups,
+            overlay_candidate$matchups %||% NULL,
+            analysis = "retrospective_current_year_candidate_overlay",
+            alternative_label = "current_year_closing_lines_overlay"
+        )
+    } else {
+        incomplete_note <- sprintf(
+            "Current-year closing lines were %s (%s/%s games with both moneyline and spread), so the retrospective %s study could not run.",
+            current_year_coverage$season_status %||% "partial",
+            current_year_coverage$recovered_both_games %||% 0L,
+            current_year_coverage$target_games %||% 0L,
+            "%s"
+        )
+        summary_rows[[length(summary_rows) + 1L]] <- build_note_row(
+            analysis = "retrospective_current_year_direct_substitution",
+            model = "current_year_closing_lines_direct",
+            selection_method = "not_available",
+            note = sprintf(incomplete_note, "direct substitution")
+        )
+        summary_rows[[length(summary_rows) + 1L]] <- build_note_row(
+            analysis = "retrospective_current_year_candidate_overlay",
+            model = "current_year_closing_lines_overlay",
+            selection_method = "not_available",
+            note = sprintf(incomplete_note, "candidate overlay")
+        )
+    }
+
+    summary_tbl <- dplyr::bind_rows(summary_rows)
+    deterministic_diff <- dplyr::bind_rows(difference_rows)
 
     utils::write.csv(summary_tbl, summary_path, row.names = FALSE)
     utils::write.csv(deterministic_diff, differences_path, row.names = FALSE)
 
+    deployable_rows <- summary_tbl %>%
+        dplyr::filter(analysis == "deployable_historical_training")
+    retrospective_rows <- summary_tbl %>%
+        dplyr::filter(analysis %in% c(
+            "retrospective_current_year_direct_substitution",
+            "retrospective_current_year_candidate_overlay"
+        ))
+
     report_lines <- c(
         sprintf("# Betting impact for %s", bracket_year),
         "",
-        sprintf("- Baseline best bracket score: %s", baseline_best$bracket_score[[1]] %||% NA),
-        sprintf("- Betting-feature best bracket score: %s", enhanced_best$bracket_score[[1]] %||% NA),
-        sprintf("- Outcome vs baseline: %s", outcome),
-        sprintf("- Baseline champion: %s", baseline_best$champion[[1]] %||% "unknown"),
-        sprintf("- Betting-feature champion: %s", enhanced_best$champion[[1]] %||% "unknown"),
-        sprintf("- Deterministic bracket differences: %s", nrow(deterministic_diff))
+        "## Current-year archive status",
+        sprintf(
+            "- Season status: %s (%s/%s games with both moneyline and spread)",
+            current_year_coverage$season_status %||% "unknown",
+            current_year_coverage$recovered_both_games %||% 0L,
+            current_year_coverage$target_games %||% 0L
+        ),
+        sprintf(
+            "- Moneyline completeness: %s/%s (%.1f%%)",
+            current_year_coverage$recovered_moneyline_games %||% 0L,
+            current_year_coverage$target_games %||% 0L,
+            100 * (current_year_coverage$moneyline_completeness_rate %||% 0)
+        ),
+        sprintf(
+            "- Spread completeness: %s/%s (%.1f%%)",
+            current_year_coverage$recovered_spread_games %||% 0L,
+            current_year_coverage$target_games %||% 0L,
+            100 * (current_year_coverage$spread_completeness_rate %||% 0)
+        ),
+        ""
     )
+
+    if (nrow(deployable_rows) > 0L) {
+        report_lines <- c(report_lines, "## Deployable historical-training comparison")
+        report_lines <- c(
+            report_lines,
+            purrr::pmap_chr(deployable_rows, function(analysis, model, selection_method, candidate_id, candidate_type, champion, correct_picks, total_games, bracket_score, champion_correct, outcome_vs_baseline, note, ...) {
+                sprintf(
+                    "- %s: score=%s correct=%s/%s outcome=%s%s",
+                    model,
+                    bracket_score %||% NA,
+                    correct_picks %||% NA,
+                    total_games %||% NA,
+                    outcome_vs_baseline %||% "unknown",
+                    if (!is.na(note) && nzchar(note)) sprintf(" [%s]", note) else ""
+                )
+            }),
+            ""
+        )
+    }
+
+    if (nrow(retrospective_rows) > 0L) {
+        report_lines <- c(report_lines, "## Retrospective current-year analyses")
+        report_lines <- c(
+            report_lines,
+            purrr::pmap_chr(retrospective_rows, function(analysis, model, selection_method, candidate_id, candidate_type, champion, correct_picks, total_games, bracket_score, champion_correct, outcome_vs_baseline, note, ...) {
+                sprintf(
+                    "- %s: score=%s correct=%s/%s outcome=%s%s",
+                    model,
+                    bracket_score %||% NA,
+                    correct_picks %||% NA,
+                    total_games %||% NA,
+                    outcome_vs_baseline %||% "unknown",
+                    if (!is.na(note) && nzchar(note)) sprintf(" [%s]", note) else ""
+                )
+            })
+        )
+    }
+
     if (nrow(deterministic_diff) > 0L) {
         example_rows <- deterministic_diff %>% dplyr::slice_head(n = min(5L, nrow(deterministic_diff)))
         report_lines <- c(
             report_lines,
             "",
-            "## Changed slots",
-            purrr::pmap_chr(example_rows, function(region, round, matchup_number, candidate_1_matchup, baseline_pick, betting_pick, actual_winner, baseline_correct, betting_correct, confidence_tier, upset_leverage) {
+            "## Example changed slots",
+            purrr::pmap_chr(example_rows, function(analysis, alternative_label, region, round, matchup_number, candidate_1_matchup, candidate_2_matchup, baseline_pick, alternative_pick, actual_winner, baseline_correct, alternative_correct, confidence_tier, upset_leverage) {
                 sprintf(
-                    "- %s %s #%s: baseline picked %s, betting picked %s, actual winner %s",
+                    "- %s | %s %s #%s: baseline picked %s, alternative picked %s, actual winner %s",
+                    analysis,
                     round,
                     region,
                     matchup_number,
                     baseline_pick,
-                    betting_pick,
+                    alternative_pick,
                     actual_winner %||% "unknown"
                 )
             })

@@ -45,13 +45,21 @@ if (nrow(skipped_years) > 0L) {
 for (year_name in names(result)) {
     year_result <- result[[year_name]]
     report <- year_result$report %||% list()
-    cat(sprintf("- %s: closing_lines=%s matched=%s/%s moneyline=%s spread=%s\n",
+    cat(sprintf("- %s: closing_lines=%s status=%s matched=%s/%s both=%s moneyline=%s spread=%s\n",
         year_name,
         year_result$paths$closing_lines %||% "unknown",
+        report$season_status %||% "unknown",
         report$matched_games %||% 0,
         report$target_games %||% 0,
+        report$recovered_both_games %||% 0,
         report$recovered_moneyline_games %||% 0,
         report$recovered_spread_games %||% 0
+    ))
+    cat(sprintf(
+        "  completeness: moneyline=%.1f%% spread=%.1f%% full=%.1f%%\n",
+        100 * (report$moneyline_completeness_rate %||% 0),
+        100 * (report$spread_completeness_rate %||% 0),
+        100 * (report$full_completeness_rate %||% 0)
     ))
     cat(sprintf("  summary=%s\n", year_result$paths$import_summary %||% "unknown"))
     cat(sprintf("  report=%s\n", year_result$paths$import_report %||% "unknown"))

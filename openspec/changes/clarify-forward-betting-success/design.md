@@ -17,6 +17,8 @@ The current runtime state already demonstrates why the distinction matters. We w
 - Keep the supported provider contract forward-only (`2026+`) and stop treating pre-2026 recovery as a success criterion.
 - Require importer/reporting logic to distinguish `complete success`, `partial archive`, and `provider-limited archive` explicitly.
 - Add a clear retrospective evaluation that answers the specific question: if we had the complete set of `2026` closing lines for every completed tournament game, would those lines have improved bracket prediction?
+- Require that retrospective evaluation to include both direct line-driven matchup substitution and candidate-ranking overlay analyses.
+- Require season reporting to expose separate moneyline and spread completeness rates in addition to the overall season status.
 - Preserve graceful degradation for missing historical seasons so the model still runs when betting archives are absent outside the supported window.
 
 **Non-Goals:**
@@ -30,12 +32,14 @@ The current runtime state already demonstrates why the distinction matters. We w
 ### 1. Operational success is season completeness, not partial artifact existence
 
 Decision:
-- The spec will define operational success as a `closing_lines.csv` archive that covers every completed game in the local results workbook for the target season and contains real usable line values for those rows.
+- The spec will define operational success as a `closing_lines.csv` archive that covers every completed game in the local results workbook for the target season and contains both moneyline and spread values for those rows.
+- Moneyline completeness and spread completeness will also be reported separately for the season.
 
 Rationale:
 - A file can exist and still be useless, as we saw with the stale all-`NA` runtime artifact.
 - A partially populated file can be helpful for debugging or limited analyses, but it does not satisfy the repo's forward-collection goal.
 - Measuring completeness against the local results workbook avoids hard-coding tournament game counts and keeps the success metric aligned with the repo's own canonical data.
+- Separate moneyline/spread rates make it possible to see near-success states without diluting the full feature-contract definition of success.
 
 Alternatives considered:
 - Treat any non-empty `closing_lines.csv` as success.
@@ -62,11 +66,15 @@ Decision:
 - The revised contract will split bracket-impact evaluation into two interpretations:
   - a deployable historical-training evaluation that only becomes meaningful once archived prior seasons exist
   - a retrospective current-year upper-bound evaluation that asks whether complete `2026` closing lines would have improved bracket prediction if they had been available for every actual `2026` matchup
+- The retrospective current-year evaluation will include both:
+  - a direct line-driven matchup substitution analysis that measures the informational value of complete `2026` closing lines on realized matchups
+  - a candidate-ranking overlay analysis that measures whether the existing mmBayes bracket-ranking workflow would have selected a better bracket from its candidate pool using that same complete `2026` line signal
 
 Rationale:
 - The user specifically wants to know whether complete current-year closing lines would help.
 - That is a valid retrospective research question even though it is not a real pre-submission bracket workflow.
 - Keeping the two analyses separate prevents us from overclaiming deployable predictive benefit from a same-year retrospective study.
+- The two retrospective views answer related but different questions: whether the information itself helps, and whether the repo's bracket-ranking machinery exploits that information well enough to matter.
 
 Alternatives considered:
 - Keep only the historical-training evaluation.
@@ -91,6 +99,7 @@ Alternatives considered:
 
 Decision:
 - Documentation, summaries, and import reports will use explicit season-level statuses such as `complete`, `partial`, and `provider-limited`, tied to completed-game coverage and non-missing line values.
+- `complete` will require both moneyline and spread for every completed game, while reporting will also include separate moneyline-completeness and spread-completeness rates.
 
 Rationale:
 - The core problem we just worked through was ambiguous operational truth.
@@ -116,5 +125,4 @@ Alternatives considered:
 
 ## Open Questions
 
-- Whether the retrospective complete-`2026` bracket study should be implemented as a direct line-driven matchup substitution analysis, a candidate-ranking overlay, or both.
-- Whether a season should count as `complete` only when both moneyline and spread exist for every completed game, or whether moneyline-complete and spread-complete should be reported separately under a common season status.
+- None at the design-contract level for this clarification change.

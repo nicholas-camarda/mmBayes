@@ -101,6 +101,8 @@ To run the supported backfill:
 Rscript scripts/import_historical_odds_papi.R
 ```
 
+Seasonal archive success is strict: every completed game in the local results workbook must have both a usable moneyline and a usable spread. Import summaries therefore report `season_status` plus separate moneyline, spread, and full completeness rates. Partial or provider-limited seasons stay locally usable, but they are not treated as successful archive completion.
+
 Years before archived betting coverage are handled gracefully in model fitting and evaluation by using neutral betting predictors with `betting_line_available = 0`, so pre-2026 seasons remain usable instead of being dropped.
 
 To measure whether those historical betting features improve bracket selection for the 2026 tournament example:
@@ -108,6 +110,13 @@ To measure whether those historical betting features improve bracket selection f
 ```sh
 Rscript scripts/evaluate_historical_betting_impact.R
 ```
+
+That evaluation now separates:
+
+- deployable historical-training evidence, which can only use archived seasons before the bracket year
+- retrospective same-year hindsight analyses for `2026`, including direct line-driven matchup substitution and candidate-pool overlay reranking
+
+The retrospective `2026` studies answer whether a complete set of current-year closing lines would have helped bracket selection, but they are explicitly non-deployable because they use same-year post hoc information.
 
 ## Source Data
 
