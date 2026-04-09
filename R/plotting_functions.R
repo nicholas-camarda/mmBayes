@@ -1425,40 +1425,29 @@ summarize_model_comparison_verdict <- function(model_comparison) {
         alternate_label
     )
 
-    current_score <- (2L * backtest_summary$current_wins) + live_summary$current_wins
-    alternate_score <- (2L * backtest_summary$alternate_wins) + live_summary$alternate_wins
-    preferred_label <- if (alternate_score > current_score) alternate_label else current_label
     backtest_diff <- backtest_summary$current_wins - backtest_summary$alternate_wins
     live_diff <- live_summary$current_wins - live_summary$alternate_wins
-    score_gap <- abs(current_score - alternate_score)
-    close_call <- score_gap <= 1L || (abs(backtest_diff) <= 1L && abs(live_diff) <= 1L)
+    preferred_label <- if (backtest_diff < 0L) alternate_label else current_label
+    close_call <- abs(backtest_diff) <= 1L
 
     justification <- if (preferred_label == current_label) {
-        if (backtest_diff > 0 && live_diff >= 0) {
-            sprintf("%s gets the nod because it wins more held-out backtest metrics and the current-year live read does not contradict that signal.", current_label)
-        } else if (backtest_diff > 0 && live_diff < 0) {
-            sprintf("%s gets the nod because the historical backtest edge is stronger, even though the live read is leaning toward %s.", current_label, alternate_label)
+        if (backtest_diff > 0) {
+            sprintf("%s gets the nod because it wins more held-out backtest metrics. Current-year live results stay monitoring-only and do not change the engine recommendation.", current_label)
         } else {
-            sprintf("%s keeps the edge on the combined read of backtest and live evidence.", current_label)
+            sprintf("%s keeps the nod because the held-out backtest does not show an alternate-engine edge. Current-year live results stay monitoring-only and do not break the tie.", current_label)
         }
     } else {
-        if (backtest_diff < 0 && live_diff <= 0) {
-            sprintf("%s gets the nod because it wins more held-out backtest metrics and the current-year live read points in the same direction.", alternate_label)
-        } else if (backtest_diff < 0 && live_diff > 0) {
-            sprintf("%s gets the nod because the historical backtest edge is stronger, even though the live read is leaning toward %s.", alternate_label, current_label)
-        } else {
-            sprintf("%s takes the edge on the combined read of backtest and live evidence.", alternate_label)
-        }
+        sprintf("%s gets the nod because it wins more held-out backtest metrics. Current-year live results stay monitoring-only and do not change the engine recommendation.", alternate_label)
     }
 
     caveat <- if (close_call) {
-        "This is a close call, so treat the preferred engine as a lean rather than a runaway winner."
+        "This is a close backtest call, so treat the preferred engine as a lean rather than a runaway winner."
     } else if ((backtest_diff > 0 && live_diff < 0) || (backtest_diff < 0 && live_diff > 0)) {
-        "Historical backtest and current-year live evidence are not pointing in exactly the same direction."
+        "Current-year live evidence points in a different direction, but it remains monitoring-only and does not override the held-out backtest."
     } else if (nrow(model_comparison$live_comparison %||% tibble::tibble()) == 0L) {
-        "No current-year live comparison was available, so the verdict leans more heavily on historical backtest evidence."
+        "No current-year live comparison was available; the verdict is based on held-out backtest evidence."
     } else {
-        "The verdict emphasizes backtest evidence first because the live sample is still smaller and more volatile."
+        "Current-year live evidence is shown for monitoring only; the verdict is based on held-out backtest evidence."
     }
 
     list(
@@ -1571,9 +1560,9 @@ render_model_comparison_summary_html <- function(model_comparison) {
         "<h2>Model Comparison</h2>",
         "<p class='panel-caption'>This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " on the same tournament data. Start in Compare for the preferred-engine verdict, then move into an engine tab only if you want the full evidence behind it.</p>",
         "<div class='overview-grid'>",
-        "<div class='summary-card action-callout'><div class='summary-label'>Preferred engine</div><div class='summary-value'>", html_escape(verdict$preferred_label), "</div><p class='summary-note'>", html_escape(if (isTRUE(verdict$close_call)) "Preferred engine, but only by a narrow margin." else "Preferred engine on the combined read of backtest and live evidence."), "</p></div>",
+        "<div class='summary-card action-callout'><div class='summary-label'>Preferred engine</div><div class='summary-value'>", html_escape(verdict$preferred_label), "</div><p class='summary-note'>", html_escape(if (isTRUE(verdict$close_call)) "Preferred engine, but only by a narrow backtest margin." else "Preferred engine from held-out backtest evidence."), "</p></div>",
         "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(backtest_summary$text), "</div><p class='summary-note'>Cross-validation style metrics from completed historical games.</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Live takeaway</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(live_summary$text), "</div><p class='summary-note'>Current-year games already completed in the live dashboard.</p></div>",
+        "<div class='summary-card'><div class='summary-label'>Live takeaway</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(live_summary$text), "</div><p class='summary-note'>Current-year games already completed in the live dashboard. Monitoring only; does not change the engine verdict.</p></div>",
         "<div class='summary-card warning-callout'><div class='summary-label'>Key caveat</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(if (isTRUE(verdict$close_call)) "Close call" else "Read caveat"), "</div><p class='summary-note'>", html_escape(verdict$caveat), "</p></div>",
         "</div>",
         "<div class='comparison-tab-bar' role='group' aria-label='Model comparison view'>",

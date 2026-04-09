@@ -721,6 +721,8 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(comparison_html, "Preferred engine verdict")
     expect_match(comparison_html, "Deeper evidence and metric tables")
     expect_match(comparison_html, "Preferred engine")
+    expect_match(comparison_html, "Preferred engine from held-out backtest evidence")
+    expect_match(comparison_html, "Monitoring only; does not change the engine verdict")
     expect_match(comparison_html, "Live Tournament Performance - Stan GLM")
     expect_match(comparison_html, "Live Tournament Performance - BART")
     expect_true(sum(gregexpr("Matchup Model", comparison_html, fixed = TRUE)[[1]] > 0) >= 2)
@@ -737,6 +739,48 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     )
     expect_true(sum(gregexpr("Matchup Model", split_overview_html, fixed = TRUE)[[1]] > 0) >= 2)
     expect_true(sum(gregexpr("Total Points Model", split_overview_html, fixed = TRUE)[[1]] > 0) >= 2)
+
+    live_conflict_bundle <- comparison_bundle
+    live_conflict_bundle$backtest_comparison <- build_model_metric_comparison_table(
+        current_summary = tibble::tibble(
+            mean_log_loss = 0.401,
+            mean_brier = 0.188,
+            mean_accuracy = 0.713,
+            mean_bracket_score = 85.4,
+            mean_correct_picks = 42.7
+        ),
+        alternate_summary = tibble::tibble(
+            mean_log_loss = 0.410,
+            mean_brier = 0.194,
+            mean_accuracy = 0.700,
+            mean_bracket_score = 84.1,
+            mean_correct_picks = 42.1
+        ),
+        current_label = "Stan GLM",
+        alternate_label = "BART",
+        kind = "backtest"
+    )
+    live_conflict_bundle$live_comparison <- build_model_metric_comparison_table(
+        current_summary = tibble::tibble(
+            games_played = 18L,
+            log_loss = 0.410,
+            brier = 0.190,
+            accuracy = 0.650
+        ),
+        alternate_summary = tibble::tibble(
+            games_played = 18L,
+            log_loss = 0.360,
+            brier = 0.160,
+            accuracy = 0.760
+        ),
+        current_label = "Stan GLM",
+        alternate_label = "BART",
+        kind = "live"
+    )
+    live_conflict_verdict <- summarize_model_comparison_verdict(live_conflict_bundle)
+    expect_equal(live_conflict_verdict$preferred_label, "Stan GLM")
+    expect_match(live_conflict_verdict$justification, "monitoring-only")
+    expect_match(live_conflict_verdict$caveat, "does not override the held-out backtest")
 
     html_without_quality <- create_technical_dashboard_html(
         bracket_year = 2026L,
