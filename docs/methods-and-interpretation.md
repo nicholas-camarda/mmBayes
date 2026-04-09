@@ -109,11 +109,16 @@ This alias layer is important because every historical result row must join back
 
 `validate_game_results()` enforces:
 
-- `winner` must equal either `teamA` or `teamB`
+- `winner` must equal that row's `teamA` or `teamB`
 - score columns must be both present or both missing
 - `total_points` must equal `teamA_score + teamB_score` when scores exist
 - the listed winner must match the higher score when scores exist
+- tied scored rows are rejected as invalid canonical tournament inputs
 - current-year completed rows are allowed in any round as long as they pass the same score-integrity and team-resolution checks
+
+### Scoring guardrails
+
+`score_bracket_against_results()` requires `Year` in actual results and uses `Year + region + round + game_index` as the game identity. This prevents multi-year or duplicate actual-result tables from silently inflating bracket scores.
 
 ### Leakage control
 
@@ -855,6 +860,8 @@ Each `output/bracket_candidate_{id}.csv` contains matchup-level rows with:
 - posterior standard deviation
 - chosen winner
 - upset flag
+
+Release publishing discovers these candidate CSVs dynamically from the runtime output directory, so the release bundle stays aligned with whatever candidate files the supported simulation run actually produced.
 
 ### Decision sheet
 

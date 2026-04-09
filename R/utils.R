@@ -2854,12 +2854,37 @@ save_results <- function(results, output_config) {
 #' @return A list containing game-level comparison rows and a one-row summary.
 #' @export
 score_bracket_against_results <- function(predicted_matchups, actual_results, round_weights = default_round_weights()) {
-    actual_lookup <- actual_results %>%
-        dplyr::select(region, round, matchup_number = game_index, actual_winner = winner)
+    if (!"Year" %in% names(actual_results)) {
+        stop_with_message("Year is required for scoring actual tournament results")
+    }
 
-    comparison <- predicted_matchups %>%
-        dplyr::select(region, round, matchup_number, predicted_winner = winner) %>%
-        dplyr::left_join(actual_lookup, by = c("region", "round", "matchup_number")) %>%
+    actual_lookup <- actual_results %>%
+        dplyr::select(Year, region, round, matchup_number = game_index, actual_winner = winner)
+    actual_key <- actual_lookup %>%
+        dplyr::select(Year, region, round, matchup_number)
+    if (anyDuplicated(actual_key) > 0L) {
+        stop_with_message("Actual tournament results are ambiguous; duplicate game identities detected")
+    }
+
+    predicted_lookup <- predicted_matchups %>%
+        dplyr::select(dplyr::any_of("Year"), region, round, matchup_number, predicted_winner = winner)
+    if (!"Year" %in% names(predicted_lookup)) {
+        actual_years <- unique(actual_lookup$Year)
+        actual_years <- actual_years[!is.na(actual_years)]
+        if (length(actual_years) != 1L) {
+            stop_with_message("Predicted matchups must include Year when scoring against multiple seasons of actual results")
+        }
+        predicted_lookup <- predicted_lookup %>%
+            dplyr::mutate(Year = actual_years[[1]])
+    }
+    predicted_key <- predicted_lookup %>%
+        dplyr::select(Year, region, round, matchup_number)
+    if (anyDuplicated(predicted_key) > 0L) {
+        stop_with_message("Predicted bracket rows are ambiguous; duplicate game identities detected")
+    }
+
+    comparison <- predicted_lookup %>%
+        dplyr::left_join(actual_lookup, by = c("Year", "region", "round", "matchup_number")) %>%
         dplyr::mutate(
             round_weight = unname(round_weights[round]),
             round_weight = dplyr::coalesce(round_weight, 0),

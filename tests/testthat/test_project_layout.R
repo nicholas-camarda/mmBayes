@@ -22,8 +22,12 @@ test_that("publish_release_bundle copies only approved deliverables", {
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
     dir.create(file.path(output_dir, "model_cache"), recursive = TRUE, showWarnings = FALSE)
     dir.create(file.path(output_dir, "logs"), recursive = TRUE, showWarnings = FALSE)
+    candidate_files <- c("bracket_candidate_1.csv", "bracket_candidate_2.csv", "bracket_candidate_3.csv")
 
     for (filename in release_deliverable_manifest()) {
+        writeLines(sprintf("fixture:%s", filename), file.path(output_dir, filename))
+    }
+    for (filename in candidate_files) {
         writeLines(sprintf("fixture:%s", filename), file.path(output_dir, filename))
     }
     writeLines("scratch", file.path(output_dir, "tournament_sim.rds"))
@@ -44,12 +48,48 @@ test_that("publish_release_bundle copies only approved deliverables", {
     expect_true(file.exists(result$manifest_path))
     expect_equal(
         sort(list.files(result$deliverables_dir, recursive = TRUE)),
-        sort(release_deliverable_manifest())
+        sort(c(release_deliverable_manifest(), candidate_files))
     )
     expect_false(file.exists(file.path(result$deliverables_dir, "tournament_sim.rds")))
     expect_false(dir.exists(file.path(result$deliverables_dir, "model_cache")))
     expect_false(dir.exists(file.path(result$deliverables_dir, "logs")))
     expect_false(dir.exists(file.path(result$release_root, "data_snapshot")))
+    expect_match(paste(readLines(result$manifest_path, warn = FALSE), collapse = "\n"), "bracket_candidate_3\\.csv")
+})
+
+test_that("publish_release_bundle defaults to the runtime output contract and fails without candidate CSVs", {
+    runtime_root <- tempfile(pattern = "mmBayes-runtime-")
+    output_dir <- file.path(runtime_root, "output")
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+    for (filename in release_deliverable_manifest()) {
+        writeLines(sprintf("fixture:%s", filename), file.path(output_dir, filename))
+    }
+
+    config <- default_project_config()
+    config$runtime$root <- runtime_root
+    config$output$path <- NULL
+    config <- normalize_project_paths(config)
+
+    expect_error(
+        publish_release_bundle(
+            config = config,
+            release_date = as.Date("2026-03-28"),
+            publish_root = tempfile(pattern = "mmBayes-publish-")
+        ),
+        regexp = "No bracket candidate CSV files found in runtime output directory"
+    )
+
+    writeLines("fixture:bracket_candidate_1.csv", file.path(output_dir, "bracket_candidate_1.csv"))
+
+    publish_root <- tempfile(pattern = "mmBayes-publish-")
+    result <- publish_release_bundle(
+        config = config,
+        release_date = as.Date("2026-03-29"),
+        publish_root = publish_root
+    )
+
+    expect_equal(result$output_dir, output_dir)
 })
 
 test_that("regenerate_dashboards_from_saved_results fails clearly when the saved results bundle is missing", {

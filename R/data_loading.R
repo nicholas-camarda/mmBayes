@@ -224,7 +224,8 @@ validate_game_results <- function(data) {
         )
     }
 
-    if (!all(data$winner %in% c(data$teamA, data$teamB))) {
+    valid_winner <- !is.na(data$winner) & (data$winner == data$teamA | data$winner == data$teamB)
+    if (!all(valid_winner)) {
         stop_with_message("Each game result must name either teamA or teamB as the winner")
     }
 
@@ -235,6 +236,10 @@ validate_game_results <- function(data) {
 
     scored_rows <- !is.na(data$teamA_score) & !is.na(data$teamB_score)
     if (any(scored_rows)) {
+        if (any(data$teamA_score[scored_rows] == data$teamB_score[scored_rows])) {
+            stop_with_message("Tied scored games are not allowed in canonical tournament results")
+        }
+
         expected_total <- data$teamA_score[scored_rows] + data$teamB_score[scored_rows]
         if (any(is.na(data$total_points[scored_rows]) | data$total_points[scored_rows] != expected_total)) {
             stop_with_message("Game total_points values must equal teamA_score + teamB_score when scores are present")

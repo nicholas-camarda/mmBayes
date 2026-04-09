@@ -3,16 +3,17 @@
 #' The manifest stays intentionally small and human-facing. It excludes runtime
 #' caches, logs, `.rds` bundles, and other scratch artifacts.
 #'
+#' @param output_dir Optional runtime output directory used to discover
+#'   candidate CSV deliverables.
+#'
 #' @return A character vector of publishable deliverable file names.
 #' @keywords internal
-release_deliverable_manifest <- function() {
-    c(
+release_deliverable_manifest <- function(output_dir = NULL) {
+    manifest <- c(
         "bracket_dashboard.html",
         "technical_dashboard.html",
         "model_comparison_dashboard.html",
         "bracket_decision_sheet.csv",
-        "bracket_candidate_1.csv",
-        "bracket_candidate_2.csv",
         "bracket_matchup_context.csv",
         "candidate_matchup_total_points.csv",
         "championship_tiebreaker_summary.csv",
@@ -22,6 +23,22 @@ release_deliverable_manifest <- function() {
         "tournament_sim_backtest_summary.txt",
         "bracket_candidates.txt"
     )
+
+    if (is.null(output_dir)) {
+        return(manifest)
+    }
+
+    output_dir <- path.expand(output_dir)
+    if (!dir.exists(output_dir)) {
+        stop_with_message(sprintf("Runtime output directory does not exist: %s", output_dir))
+    }
+
+    candidate_files <- sort(list.files(output_dir, pattern = "^bracket_candidate_.+\\.csv$", full.names = FALSE))
+    if (length(candidate_files) == 0L) {
+        stop_with_message(sprintf("No bracket candidate CSV files found in runtime output directory: %s", output_dir))
+    }
+
+    c(manifest, candidate_files)
 }
 
 #' Copy a file or directory into a destination directory
@@ -57,9 +74,10 @@ copy_release_artifact <- function(source, destination_dir) {
 publish_release_bundle <- function(config = NULL,
                                    release_date = Sys.Date(),
                                    publish_root = default_publish_root()) {
-    config <- config %||% load_project_config()
-    output_dir <- path.expand(config$output$path %||% default_cloud_output_root())
+    config <- normalize_project_paths(config %||% load_project_config())
+    output_dir <- path.expand(config$output$path %||% default_runtime_output_root())
     release_root <- project_publish_release_root(release_date, publish_root = publish_root)
+    deliverable_manifest <- release_deliverable_manifest(output_dir)
 
     if (dir.exists(release_root)) {
         stop_with_message(sprintf("Release folder already exists: %s", release_root))
@@ -71,7 +89,7 @@ publish_release_bundle <- function(config = NULL,
     deliverables_dir <- file.path(release_root, "deliverables")
     dir.create(deliverables_dir, recursive = TRUE, showWarnings = FALSE)
 
-    deliverable_paths <- vapply(release_deliverable_manifest(), function(filename) {
+    deliverable_paths <- vapply(deliverable_manifest, function(filename) {
         source <- file.path(output_dir, filename)
         if (!file.exists(source)) {
             stop_with_message(sprintf("Missing deliverable file: %s", source))
@@ -84,7 +102,7 @@ publish_release_bundle <- function(config = NULL,
         sprintf("release_date: %s", format(as.Date(release_date), "%Y-%m-%d")),
         sprintf("output_dir: %s", output_dir),
         "deliverables:",
-        paste0("  - ", release_deliverable_manifest())
+        paste0("  - ", deliverable_manifest)
     )
     writeLines(manifest_lines, manifest_path, useBytes = TRUE)
 

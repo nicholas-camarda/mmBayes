@@ -42,7 +42,7 @@ The main review loop usually looks like this:
 
 1. open [output/bracket_dashboard.html](output/bracket_dashboard.html) to build the two entries and review the evidence trail
 2. scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) for the hardest decisions first
-3. use [output/bracket_candidate_1.csv](output/bracket_candidate_1.csv) and [output/bracket_candidate_2.csv](output/bracket_candidate_2.csv) if you want the underlying pick paths
+3. use the generated `output/bracket_candidate_{id}.csv` files if you want the underlying pick paths; the default workflow currently writes Candidate 1 and Candidate 2
 4. check the status banner to see whether First Four slots are still simulated or already final
 
 The main dashboard is designed to answer three jobs fast: what Candidate 1 and Candidate 2 are, which evidence drives the key decisions, and which matchups deserve another look before you trust the entries.
@@ -133,11 +133,13 @@ After a pipeline run the following files are generated in the runtime output dir
 |------|-------------|
 | [bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) | Ranked picks sorted by leverage - start here |
 | [bracket_matchup_context.csv](output/bracket_matchup_context.csv) | Enriched matchup evidence used by the dashboard |
-| [bracket_candidate_1.csv](output/bracket_candidate_1.csv) | Safe bracket path |
-| [bracket_candidate_2.csv](output/bracket_candidate_2.csv) | Alternate bracket path |
+| [bracket_candidate_1.csv](output/bracket_candidate_1.csv) | Safe bracket path in the default two-candidate workflow |
+| [bracket_candidate_2.csv](output/bracket_candidate_2.csv) | Alternate bracket path in the default two-candidate workflow |
 | [candidate_matchup_total_points.csv](output/candidate_matchup_total_points.csv) | Matchup-level total-points support |
 | [championship_tiebreaker_summary.csv](output/championship_tiebreaker_summary.csv) | Championship tiebreaker summary |
 | [championship_tiebreaker_distribution.csv](output/championship_tiebreaker_distribution.csv) | Full tiebreaker score distribution |
+
+Release publishing includes every generated `bracket_candidate_{id}.csv` file found in the runtime output directory for that run.
 
 ### Summaries (TXT)
 
@@ -174,6 +176,8 @@ Notes:
 - `scripts/run_simulation.R` and `scripts/run_bracket_candidates.R` load `.env` when present via `load_dotenv_file()`.
 - Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
 - `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_dashboards.R` when the saved full results bundle already exists.
+- `scripts/publish_release.R` publishes from the runtime output directory, not the cloud output tree, and includes every generated `bracket_candidate_{id}.csv` file in that run's output.
+- `Rscript tests/testthat.R` is the authoritative branch-health check for `master`.
 
 ---
 

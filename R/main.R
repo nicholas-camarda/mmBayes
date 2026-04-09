@@ -328,13 +328,14 @@ run_tournament_simulation <- function(config = NULL) {
         log_stage_progress = FALSE
     )
     candidate_simulations <- 50L
-    logger::log_info("Generating bracket candidates from {candidate_simulations} stochastic simulations")
+    n_candidates <- 2L
+    logger::log_info("Generating {n_candidates} bracket candidates from {candidate_simulations} stochastic simulations")
     candidate_results <- generate_bracket_candidates(
         all_teams = data$current_teams,
         model_results = model_results,
         draws = draws_budget,
         actual_play_in_results = data$current_play_in_results,
-        n_candidates = 2L,
+        n_candidates = n_candidates,
         n_simulations = candidate_simulations,
         random_seed = config$model$random_seed
     )

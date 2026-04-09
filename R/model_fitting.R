@@ -1345,6 +1345,8 @@ run_rolling_backtest <- function(historical_teams,
             log_stage_progress = FALSE
         )
         predicted_matchups <- flatten_matchup_results(simulated_bracket)
+        predicted_matchups <- predicted_matchups %>%
+            dplyr::mutate(Year = holdout_year)
         actual_lookup <- holdout_results %>%
             dplyr::select(Year, region, round, game_index, winner)
         bracket_score <- score_bracket_against_results(predicted_matchups, actual_lookup)$summary %>%
