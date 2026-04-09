@@ -34,7 +34,7 @@ To refresh the GitHub-linked dashboards from the latest runtime HTML, run:
 
 If you changed only dashboard rendering code and want a fast refresh from the cached full results bundle, run:
 
-`Rscript scripts/regenerate_dashboards.R`
+`Rscript scripts/regenerate_and_sync_dashboards.R`
 
 If you published the latest bundle to the cloud output tree instead of the local runtime root, set `MMBAYES_PAGES_SOURCE` to that folder before running the sync.
 
@@ -97,7 +97,7 @@ Rscript scripts/run_simulation.R
 # 2. Edit the dashboard rendering code
 
 # 3. Regenerate only the dashboard HTML from the cached results bundle
-Rscript scripts/regenerate_dashboards.R
+Rscript scripts/regenerate_and_sync_dashboards.R
 
 # 4. Inspect the runtime dashboard HTML copies in ~/ProjectsRuntime/mmBayes/output
 # macOS: use `open`
@@ -166,7 +166,7 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 | `Rscript scripts/run_simulation.R` | Authoritative full pipeline: fit, backtest, simulate, compare, and export |
 | `Rscript scripts/update_data.R` | Refresh canonical data files from source |
 | `Rscript scripts/run_bracket_candidates.R` | Lighter rerun without the full backtest, but it still fits or reloads models and regenerates candidates |
-| `Rscript scripts/regenerate_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds HTML from the saved full results bundle and syncs repo `output/` copies |
+| `Rscript scripts/regenerate_and_sync_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds HTML from the saved full results bundle and syncs repo `output/` copies |
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
 | `Rscript scripts/publish_release.R` | Copy approved deliverables into the dated OneDrive release folder |
 | `Rscript scripts/publish_github_pages.R` | Lower-level sync helper that copies already-rendered dashboard HTML into tracked repo `output/` files |
@@ -175,7 +175,7 @@ Notes:
 
 - `scripts/run_simulation.R` and `scripts/run_bracket_candidates.R` load `.env` when present via `load_dotenv_file()`.
 - Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
-- `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_dashboards.R` when the saved full results bundle already exists.
+- `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_and_sync_dashboards.R` when the saved full results bundle already exists.
 - `scripts/publish_release.R` publishes from the runtime output directory, not the cloud output tree, and includes every generated `bracket_candidate_{id}.csv` file in that run's output.
 - `Rscript tests/testthat.R` is the authoritative branch-health check for `master`.
 

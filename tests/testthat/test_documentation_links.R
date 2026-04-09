@@ -33,7 +33,7 @@ test_that("README documents the dashboard regeneration workflow and command role
     repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
     readme_text <- paste(readLines(file.path(repo_root, "README.md"), warn = FALSE), collapse = "\n")
 
-    expect_match(readme_text, "scripts/regenerate_dashboards\\.R")
+    expect_match(readme_text, "scripts/regenerate_and_sync_dashboards\\.R")
     expect_match(readme_text, "Preferred dashboard-refresh command")
     expect_match(readme_text, "run_bracket_candidates\\.R.*not the right command for CSS/layout-only iteration")
     expect_match(readme_text, "publish_github_pages\\.R.*Lower-level sync helper")
@@ -67,6 +67,6 @@ test_that("methods guide documents operational entrypoint roles", {
     expect_match(methods_text, "Operational Entrypoints")
     expect_match(methods_text, "scripts/run_simulation\\.R")
     expect_match(methods_text, "scripts/run_bracket_candidates\\.R")
-    expect_match(methods_text, "scripts/regenerate_dashboards\\.R")
+    expect_match(methods_text, "scripts/regenerate_and_sync_dashboards\\.R")
     expect_match(methods_text, "scripts/publish_github_pages\\.R")
 })
