@@ -19,13 +19,13 @@
 - The repository checkout is a local non-synced working tree.
 - Cloud storage holds the canonical input data and published release bundles.
 - Live generated outputs belong in `~/ProjectsRuntime/mmBayes/output` during active runs.
-- Release drops must be append-only and split into `deliverables/` and `data_snapshot/`.
+- Release drops must be append-only and contain only approved human-facing deliverables plus a manifest.
 
 ## Publish Layout
 
 Each dated release folder should contain:
 
 - `deliverables/` for human-facing outputs such as dashboards, CSV summaries, and text summaries.
-- `data_snapshot/` for the odds-history and other scraped inputs used to produce the release.
+- `release_manifest.txt` with the release date, source runtime output directory, and copied deliverable list.
 
-The publish command is `Rscript scripts/publish_release.R`. It fails closed if a deliverable is missing or if the dated publish folder already exists.
+The publish command is `Rscript scripts/publish_release.R`. It fails closed if a deliverable is missing or if the dated publish folder already exists. Caches, logs, RDS bundles, data snapshots, `betting_*` files, legacy PNGs, and other runtime scratch artifacts are outside the release contract.

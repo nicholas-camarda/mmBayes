@@ -404,6 +404,63 @@ test_that("build_model_comparison_bundle sanitizes BART options and renders the 
     expect_match(comparison_html, "learns interactions implicitly through tree splits")
 })
 
+test_that("model comparison failures require explicit unavailable-comparison opt-in", {
+    current_backtest <- list(summary = tibble::tibble(mean_log_loss = 0.4, mean_brier = 0.2, mean_accuracy = 0.7))
+    current_live <- list(summary = tibble::tibble(games_played = 1L, log_loss = 0.4, brier = 0.2, accuracy = 1))
+
+    testthat::local_mocked_bindings(
+        fit_tournament_model = function(...) stop("alternate engine unavailable"),
+        .package = "mmBayes"
+    )
+
+    expect_error(
+        build_model_comparison_bundle(
+            data = list(historical_matchups = tibble::tibble(), historical_actual_results = tibble::tibble()),
+            current_engine = "stan_glm",
+            current_model_results = list(engine = "stan_glm"),
+            current_total_points_model = list(engine = "stan_glm"),
+            current_backtest = current_backtest,
+            current_live_performance = current_live,
+            current_model_overview = list(engine = "stan_glm"),
+            current_total_points_overview = list(engine = "stan_glm"),
+            draws_budget = 10L,
+            bart_config = list(),
+            random_seed = 123,
+            model_cache_dir = tempfile("comparison-cache-"),
+            use_model_cache = FALSE,
+            interaction_terms = NULL,
+            prior_type = "normal",
+            matchup_predictors = character(0),
+            run_backtest = FALSE
+        ),
+        "Alternate matchup model fit failed"
+    )
+
+    comparison <- build_model_comparison_bundle(
+        data = list(historical_matchups = tibble::tibble(), historical_actual_results = tibble::tibble()),
+        current_engine = "stan_glm",
+        current_model_results = list(engine = "stan_glm"),
+        current_total_points_model = list(engine = "stan_glm"),
+        current_backtest = current_backtest,
+        current_live_performance = current_live,
+        current_model_overview = list(engine = "stan_glm"),
+        current_total_points_overview = list(engine = "stan_glm"),
+        draws_budget = 10L,
+        bart_config = list(),
+        random_seed = 123,
+        model_cache_dir = tempfile("comparison-cache-"),
+        use_model_cache = FALSE,
+        interaction_terms = NULL,
+        prior_type = "normal",
+        matchup_predictors = character(0),
+        run_backtest = FALSE,
+        allow_unavailable = TRUE
+    )
+
+    expect_false(comparison$available)
+    expect_true(comparison$attempted)
+})
+
 test_that("direct BART matchup fits still reject explicit interaction terms", {
     team_file <- tempfile(fileext = ".xlsx")
     results_file <- tempfile(fileext = ".xlsx")

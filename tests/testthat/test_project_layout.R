@@ -31,6 +31,9 @@ test_that("publish_release_bundle copies only approved deliverables", {
         writeLines(sprintf("fixture:%s", filename), file.path(output_dir, filename))
     }
     writeLines("scratch", file.path(output_dir, "tournament_sim.rds"))
+    writeLines("scratch", file.path(output_dir, "simulation_results.rds"))
+    writeLines("scratch", file.path(output_dir, "tournament_sim_bracket.png"))
+    writeLines("scratch", file.path(output_dir, "betting_bracket_impact_2026_report.md"))
     writeLines("cache", file.path(output_dir, "model_cache", "cached-fit.rds"))
     writeLines("log", file.path(output_dir, "logs", "tournament_simulation.log"))
 
@@ -51,6 +54,9 @@ test_that("publish_release_bundle copies only approved deliverables", {
         sort(c(release_deliverable_manifest(), candidate_files))
     )
     expect_false(file.exists(file.path(result$deliverables_dir, "tournament_sim.rds")))
+    expect_false(file.exists(file.path(result$deliverables_dir, "simulation_results.rds")))
+    expect_false(file.exists(file.path(result$deliverables_dir, "tournament_sim_bracket.png")))
+    expect_false(file.exists(file.path(result$deliverables_dir, "betting_bracket_impact_2026_report.md")))
     expect_false(dir.exists(file.path(result$deliverables_dir, "model_cache")))
     expect_false(dir.exists(file.path(result$deliverables_dir, "logs")))
     expect_false(dir.exists(file.path(result$release_root, "data_snapshot")))

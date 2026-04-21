@@ -176,6 +176,44 @@ test_that("simulate_full_bracket returns region and final four structure", {
     expect_true(all(c("semifinalists", "semifinals", "championship", "champion") %in% names(simulation$final_four)))
 })
 
+test_that("stochastic bracket simulation can use one coherent posterior draw index", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    current_teams <- team_data %>%
+        dplyr::filter(Year == "2025")
+
+    testthat::local_mocked_bindings(
+        calculate_win_probabilities = function(...) {
+            list(
+                mean = 0.5,
+                ci_lower = 0,
+                ci_upper = 1,
+                sd = 0.5,
+                draws = c(0, 1),
+                model_mean = 0.5,
+                line_prob = NA_real_,
+                blend_weight = 0,
+                used_betting_line = FALSE
+            )
+        },
+        .package = "mmBayes"
+    )
+
+    set.seed(123)
+    simulation <- simulate_full_bracket(
+        all_teams = current_teams,
+        model_results = list(),
+        draws = 2L,
+        deterministic = FALSE,
+        log_matchups = FALSE,
+        posterior_draw_index = 2L
+    )
+    flattened <- flatten_matchup_results(simulation)
+
+    expect_true(all(flattened$posterior_draw_index == 2L))
+    expect_true(all(flattened$decision_prob_A == 1))
+    expect_true(all(flattened$winner == flattened$teamA))
+})
+
 test_that("candidate generation adds decision metadata and an alternate bracket", {
     team_file <- tempfile(fileext = ".xlsx")
     results_file <- tempfile(fileext = ".xlsx")
@@ -228,6 +266,10 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     )
 
     expect_true(length(candidates) >= 1)
+    expect_equal(candidates[[1]]$path_support_label, "Deterministic posterior-mean reference bracket.")
+    if (length(candidates) > 1) {
+        expect_match(candidates[[2]]$path_support_label, "coherent posterior-draw simulations")
+    }
     expect_true(all(c("decision_rank", "confidence_tier", "upset_leverage", "inspection_flag", "inspection_level") %in% names(candidates[[1]]$matchups)))
     expect_true(all(c("candidate_1_pick", "candidate_2_pick", "candidate_diff_flag", "decision_score", "inspection_flag", "inspection_level") %in% names(decision_sheet)))
     expect_equal(
@@ -291,7 +333,8 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     resolved_quality <- resolve_model_quality_context(
         backtest = NULL,
         output_dir = output_dir,
-        quality_signature = quality_signature
+        quality_signature = quality_signature,
+        allow_fallback = TRUE
     )
     expect_true(isTRUE(resolved_quality$used_cached_quality))
     expect_match(resolved_quality$source_label, "Cached identical validation snapshot")
@@ -319,7 +362,8 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         quality_signature = quality_signature,
         play_in_resolution = play_in_resolution,
         total_points_predictions = total_predictions,
-        live_performance = live_performance
+        live_performance = live_performance,
+        allow_cached_quality = TRUE
     )
     saved_matchup_totals <- utils::read.csv(decision_outputs$matchup_total_points)
 

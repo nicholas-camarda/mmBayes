@@ -1144,6 +1144,28 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
             )
         }
 
+        if (!is.null(overview$effective_historical_years)) {
+            history_rows <- tibble::tibble(
+                Setting = c("Configured history window", "Effective historical seasons", "Historical years", "Skipped years"),
+                Value = c(
+                    overview$configured_history_window %||% "n/a",
+                    overview$effective_historical_years %||% "n/a",
+                    overview$historical_years %||% "n/a",
+                    overview$skipped_historical_years %||% "none"
+                )
+            )
+            detail_cards <- c(
+                detail_cards,
+                paste0(
+                    "<div class='quality-card reference-callout'>",
+                    "<h4>Training history</h4>",
+                    render_html_table(history_rows),
+                    "<p>Historical games are expanded into ordered matchup rows for prediction; coefficient summaries should be read as predictive diagnostics, not independent scientific effects.</p>",
+                    "</div>"
+                )
+            )
+        }
+
         if (length(detail_cards) == 0) {
             return("")
         }
@@ -1175,6 +1197,7 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
                 "<div class='summary-card'><div class='summary-label'>Draw budget</div><div class='summary-value'>", html_escape(if (is.finite(safe_numeric(overview$draw_budget, default = NA_real_))) format(safe_numeric(overview$draw_budget, default = NA_real_), scientific = FALSE) else "n/a"), "</div><p class='summary-note'>Posterior draws used for scoring and simulation.</p></div>",
                 "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(as.character(overview$predictor_count %||% 0L)), "</div><p class='summary-note'>", html_escape(overview$predictor_summary %||% "No predictors were recorded."), "</p></div>",
                 "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(overview$interaction_terms %||% character(0)) > 0) "Interactions on" else "No explicit terms"), "</div><p class='summary-note'>", html_escape(feature_mix_note(overview)), "</p></div>",
+                if (!is.null(overview$effective_historical_years)) paste0("<div class='summary-card'><div class='summary-label'>Training years</div><div class='summary-value'>", html_escape(as.character(overview$effective_historical_years)), "</div><p class='summary-note'>Effective historical seasons from configured window ", html_escape(as.character(overview$configured_history_window %||% "n/a")), ".</p></div>") else "",
                 "</div>",
                 render_model_detail_html(overview),
                 "</div>"
@@ -1214,6 +1237,7 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
         "<div class='summary-card'><div class='summary-label'>Draw budget</div><div class='summary-value'>", html_escape(if (is.finite(draw_budget)) format(draw_budget, scientific = FALSE) else "n/a"), "</div><p class='summary-note'>Posterior draws used for scoring and simulation.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Predictors</div><div class='summary-value'>", html_escape(as.character(model_overview$predictor_count %||% 0L)), "</div><p class='summary-note'>", html_escape(predictor_summary), "</p></div>",
         "<div class='summary-card'><div class='summary-label'>Feature mix</div><div class='summary-value'>", html_escape(if (length(interaction_terms) > 0) "Interactions on" else "No explicit terms"), "</div><p class='summary-note'>", html_escape(feature_mix_note(model_overview)), "</p></div>",
+        if (!is.null(model_overview$effective_historical_years)) paste0("<div class='summary-card'><div class='summary-label'>Training years</div><div class='summary-value'>", html_escape(as.character(model_overview$effective_historical_years)), "</div><p class='summary-note'>Effective historical seasons from configured window ", html_escape(as.character(model_overview$configured_history_window %||% "n/a")), ".</p></div>") else "",
         "</div>"
     )
 
@@ -4230,6 +4254,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
         tiebreaker_median <- display_value(row_value(summary_row, "predicted_total_median", NA_real_), digits = 1L)
         summary_note <- row_value(summary_row, "identity_text", "No summary available.")
+        path_support_note <- row_value(summary_row, "path_support_label", NA_character_)
         alternate_change_summary <- sprintf(
             "%s total | %s late-round",
             display_value(row_value(summary_row, "diff_count", NA_real_), digits = 0L),
@@ -4257,6 +4282,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             "</div>",
             "<p class='candidate-card__subline'><strong>Final Four:</strong> ", html_escape(row_value(summary_row, "final_four", "n/a")), "</p>",
             "<p class='candidate-card__subline'><strong>Identity:</strong> ", html_escape(summary_note), "</p>",
+            if (!is.na(path_support_note)) paste0("<p class='candidate-card__subline'><strong>Path support:</strong> ", html_escape(path_support_note), "</p>") else "",
             "<div class='candidate-card__facts'>",
             "<div><span>Bracket log probability</span><strong>", html_escape(display_value(row_value(summary_row, "bracket_log_probability", NA_real_), digits = 3L)), "</strong></div>",
             "<div><span>Mean picked-game probability</span><strong>", html_escape(display_value(row_value(summary_row, "mean_picked_game_probability", NA_real_), digits = 3L)), "</strong></div>",

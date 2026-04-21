@@ -74,7 +74,8 @@ build_model_comparison_bundle <- function(data,
                                           interaction_terms,
                                           prior_type,
                                           matchup_predictors,
-                                          run_backtest = TRUE) {
+                                          run_backtest = TRUE,
+                                          allow_unavailable = FALSE) {
     alternate_engine <- if (identical(current_engine, "bart")) "stan_glm" else "bart"
     current_label <- engine_display_label(current_engine)
     alternate_label <- engine_display_label(alternate_engine)
@@ -100,6 +101,9 @@ build_model_comparison_bundle <- function(data,
             prior_type = alternate_engine_options$prior_type
         ),
         error = function(e) {
+            if (!isTRUE(allow_unavailable)) {
+                stop_with_message(sprintf("Alternate matchup model fit failed: %s", e$message))
+            }
             logger::log_warn("Alternate matchup model fit failed: {e$message}")
             NULL
         }
@@ -140,6 +144,9 @@ build_model_comparison_bundle <- function(data,
             use_cache = use_model_cache
         ),
         error = function(e) {
+            if (!isTRUE(allow_unavailable)) {
+                stop_with_message(sprintf("Alternate total-points model fit failed: %s", e$message))
+            }
             logger::log_warn("Alternate total-points model fit failed: {e$message}")
             NULL
         }
@@ -161,6 +168,9 @@ build_model_comparison_bundle <- function(data,
                 prior_type = alternate_engine_options$prior_type
             ),
             error = function(e) {
+                if (!isTRUE(allow_unavailable)) {
+                    stop_with_message(sprintf("Alternate backtest failed: %s", e$message))
+                }
                 logger::log_warn("Alternate backtest failed: {e$message}")
                 NULL
             }
@@ -176,6 +186,9 @@ build_model_comparison_bundle <- function(data,
             draws = draws_budget
         ),
         error = function(e) {
+            if (!isTRUE(allow_unavailable)) {
+                stop_with_message(sprintf("Alternate live-performance summary failed: %s", e$message))
+            }
             logger::log_warn("Alternate live-performance summary failed: {e$message}")
             NULL
         }
@@ -260,6 +273,7 @@ run_tournament_simulation <- function(config = NULL) {
     output_dir <- config$output$path %||% default_runtime_output_root()
     engine <- config$model$engine %||% "stan_glm"
     compare_engines <- isTRUE(config$model$compare_engines %||% TRUE)
+    allow_unavailable_comparison <- isTRUE(config$model$allow_unavailable_comparison %||% FALSE)
     bart_config <- config$model$bart %||% list()
     draws_budget <- if (identical(engine, "bart")) {
         as.integer(bart_config$n_post %||% 1000L)
@@ -353,7 +367,7 @@ run_tournament_simulation <- function(config = NULL) {
         draws = draws_budget
     )
 
-    model_overview <- summarize_model_overview(model_results, draws = draws_budget)
+    model_overview <- summarize_model_overview(model_results, draws = draws_budget, history_summary = data$history_summary)
     total_points_model_overview <- summarize_model_overview(total_points_model, draws = draws_budget)
     model_comparison <- if (compare_engines) {
         build_model_comparison_bundle(
@@ -373,7 +387,8 @@ run_tournament_simulation <- function(config = NULL) {
             interaction_terms = interaction_terms,
             prior_type = config$model$prior_type %||% "normal",
             matchup_predictors = matchup_predictors,
-            run_backtest = isTRUE(config$model$backtest)
+            run_backtest = isTRUE(config$model$backtest),
+            allow_unavailable = allow_unavailable_comparison
         )
     } else {
         NULL
@@ -395,6 +410,9 @@ run_tournament_simulation <- function(config = NULL) {
         total_points_predictions = total_points_predictions,
         live_performance = live_performance,
         final_four = simulation_results$final_four,
+        history_summary = data$history_summary,
+        configured_history_window = data$configured_history_window,
+        effective_historical_years = data$effective_historical_years,
         output = list(log_path = run_log_path)
     )
 

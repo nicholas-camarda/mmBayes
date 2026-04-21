@@ -100,7 +100,7 @@ generate_matchup_stats <- function(teamA, teamB, win_probs) {
 #'
 #' @return A one-row tibble describing the simulated matchup result.
 #' @keywords internal
-create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_probs, matchup_stats, winner) {
+create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_probs, matchup_stats, winner, decision_prob_A = NULL, posterior_draw_index = NA_integer_) {
     team_a_name <- teamA$Team[1]
     team_b_name <- teamB$Team[1]
     team_a_seed <- teamA$Seed[1]
@@ -116,6 +116,8 @@ create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_
         teamB_seed = team_b_seed,
         teamB_strength = matchup_stats$teamB_strength,
         win_prob_A = win_probs$mean,
+        decision_prob_A = decision_prob_A %||% win_probs$mean,
+        posterior_draw_index = posterior_draw_index,
         model_win_prob_A = win_probs$model_mean %||% NA_real_,
         line_prob_A = win_probs$line_prob %||% NA_real_,
         betting_blend_weight = win_probs$blend_weight %||% NA_real_,
@@ -140,17 +142,27 @@ create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_
 #'
 #' @return A one-row tibble describing the matchup result.
 #' @export
-simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_results, draws = 1000, deterministic = TRUE, log_matchup = TRUE) {
+simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_results, draws = 1000, deterministic = TRUE, log_matchup = TRUE, posterior_draw_index = NULL) {
     if (isTRUE(log_matchup)) {
         logger::log_debug("Evaluating matchup: {teamA$Team[1]} vs {teamB$Team[1]} ({round_name})")
     }
 
     win_probs <- calculate_win_probabilities(teamA, teamB, round_name, model_results, draws)
     matchup_stats <- generate_matchup_stats(teamA, teamB, win_probs)
+    decision_prob_A <- if (isTRUE(deterministic) || is.null(posterior_draw_index)) {
+        win_probs$mean
+    } else {
+        draw_count <- length(win_probs$draws)
+        if (draw_count == 0L) {
+            stop_with_message("No posterior draws were available for stochastic matchup simulation")
+        }
+        draw_index <- ((as.integer(posterior_draw_index) - 1L) %% draw_count) + 1L
+        win_probs$draws[[draw_index]]
+    }
     team_a_wins <- if (isTRUE(deterministic)) {
         win_probs$mean >= 0.5
     } else {
-        stats::rbinom(1L, 1L, prob = win_probs$mean) == 1L
+        stats::rbinom(1L, 1L, prob = decision_prob_A) == 1L
     }
     winner <- if (team_a_wins) teamA$Team[1] else teamB$Team[1]
 
@@ -161,7 +173,9 @@ simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_res
         matchup_number = matchup_number,
         win_probs = win_probs,
         matchup_stats = matchup_stats,
-        winner = winner
+        winner = winner,
+        decision_prob_A = decision_prob_A,
+        posterior_draw_index = posterior_draw_index %||% NA_integer_
     )
 }
 
@@ -176,7 +190,7 @@ simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_res
 #'
 #' @return A list containing round results and advancing teams.
 #' @keywords internal
-simulate_round <- function(teams, round_name, model_results, draws, deterministic = TRUE, log_matchups = TRUE) {
+simulate_round <- function(teams, round_name, model_results, draws, deterministic = TRUE, log_matchups = TRUE, posterior_draw_index = NULL) {
     if (nrow(teams) %% 2 != 0) {
         stop_with_message(sprintf("%s received an odd number of teams", round_name))
     }
@@ -190,7 +204,7 @@ simulate_round <- function(teams, round_name, model_results, draws, deterministi
         team_a <- teams[team_a_idx, , drop = FALSE]
         team_b <- teams[team_b_idx, , drop = FALSE]
 
-        matchup <- simulate_matchup(team_a, team_b, round_name, i, model_results, draws, deterministic = deterministic, log_matchup = log_matchups)
+        matchup <- simulate_matchup(team_a, team_b, round_name, i, model_results, draws, deterministic = deterministic, log_matchup = log_matchups, posterior_draw_index = posterior_draw_index)
         round_results[[i]] <- matchup
         advancing_teams[[i]] <- if (matchup$winner[1] == team_a$Team[1]) team_a else team_b
     }
@@ -214,7 +228,7 @@ simulate_round <- function(teams, round_name, model_results, draws, deterministi
 #'
 #' @return A list containing resolved teams and optional First Four results.
 #' @keywords internal
-resolve_play_in_games <- function(region_teams, model_results, draws, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE) {
+resolve_play_in_games <- function(region_teams, model_results, draws, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE, posterior_draw_index = NULL) {
     region_name <- unique(region_teams$Region)[1]
     duplicate_counts <- table(region_teams$Seed)
     dup_seeds <- as.integer(names(duplicate_counts[duplicate_counts > 1]))
@@ -276,7 +290,9 @@ resolve_play_in_games <- function(region_teams, model_results, draws, actual_pla
                 i,
                 win_probs,
                 matchup_stats,
-                actual_winner
+                actual_winner,
+                decision_prob_A = win_probs$mean,
+                posterior_draw_index = NA_integer_
             )
         } else {
             matchup <- simulate_matchup(
@@ -287,7 +303,8 @@ resolve_play_in_games <- function(region_teams, model_results, draws, actual_pla
                 model_results,
                 draws,
                 deterministic = deterministic,
-                log_matchup = log_matchups
+                log_matchup = log_matchups,
+                posterior_draw_index = posterior_draw_index
             )
         }
         play_in_results[[i]] <- matchup
@@ -317,7 +334,7 @@ resolve_play_in_games <- function(region_teams, model_results, draws, actual_pla
 #'
 #' @return A list containing regional round results and the region champion.
 #' @export
-simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL) {
+simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL, posterior_draw_index = NULL) {
     region_name <- unique(region_teams$Region)[1]
     if (is.null(log_stage_progress)) {
         log_stage_progress <- !isTRUE(log_matchups)
@@ -331,7 +348,8 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, 
         draws,
         actual_play_in_results = actual_play_in_results,
         deterministic = deterministic,
-        log_matchups = log_matchups
+        log_matchups = log_matchups,
+        posterior_draw_index = posterior_draw_index
     )
     region_teams <- play_in$teams
 
@@ -354,7 +372,7 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, 
         if (isTRUE(log_stage_progress)) {
             logger::log_info("Simulating {round_name} in {region_name}")
         }
-        simulated_round <- simulate_round(remaining, round_name, model_results, draws, deterministic = deterministic, log_matchups = log_matchups)
+        simulated_round <- simulate_round(remaining, round_name, model_results, draws, deterministic = deterministic, log_matchups = log_matchups, posterior_draw_index = posterior_draw_index)
         round_results[[round_name]] <- simulated_round$results
         remaining <- simulated_round$winners
     }
@@ -377,7 +395,7 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, 
 #'
 #' @return A list containing semifinal, championship, and champion results.
 #' @export
-simulate_final_four <- function(region_champions, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL) {
+simulate_final_four <- function(region_champions, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL, posterior_draw_index = NULL) {
     if (is.null(log_stage_progress)) {
         log_stage_progress <- !isTRUE(log_matchups)
     }
@@ -392,7 +410,8 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
         model_results,
         draws,
         deterministic = deterministic,
-        log_matchup = log_matchups
+        log_matchup = log_matchups,
+        posterior_draw_index = posterior_draw_index
     )
     semifinal2 <- simulate_matchup(
         region_champions$East,
@@ -402,7 +421,8 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
         model_results,
         draws,
         deterministic = deterministic,
-        log_matchup = log_matchups
+        log_matchup = log_matchups,
+        posterior_draw_index = posterior_draw_index
     )
 
     championship_team_a <- if (semifinal1$winner[1] == region_champions$South$Team[1]) {
@@ -424,7 +444,8 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
         model_results,
         draws,
         deterministic = deterministic,
-        log_matchup = log_matchups
+        log_matchup = log_matchups,
+        posterior_draw_index = posterior_draw_index
     )
 
     champion <- if (championship$winner[1] == championship_team_a$Team[1]) {
@@ -454,7 +475,7 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
 #'
 #' @return A list containing regional results and Final Four results.
 #' @export
-simulate_full_bracket <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL) {
+simulate_full_bracket <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL, posterior_draw_index = NULL) {
     regions <- c("East", "West", "South", "Midwest")
     region_counts <- table(all_teams$Region)
     if (is.null(log_stage_progress)) {
@@ -477,7 +498,8 @@ simulate_full_bracket <- function(all_teams, model_results, draws = 1000, actual
                 actual_play_in_results = actual_play_in_results,
                 deterministic = deterministic,
                 log_matchups = log_matchups,
-                log_stage_progress = log_stage_progress
+                log_stage_progress = log_stage_progress,
+                posterior_draw_index = posterior_draw_index
             )
         }
     )
@@ -489,7 +511,8 @@ simulate_full_bracket <- function(all_teams, model_results, draws = 1000, actual
         draws,
         deterministic = deterministic,
         log_matchups = log_matchups,
-        log_stage_progress = log_stage_progress
+        log_stage_progress = log_stage_progress,
+        posterior_draw_index = posterior_draw_index
     )
 
     list(

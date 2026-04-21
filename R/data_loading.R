@@ -299,6 +299,33 @@ select_historical_years <- function(team_data, game_results, bracket_year, histo
     utils::tail(eligible, history_window)
 }
 
+#' Summarize the effective historical training window
+#'
+#' @param team_data A normalized team feature table.
+#' @param game_results A normalized tournament game-results table.
+#' @param bracket_year The active bracket year.
+#' @param history_window Configured number of historical tournaments to retain.
+#' @param selected_years Historical years selected for modeling.
+#'
+#' @return A one-row tibble describing the configured and effective window.
+#' @keywords internal
+summarize_history_window <- function(team_data, game_results, bracket_year, history_window = 8L, selected_years = NULL) {
+    team_years <- unique(as.character(team_data$Year))
+    result_years <- unique(as.character(game_results$Year))
+    available_years <- intersect(team_years, result_years)
+    skipped_years <- intersect(available_years, "2020")
+    available_historical_years <- sort(setdiff(available_years, c(as.character(bracket_year), skipped_years)))
+    selected_years <- selected_years %||% utils::tail(available_historical_years, history_window)
+
+    tibble::tibble(
+        configured_history_window = as.integer(history_window),
+        effective_historical_years = length(selected_years),
+        historical_years = paste(selected_years, collapse = ", "),
+        available_historical_years = paste(available_historical_years, collapse = ", "),
+        skipped_historical_years = paste(skipped_years, collapse = ", ")
+    )
+}
+
 #' Prepare the current bracket's team rows
 #'
 #' @param team_data A normalized team feature table.
@@ -487,11 +514,22 @@ load_tournament_data <- function(config) {
     bracket_year <- get_bracket_year(team_features)
     logger::log_info("Using bracket year: {bracket_year}")
 
+    configured_history_window <- config$model$history_window %||% 8L
     historical_years <- select_historical_years(
         team_data = team_features,
         game_results = game_results,
         bracket_year = bracket_year,
-        history_window = config$model$history_window %||% 8L
+        history_window = configured_history_window
+    )
+    history_summary <- summarize_history_window(
+        team_data = team_features,
+        game_results = game_results,
+        bracket_year = bracket_year,
+        history_window = configured_history_window,
+        selected_years = historical_years
+    )
+    logger::log_info(
+        "Effective historical seasons: {history_summary$effective_historical_years[[1]]}/{history_summary$configured_history_window[[1]]} ({history_summary$historical_years[[1]]})"
     )
 
     historical_teams <- team_features %>%
@@ -520,6 +558,10 @@ load_tournament_data <- function(config) {
         current_teams = current_teams,
         current_play_in_results = current_play_in_results,
         current_completed_results = current_completed_results,
-        game_results = game_results
+        game_results = game_results,
+        configured_history_window = history_summary$configured_history_window[[1]],
+        effective_historical_years = history_summary$effective_historical_years[[1]],
+        historical_years = historical_years,
+        history_summary = history_summary
     )
 }

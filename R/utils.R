@@ -1714,6 +1714,7 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
             diff_count = candidate_diff_count,
             late_round_diff_count = late_round_diff_count,
             identity_text = build_identity_text(candidate, diff_count = candidate_diff_count, late_round_diff_count = late_round_diff_count),
+            path_support_label = candidate$path_support_label %||% NA_character_,
             comparison_summary_label = comparison_summary$label %||% NA_character_,
             comparison_summary_value = comparison_summary$value %||% NA_character_,
             path_link = sprintf("#candidate-path-%s", candidate$candidate_id),
@@ -2270,7 +2271,8 @@ predict_candidate_total_points <- function(candidates, current_teams, total_poin
 #'
 #' @return A list with candidate metadata and flattened matchup tables.
 #' @export
-generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, n_candidates = 2L, n_simulations = 250L, random_seed = 123) {
+generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, n_candidates = 2L, n_simulations = 250L, random_seed = 123, simulation_method = c("coherent_draw", "posterior_mean")) {
+    simulation_method <- match.arg(simulation_method)
     logger::log_info("Building deterministic reference bracket")
     deterministic_bracket <- simulate_full_bracket(
         all_teams = all_teams,
@@ -2298,6 +2300,7 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             title_path_mean_prob = deterministic_path$title_path_mean_prob[[1]],
             title_path_min_prob = deterministic_path$title_path_min_prob[[1]],
             diff_summary = "Primary bracket built from the higher posterior-mean pick in every slot.",
+            path_support_label = "Deterministic posterior-mean reference bracket.",
             simulation = deterministic_bracket,
             matchups = deterministic_flat
         )
@@ -2308,10 +2311,15 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
     }
 
     set.seed(random_seed)
-    logger::log_info("Exploring {n_simulations} stochastic bracket simulations")
+    logger::log_info("Exploring {n_simulations} stochastic bracket simulations with {simulation_method} path sampling")
     simulated_rows <- vector("list", n_simulations)
     progress_points <- sort(unique(pmax(1L, as.integer(round(seq(0.2, 1, by = 0.2) * n_simulations)))))
     for (index in seq_len(n_simulations)) {
+        posterior_draw_index <- if (identical(simulation_method, "coherent_draw")) {
+            sample.int(max(1L, as.integer(draws)), 1L)
+        } else {
+            NULL
+        }
         bracket <- simulate_full_bracket(
             all_teams = all_teams,
             model_results = model_results,
@@ -2319,7 +2327,8 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             actual_play_in_results = actual_play_in_results,
             deterministic = FALSE,
             log_matchups = FALSE,
-            log_stage_progress = FALSE
+            log_stage_progress = FALSE,
+            posterior_draw_index = posterior_draw_index
         )
         flattened <- flatten_matchup_results(bracket)
         summary_row <- summarize_bracket_probability(flattened)
@@ -2329,6 +2338,7 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             final_four = paste(vapply(bracket$final_four$semifinalists, function(team) team$Team[[1]], character(1)), collapse = ", "),
             bracket_log_prob = summary_row$bracket_log_prob[[1]],
             mean_game_prob = summary_row$mean_game_prob[[1]],
+            posterior_draw_index = posterior_draw_index %||% NA_integer_,
             simulation = list(bracket),
             matchups = list(augment_matchup_decisions(flattened))
         )
@@ -2344,8 +2354,9 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             champion = champion[[1]],
             final_four = final_four[[1]],
             frequency = dplyr::n(),
-            bracket_log_prob = max(bracket_log_prob),
-            mean_game_prob = max(mean_game_prob),
+            bracket_log_prob = mean(bracket_log_prob),
+            mean_game_prob = mean(mean_game_prob),
+            representative_log_prob = max(bracket_log_prob),
             simulation = list(simulation[[which.max(bracket_log_prob)]]),
             matchups = list(matchups[[which.max(bracket_log_prob)]]),
             .groups = "drop"
@@ -2365,11 +2376,8 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             diff_count = nrow(diff_rows),
             round64_diff_count = sum(diff_rows$round == "Round of 64"),
             leverage_sum = sum(diff_rows$upset_leverage, na.rm = TRUE),
-            candidate_score = row$bracket_log_prob[[1]] +
-                (log1p(row$frequency[[1]]) / 3) +
-                (sum(diff_rows$upset_leverage, na.rm = TRUE) / 25) -
-                (nrow(diff_rows) / 8) -
-                (max(sum(diff_rows$round == "Round of 64") - 6L, 0L) * 2),
+            frequency = row$frequency[[1]],
+            bracket_log_prob = row$bracket_log_prob[[1]],
             diff_summary = if (nrow(diff_rows) == 0) {
                 "Matches the primary bracket."
             } else {
@@ -2385,7 +2393,7 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
         )
     }) %>%
         dplyr::filter(diff_count > 0) %>%
-        dplyr::arrange(dplyr::desc(candidate_score), round64_diff_count, diff_count)
+        dplyr::arrange(dplyr::desc(frequency), dplyr::desc(bracket_log_prob), round64_diff_count, diff_count)
 
     for (index in seq_len(min(n_candidates - 1L, nrow(alternate_candidates)))) {
         row <- ranked_candidates[alternate_candidates$row_index[[index]], , drop = FALSE]
@@ -2402,6 +2410,11 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
             title_path_mean_prob = path_summary$title_path_mean_prob[[1]],
             title_path_min_prob = path_summary$title_path_min_prob[[1]],
             diff_summary = alternate_candidates$diff_summary[[index]],
+            path_support_label = sprintf(
+                "Observed in %s of %s coherent posterior-draw simulations.",
+                row$frequency[[1]],
+                n_simulations
+            ),
             simulation = row$simulation[[1]],
             matchups = row$matchups[[1]]
         )
@@ -2428,7 +2441,7 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
 #' @return A list of decision-artifact file paths and the in-memory decision
 #'   sheet.
 #' @export
-save_decision_outputs <- function(bracket_year, candidates, output_dir = default_runtime_output_root(), current_teams = NULL, backtest = NULL, model_overview = NULL, quality_signature = NULL, play_in_resolution = NULL, total_points_predictions = NULL, live_performance = NULL, model_comparison = NULL) {
+save_decision_outputs <- function(bracket_year, candidates, output_dir = default_runtime_output_root(), current_teams = NULL, backtest = NULL, model_overview = NULL, quality_signature = NULL, play_in_resolution = NULL, total_points_predictions = NULL, live_performance = NULL, model_comparison = NULL, allow_cached_quality = FALSE) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- build_decision_sheet(candidates)
@@ -2495,7 +2508,10 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
             }
         }
         if (!is.na(candidate$frequency)) {
-            cat(sprintf("Simulation frequency: %s\n", candidate$frequency))
+            cat(sprintf("Coherent posterior path support: %s simulations\n", candidate$frequency))
+        }
+        if (!is.null(candidate$path_support_label)) {
+            cat(sprintf("Path support note: %s\n", candidate$path_support_label))
         }
         if (!is.null(candidate$diff_summary)) {
             cat(sprintf("Alternate rationale: %s\n", candidate$diff_summary))
@@ -2516,7 +2532,8 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         live_performance = live_performance,
         model_comparison = model_comparison,
         decision_sheet = decision_sheet,
-        dashboard_context = dashboard_context
+        dashboard_context = dashboard_context,
+        allow_cached_quality = allow_cached_quality
     )
 
     list(
@@ -2571,7 +2588,8 @@ write_dashboard_outputs <- function(bracket_year,
                                     live_performance = NULL,
                                     model_comparison = NULL,
                                     decision_sheet = NULL,
-                                    dashboard_context = NULL) {
+                                    dashboard_context = NULL,
+                                    allow_cached_quality = FALSE) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- decision_sheet %||% build_decision_sheet(candidates)
@@ -2587,7 +2605,7 @@ write_dashboard_outputs <- function(bracket_year,
         backtest = backtest,
         output_dir = output_dir,
         quality_signature = quality_signature,
-        allow_fallback = TRUE,
+        allow_fallback = isTRUE(allow_cached_quality),
         require_exact_match = TRUE
     )
 
@@ -2669,7 +2687,7 @@ regenerate_dashboard_outputs_from_results <- function(results,
         stop_with_message("Saved results bundle is missing current team data needed for dashboard regeneration.")
     }
 
-    matchup_model_overview <- results$model_overview %||% summarize_model_overview(results$model, draws = results$draws_budget %||% NULL)
+    matchup_model_overview <- results$model_overview %||% summarize_model_overview(results$model, draws = results$draws_budget %||% NULL, history_summary = results$history_summary %||% results$data$history_summary %||% NULL)
     total_points_model_overview <- results$total_points_model_overview %||% summarize_model_overview(results$total_points_model, draws = results$draws_budget %||% NULL)
     model_overview <- as_model_overview_bundle(
         model_overview = matchup_model_overview,
@@ -2693,7 +2711,8 @@ regenerate_dashboard_outputs_from_results <- function(results,
         total_points_predictions = results$total_points_predictions %||% NULL,
         live_performance = results$live_performance %||% NULL,
         model_comparison = results$model_comparison %||% NULL,
-        decision_sheet = results$decision_sheet %||% NULL
+        decision_sheet = results$decision_sheet %||% NULL,
+        allow_cached_quality = TRUE
     )
 
     synced_repo_files <- if (!is.null(repo_output_dir)) {
@@ -2749,7 +2768,7 @@ save_results <- function(results, output_config) {
     output_dir <- output_config$path %||% default_runtime_output_root()
     prefix <- output_config$prefix %||% "tournament_sim"
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
-    matchup_model_overview <- results$model_overview %||% summarize_model_overview(results$model, draws = results$draws_budget %||% NULL)
+    matchup_model_overview <- results$model_overview %||% summarize_model_overview(results$model, draws = results$draws_budget %||% NULL, history_summary = results$history_summary %||% results$data$history_summary %||% NULL)
     total_points_model_overview <- results$total_points_model_overview %||% summarize_model_overview(results$total_points_model, draws = results$draws_budget %||% NULL)
     model_overview <- as_model_overview_bundle(
         model_overview = matchup_model_overview,
@@ -2796,7 +2815,8 @@ save_results <- function(results, output_config) {
             play_in_resolution = play_in_resolution,
             total_points_predictions = results$total_points_predictions,
             live_performance = results$live_performance,
-            model_comparison = results$model_comparison %||% NULL
+            model_comparison = results$model_comparison %||% NULL,
+            allow_cached_quality = isTRUE(output_config$allow_cached_model_quality %||% FALSE)
         )
     } else {
         NULL

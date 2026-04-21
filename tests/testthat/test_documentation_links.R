@@ -39,6 +39,8 @@ test_that("README documents the dashboard regeneration workflow and command role
     expect_match(readme_text, "publish_github_pages\\.R.*Lower-level sync helper")
     expect_match(readme_text, "~/ProjectsRuntime/mmBayes/output")
     expect_match(readme_text, "macOS: use `open`")
+    expect_match(readme_text, "dashboard HTML snapshots")
+    expect_match(readme_text, "CSV/TXT/RDS outputs live in runtime/release bundles|CSV, TXT, RDS, cache, and log artifacts")
 })
 
 test_that("README quick start explains the runtime output bundle and browser launch step", {
@@ -69,4 +71,19 @@ test_that("methods guide documents operational entrypoint roles", {
     expect_match(methods_text, "scripts/run_bracket_candidates\\.R")
     expect_match(methods_text, "scripts/regenerate_and_sync_dashboards\\.R")
     expect_match(methods_text, "scripts/publish_github_pages\\.R")
+})
+
+test_that("runtime and methods docs describe current artifact and model contracts", {
+    repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
+    runtime_text <- paste(readLines(file.path(repo_root, "docs", "runtime-roots.md"), warn = FALSE), collapse = "\n")
+    methods_text <- paste(readLines(file.path(repo_root, "docs", "methods-and-interpretation.md"), warn = FALSE), collapse = "\n")
+
+    expect_match(runtime_text, "deliverables/")
+    expect_match(runtime_text, "release_manifest\\.txt")
+    expect_no_match(runtime_text, "data_snapshot/")
+    expect_match(methods_text, "prior_type")
+    expect_match(methods_text, "globalScale")
+    expect_match(methods_text, "effective_historical_years")
+    expect_match(methods_text, "coherent shared posterior draws")
+    expect_match(methods_text, "predictive diagnostics")
 })

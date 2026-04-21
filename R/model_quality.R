@@ -81,7 +81,7 @@ build_model_quality_signature <- function(results) {
 #'
 #' @return A named list of display-friendly model details.
 #' @keywords internal
-summarize_model_overview <- function(model_results, draws = NULL) {
+summarize_model_overview <- function(model_results, draws = NULL, history_summary = NULL) {
     if (is.null(model_results)) {
         return(list())
     }
@@ -92,6 +92,13 @@ summarize_model_overview <- function(model_results, draws = NULL) {
     betting_predictor_count <- sum(startsWith(feature_columns, "betting_"), na.rm = TRUE)
     bart_config <- model_results$bart_config %||% list()
     draw_budget <- draws %||% (if (identical(engine, "bart")) safe_numeric(bart_config$n_post, default = NA_real_) else NA_real_)
+
+    history_summary <- history_summary %||% tibble::tibble()
+    history_row <- if (inherits(history_summary, "data.frame") && nrow(history_summary) > 0) {
+        history_summary[1, , drop = FALSE]
+    } else {
+        tibble::tibble()
+    }
 
     list(
         engine = engine,
@@ -110,7 +117,12 @@ summarize_model_overview <- function(model_results, draws = NULL) {
         },
         bart_config = bart_config,
         interaction_terms = model_results$interaction_terms %||% character(0),
-        cache_path = model_results$cache_path %||% NULL
+        cache_path = model_results$cache_path %||% NULL,
+        configured_history_window = if ("configured_history_window" %in% names(history_row)) history_row$configured_history_window[[1]] else NULL,
+        effective_historical_years = if ("effective_historical_years" %in% names(history_row)) history_row$effective_historical_years[[1]] else NULL,
+        historical_years = if ("historical_years" %in% names(history_row)) history_row$historical_years[[1]] else NULL,
+        available_historical_years = if ("available_historical_years" %in% names(history_row)) history_row$available_historical_years[[1]] else NULL,
+        skipped_historical_years = if ("skipped_historical_years" %in% names(history_row)) history_row$skipped_historical_years[[1]] else NULL
     )
 }
 
@@ -660,7 +672,7 @@ load_latest_model_quality_artifact <- function(output_dir = default_runtime_outp
 #'
 #' @return A list containing the effective backtest bundle and source labels.
 #' @keywords internal
-resolve_model_quality_context <- function(backtest = NULL, output_dir = default_runtime_output_root(), quality_signature = NULL, allow_fallback = TRUE, require_exact_match = TRUE) {
+resolve_model_quality_context <- function(backtest = NULL, output_dir = default_runtime_output_root(), quality_signature = NULL, allow_fallback = FALSE, require_exact_match = TRUE) {
     if (model_quality_has_backtest(backtest)) {
         return(list(
             backtest = backtest,

@@ -1,9 +1,9 @@
 Package: mmBayes
-Title: March Madness Bayesian Prediction Model
+Title: Bayesian NCAA Tournament Bracket Prediction
 Version: 0.1.0
 Authors@R: 
-    person("Author", "Name", , "author@example.com", role = c("aut", "cre"))
-Description: A Bayesian model for predicting March Madness tournament outcomes.
+    person("Nicholas", "Camarda", role = c("aut", "cre"))
+Description: Fits Bayesian matchup and total-points models for NCAA tournament bracket prediction, rolling validation, candidate bracket generation, and dashboard review artifacts.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

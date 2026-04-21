@@ -191,6 +191,7 @@ default_project_config <- function() {
             backtest = TRUE,
             engine = "stan_glm",
             compare_engines = TRUE,
+            allow_unavailable_comparison = FALSE,
             bart = list(
                 n_trees = 200L,
                 n_burn = 500L,

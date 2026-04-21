@@ -29,10 +29,20 @@ test_that("model quality artifacts save and resolve from the latest snapshot", {
     expect_identical(first_artifact$archive_path, first_artifact$latest_path)
     expect_equal(length(list.files(file.path(output_dir, "model_quality"), pattern = "^model_quality_.*_pid.*\\.rds$")), 0L)
 
+    expect_error(
+        resolve_model_quality_context(
+            backtest = NULL,
+            output_dir = output_dir,
+            quality_signature = quality_signature
+        ),
+        "fallback is disabled"
+    )
+
     resolved <- resolve_model_quality_context(
         backtest = NULL,
         output_dir = output_dir,
-        quality_signature = quality_signature
+        quality_signature = quality_signature,
+        allow_fallback = TRUE
     )
 
     expect_true(isTRUE(resolved$used_fallback))
@@ -78,7 +88,8 @@ test_that("model quality artifacts save and resolve from the latest snapshot", {
         resolve_model_quality_context(
             backtest = NULL,
             output_dir = output_dir,
-            quality_signature = "different-signature"
+            quality_signature = "different-signature",
+            allow_fallback = TRUE
         ),
         "does not match the current model/data fingerprint"
     )
@@ -91,7 +102,8 @@ test_that("model quality resolution tolerates a missing cache", {
     resolved <- resolve_model_quality_context(
         backtest = NULL,
         output_dir = output_dir,
-        quality_signature = "missing-signature"
+        quality_signature = "missing-signature",
+        allow_fallback = TRUE
     )
 
     expect_false(model_quality_has_backtest(resolved$backtest))

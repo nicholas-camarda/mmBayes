@@ -105,14 +105,14 @@ Rscript scripts/regenerate_and_sync_dashboards.R
 open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
 
-Then scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) to identify the highest-leverage picks before filling out your entry.
-The pipeline writes its live outputs under `~/ProjectsRuntime/mmBayes/output` by default. The tracked files under `output/` in this repo are reference snapshots, not the live run directory. Publish scripts can copy approved artifacts into the cloud project tree when you want a shared release bundle.
+Then scan `~/ProjectsRuntime/mmBayes/output/bracket_decision_sheet.csv` to identify the highest-leverage picks before filling out your entry.
+The pipeline writes its live outputs under `~/ProjectsRuntime/mmBayes/output` by default. The tracked files under `output/` in this repo are dashboard HTML snapshots for GitHub Pages, not the live run directory and not the CSV/TXT source of truth. Publish scripts can copy approved runtime deliverables into the cloud project tree when you want a shared release bundle.
 
 ---
 
 ## Outputs
 
-After a pipeline run the following files are generated in the runtime output directory, which defaults to `~/ProjectsRuntime/mmBayes/output`. The repository keeps example outputs for reference only. The cloud project root holds the canonical input data and dated release bundles, while the runtime root holds the active run outputs and scratch files.
+After a pipeline run the following files are generated in the runtime output directory, which defaults to `~/ProjectsRuntime/mmBayes/output`. The repository tracks only the dashboard HTML snapshots under `output/` for GitHub Pages. CSV, TXT, RDS, cache, and log artifacts should be read from the runtime output directory or from a dated release bundle.
 
 ### Primary Dashboard (HTML)
 
@@ -131,13 +131,13 @@ After a pipeline run the following files are generated in the runtime output dir
 
 | File | Description |
 |------|-------------|
-| [bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) | Ranked picks sorted by leverage - start here |
-| [bracket_matchup_context.csv](output/bracket_matchup_context.csv) | Enriched matchup evidence used by the dashboard |
-| [bracket_candidate_1.csv](output/bracket_candidate_1.csv) | Safe bracket path in the default two-candidate workflow |
-| [bracket_candidate_2.csv](output/bracket_candidate_2.csv) | Alternate bracket path in the default two-candidate workflow |
-| [candidate_matchup_total_points.csv](output/candidate_matchup_total_points.csv) | Matchup-level total-points support |
-| [championship_tiebreaker_summary.csv](output/championship_tiebreaker_summary.csv) | Championship tiebreaker summary |
-| [championship_tiebreaker_distribution.csv](output/championship_tiebreaker_distribution.csv) | Full tiebreaker score distribution |
+| `bracket_decision_sheet.csv` | Ranked picks sorted by leverage - start here |
+| `bracket_matchup_context.csv` | Enriched matchup evidence used by the dashboard |
+| `bracket_candidate_1.csv` | Safe bracket path in the default two-candidate workflow |
+| `bracket_candidate_2.csv` | Alternate bracket path in the default two-candidate workflow |
+| `candidate_matchup_total_points.csv` | Matchup-level total-points support |
+| `championship_tiebreaker_summary.csv` | Championship tiebreaker summary |
+| `championship_tiebreaker_distribution.csv` | Full tiebreaker score distribution |
 
 Release publishing includes every generated `bracket_candidate_{id}.csv` file found in the runtime output directory for that run.
 
@@ -145,10 +145,10 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 
 | File | Description |
 |------|-------------|
-| [tournament_sim_candidate_brackets.txt](output/tournament_sim_candidate_brackets.txt) | Text summary of all candidate brackets |
-| [tournament_sim_model_summary.txt](output/tournament_sim_model_summary.txt) | Fitted model coefficient summary |
-| [tournament_sim_backtest_summary.txt](output/tournament_sim_backtest_summary.txt) | Rolling backtest accuracy report |
-| [bracket_candidates.txt](output/bracket_candidates.txt) | Concise candidate bracket listing |
+| `tournament_sim_candidate_brackets.txt` | Text summary of all candidate brackets |
+| `tournament_sim_model_summary.txt` | Fitted model coefficient summary |
+| `tournament_sim_backtest_summary.txt` | Rolling backtest accuracy report |
+| `bracket_candidates.txt` | Concise candidate bracket listing |
 
 ### Heavy Artifacts (ignored by git)
 
@@ -156,6 +156,7 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 - `bracket_candidates.rds` - serialized bracket candidates
 - `model_cache/` - cached model fits
 - `model_quality/` - model-quality snapshots
+- any `betting_*`, legacy PNG, old RDS, or non-manifest files in runtime output - scratch artifacts outside the supported `master` release contract
 
 ---
 
@@ -177,6 +178,7 @@ Notes:
 - Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
 - `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_and_sync_dashboards.R` when the saved full results bundle already exists.
 - `scripts/publish_release.R` publishes from the runtime output directory, not the cloud output tree, and includes every generated `bracket_candidate_{id}.csv` file in that run's output.
+- Dated releases contain a `deliverables/` folder and `release_manifest.txt`; caches, logs, RDS bundles, data snapshots, and scratch artifacts are not part of the release contract.
 - `Rscript tests/testthat.R` is the authoritative branch-health check for `master`.
 
 ---
@@ -201,7 +203,7 @@ Data sources:
 
 Current-year monitoring rows are not used to retrain the bracket model or alter the pre-tournament matchup features. They exist so the live performance panels can report how the model is doing as the tournament unfolds.
 
-The default configuration uses the eight most recent completed tournaments, skips 2020, and backtests on rolling held-out years.
+The default configuration requests the eight most recent completed tournaments and skips 2020. The dashboard reports the effective historical seasons actually available in the canonical workbooks; the current 2026 data state uses seven completed seasons, 2018, 2019, and 2021-2025.
 
 ---
 
@@ -240,7 +242,7 @@ Matchup predictors (differences between the two teams):
 | `3P%_diff` / `3P%D_diff` | Three-point shooting / defense difference |
 | `Adj T._diff` | Adjusted tempo difference |
 
-The seed and efficiency terms (`seed_diff`, `barthag_logit_diff`, `AdjOE_diff`, `AdjDE_diff`, `WAB_diff`) tend to carry the most posterior weight in the core model.
+The seed and efficiency terms (`seed_diff`, `barthag_logit_diff`, `AdjOE_diff`, `AdjDE_diff`, `WAB_diff`) tend to carry the most posterior weight in the core model. Historical games are expanded into forward and reversed ordered matchup rows for prediction, so coefficient summaries are predictive diagnostics rather than independent scientific effects.
 
 ### Tiebreaker Model
 
@@ -262,7 +264,7 @@ mmBayes/
 ├── scripts/            # Command-line entry points
 ├── tests/              # Automated tests and fixtures
 ├── data/               # Checked-in reference inputs; live canonical data lives in the cloud project root
-├── output/             # Checked-in example outputs; active runs use the runtime output root
+├── output/             # Checked-in dashboard HTML snapshots; active runs use the runtime output root
 ├── docs/               # Methods guide and reference material
 ├── archive/            # Historical material no longer in the active workflow
 └── config.yml          # Pipeline configuration

@@ -57,7 +57,7 @@ total_points_model <- fit_total_points_model(
     use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
 )
 model_overview <- list(
-    matchup = summarize_model_overview(model_results, draws = draws_budget),
+    matchup = summarize_model_overview(model_results, draws = draws_budget, history_summary = data$history_summary),
     totals = summarize_model_overview(total_points_model, draws = draws_budget)
 )
 quality_signature <- build_model_quality_signature(list(
@@ -103,7 +103,8 @@ decision_outputs <- save_decision_outputs(
     quality_signature = quality_signature,
     play_in_resolution = play_in_resolution,
     total_points_predictions = total_points_predictions,
-    live_performance = live_performance
+    live_performance = live_performance,
+    allow_cached_quality = TRUE
 )
 
 cat("\n=============================================\n")

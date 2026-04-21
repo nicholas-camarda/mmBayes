@@ -10,6 +10,8 @@ default:
     history_window: 8
     backtest: true
     engine: "stan_glm"
+    compare_engines: true
+    allow_unavailable_comparison: false
     bart:
       n_trees: 200
       n_burn: 500

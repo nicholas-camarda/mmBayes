@@ -200,6 +200,17 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         dplyr::arrange(Year, round, region, game_index)
 
     unresolved_teams <- find_unresolved_result_teams(team_features, game_results)
+    passed <- all(games_per_year$ok) &&
+        nrow(round_count_issues) == 0 &&
+        nrow(current_year_round_scope_issues) == 0 &&
+        nrow(current_year_round_count_issues) == 0 &&
+        nrow(current_year_game_index_issues) == 0 &&
+        nrow(invalid_current_play_in) == 0 &&
+        nrow(unmatched_current_slots) == 0 &&
+        nrow(duplicate_current_slots) == 0 &&
+        nrow(suspicious_first_four) == 0 &&
+        nrow(invalid_score_rows) == 0 &&
+        nrow(unresolved_teams) == 0
 
     summary <- tibble::tibble(
         team_rows = nrow(team_features),
@@ -218,17 +229,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         suspicious_first_four_rows = nrow(suspicious_first_four),
         invalid_score_rows = nrow(invalid_score_rows),
         unresolved_team_rows = nrow(unresolved_teams),
-        passed = all(games_per_year$ok) &&
-            nrow(round_count_issues) == 0 &&
-            nrow(current_year_round_scope_issues) == 0 &&
-            nrow(current_year_round_count_issues) == 0 &&
-            nrow(current_year_game_index_issues) == 0 &&
-            nrow(invalid_current_play_in) == 0 &&
-            nrow(unmatched_current_slots) == 0 &&
-            nrow(duplicate_current_slots) == 0 &&
-            nrow(suspicious_first_four) == 0 &&
-            nrow(invalid_score_rows) == 0 &&
-            nrow(unresolved_teams) == 0
+        passed = passed
     )
 
     list(
@@ -248,7 +249,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         suspicious_first_four = suspicious_first_four,
         invalid_score_rows = invalid_score_rows,
         unresolved_teams = unresolved_teams,
-        passed = isTRUE(summary$passed[[1]])
+        passed = isTRUE(passed)
     )
 }
 
