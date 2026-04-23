@@ -35,6 +35,7 @@ test_that("README documents the dashboard regeneration workflow and command role
 
     expect_match(readme_text, "scripts/regenerate_and_sync_dashboards\\.R")
     expect_match(readme_text, "Preferred dashboard-refresh command")
+    expect_match(readme_text, "run_simulation\\.R.*syncs the tracked repo dashboard HTML snapshot|successful `Rscript scripts/run_simulation\\.R` updates both the runtime HTML bundle and the GitHub Pages source files")
     expect_match(readme_text, "run_bracket_candidates\\.R.*not the right command for CSS/layout-only iteration")
     expect_match(readme_text, "publish_github_pages\\.R.*Lower-level sync helper")
     expect_match(readme_text, "configured runtime output directory")
@@ -66,6 +67,7 @@ test_that("methods guide documents operational entrypoint roles", {
 
     expect_match(methods_text, "Operational Entrypoints")
     expect_match(methods_text, "scripts/run_simulation\\.R")
+    expect_match(methods_text, "syncs the tracked repo dashboard HTML snapshot")
     expect_match(methods_text, "scripts/run_bracket_candidates\\.R")
     expect_match(methods_text, "scripts/regenerate_and_sync_dashboards\\.R")
     expect_match(methods_text, "scripts/publish_github_pages\\.R")

@@ -23,6 +23,14 @@ load_dotenv_file(".env", override = FALSE)
 
 config <- load_project_config("config.yml")
 results <- run_tournament_simulation(config)
+runtime_dashboard_dir <- dirname(results$output$dashboard %||% stop_with_message(
+    "run_tournament_simulation() did not return a dashboard path to sync."
+))
+repo_output_dir <- file.path(project_root, "output")
+synced_repo_dashboards <- sync_dashboard_html_files(
+    source_dir = runtime_dashboard_dir,
+    destination_dir = repo_output_dir
+)
 
 champion <- results$final_four$champion
 cat("\n=============================================\n")
@@ -62,6 +70,10 @@ if (!is.null(results$output$candidate_summary)) {
 }
 if (!is.null(results$output$dashboard)) {
     cat(sprintf("- Dashboard: %s\n", results$output$dashboard))
+}
+cat(sprintf("- Repo dashboard snapshot dir: %s\n", repo_output_dir))
+for (filename in names(synced_repo_dashboards)) {
+    cat(sprintf("- Synced %s: %s\n", filename, synced_repo_dashboards[[filename]]))
 }
 if (!is.null(results$output$technical_dashboard)) {
     cat(sprintf("- Technical dashboard: %s\n", results$output$technical_dashboard))

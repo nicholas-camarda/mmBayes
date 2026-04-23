@@ -23,10 +23,10 @@ It is meant to answer four questions clearly:
 
 The repo has four different command-line entrypoints for simulation and dashboard output, and they are not interchangeable:
 
-- `Rscript scripts/run_simulation.R` is the authoritative full pipeline. It fits the models, optionally runs the rolling backtest, simulates the bracket, generates candidates, and writes the full output bundle including the saved results RDS.
+- `Rscript scripts/run_simulation.R` is the authoritative full pipeline. It fits the models, optionally runs the rolling backtest, simulates the bracket, generates candidates, writes the full output bundle including the saved results RDS, and syncs the tracked repo dashboard HTML snapshot under `output/`.
 - `Rscript scripts/run_bracket_candidates.R` is a lighter rerun for bracket outputs when you do not want the full backtest, but it still reloads or refits models and regenerates bracket candidates. It is not a render-only command.
 - `Rscript scripts/regenerate_and_sync_dashboards.R` is the preferred command for dashboard/UI iteration. It loads the saved full results bundle, regenerates only the dashboard HTML files, and syncs the tracked repo `output/` HTML copies without rerunning simulation.
-- `Rscript scripts/publish_github_pages.R` is the lower-level sync helper. It only copies already-rendered dashboard HTML into the tracked repo `output/` directory.
+- `Rscript scripts/publish_github_pages.R` is the lower-level sync helper. It only copies already-rendered dashboard HTML into the tracked repo `output/` directory when you do not want to rerun the full simulation.
 
 Use the render-only path when the cached full results bundle is already valid and you only changed dashboard code or documentation-linked HTML output.
 

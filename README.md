@@ -26,7 +26,9 @@ If you want the published dashboard entrypoint, start at the GitHub Pages hub:
 
 The hub links to the main bracket dashboard plus the optional diagnostics pages.
 
-To refresh the GitHub-linked dashboards from the latest runtime HTML, run:
+The authoritative full run now refreshes the tracked repo dashboard snapshot automatically, so a successful `Rscript scripts/run_simulation.R` updates both the runtime HTML bundle and the GitHub Pages source files under `output/`.
+
+If you need to refresh the GitHub-linked dashboards from already-rendered runtime HTML without rerunning simulation, run:
 
 `Rscript scripts/publish_github_pages.R`
 
@@ -73,7 +75,8 @@ Rscript scripts/update_data.R
 # 2. Run the full simulation and generate all outputs
 Rscript scripts/run_simulation.R
 
-# This writes the live dashboard bundle to the configured runtime output directory.
+# This writes the live dashboard bundle to the configured runtime output directory
+# and syncs the tracked repo dashboard HTML snapshot under `output/`.
 # Open `bracket_dashboard.html` in that directory first.
 # Expect this step to take longer than the refresh step because it fits/loads models,
 # runs the backtest workflow, and then renders the dashboard bundle.
@@ -94,7 +97,7 @@ Rscript scripts/regenerate_and_sync_dashboards.R
 ```
 
 Then scan `bracket_decision_sheet.csv` in the configured runtime output directory to identify the highest-leverage picks before filling out your entry.
-The pipeline writes its live outputs under the configured runtime output directory. The tracked files under `output/` in this repo are dashboard HTML snapshots for GitHub Pages, not the live run directory and not the CSV/TXT source of truth. Publish scripts can copy approved runtime deliverables into the configured synced project home when you want a shared release bundle.
+The pipeline writes its live outputs under the configured runtime output directory. The tracked files under `output/` in this repo are dashboard HTML snapshots for GitHub Pages, not the live run directory and not the CSV/TXT source of truth. `scripts/run_simulation.R` now syncs those tracked HTML snapshots automatically after a successful full run. Publish scripts can copy approved runtime deliverables into the configured synced project home when you want a shared release bundle.
 
 ---
 
@@ -151,18 +154,19 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 
 | Command | Purpose |
 |---------|---------|
-| `Rscript scripts/run_simulation.R` | Authoritative full pipeline: fit, backtest, simulate, compare, and export |
+| `Rscript scripts/run_simulation.R` | Authoritative full pipeline: fit, backtest, simulate, compare, export, and sync tracked repo dashboard HTML |
 | `Rscript scripts/update_data.R` | Refresh canonical data files from source |
 | `Rscript scripts/run_bracket_candidates.R` | Lighter rerun without the full backtest, but it still fits or reloads models and regenerates candidates |
 | `Rscript scripts/regenerate_and_sync_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds HTML from the saved full results bundle and syncs repo `output/` copies |
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
 | `Rscript scripts/publish_release.R` | Copy approved deliverables into the dated release folder under the configured synced project home |
-| `Rscript scripts/publish_github_pages.R` | Lower-level sync helper that copies already-rendered dashboard HTML into tracked repo `output/` files |
+| `Rscript scripts/publish_github_pages.R` | Lower-level sync helper that copies already-rendered dashboard HTML into tracked repo `output/` files without rerunning the simulation |
 
 Notes:
 
 - `scripts/run_simulation.R` and `scripts/run_bracket_candidates.R` load `.env` when present via `load_dotenv_file()`.
 - Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
+- `scripts/run_simulation.R` syncs the tracked repo dashboard HTML snapshot after a successful full run so the committed `output/` files stay aligned with the latest runtime dashboard bundle.
 - `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_and_sync_dashboards.R` when the saved full results bundle already exists.
 - `scripts/publish_release.R` publishes from the runtime output directory, not the cloud output tree, and includes every generated `bracket_candidate_{id}.csv` file in that run's output.
 - Dated releases contain a `deliverables/` folder and a plain-text manifest; non-deliverable runtime artifacts are not part of the release contract.
