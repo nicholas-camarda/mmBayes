@@ -27,9 +27,15 @@ runtime_dashboard_dir <- dirname(results$output$dashboard %||% stop_with_message
     "run_tournament_simulation() did not return a dashboard path to sync."
 ))
 repo_output_dir <- file.path(project_root, "output")
-synced_repo_dashboards <- sync_dashboard_html_files(
-    source_dir = runtime_dashboard_dir,
-    destination_dir = repo_output_dir
+dashboard_build_metadata <- build_dashboard_build_metadata(
+    project_root = project_root,
+    repo_snapshot_synced = TRUE
+)
+rendered_dashboards <- regenerate_dashboard_outputs_from_results(
+    results = results,
+    output_dir = runtime_dashboard_dir,
+    repo_output_dir = repo_output_dir,
+    dashboard_build_metadata = dashboard_build_metadata
 )
 
 champion <- results$final_four$champion
@@ -68,15 +74,18 @@ if (!is.null(results$output$backtest_summary)) {
 if (!is.null(results$output$candidate_summary)) {
     cat(sprintf("- Candidate brackets: %s\n", results$output$candidate_summary))
 }
-if (!is.null(results$output$dashboard)) {
-    cat(sprintf("- Dashboard: %s\n", results$output$dashboard))
+if (!is.null(rendered_dashboards$dashboard)) {
+    cat(sprintf("- Dashboard: %s\n", rendered_dashboards$dashboard))
 }
 cat(sprintf("- Repo dashboard snapshot dir: %s\n", repo_output_dir))
-for (filename in names(synced_repo_dashboards)) {
-    cat(sprintf("- Synced %s: %s\n", filename, synced_repo_dashboards[[filename]]))
+for (path in rendered_dashboards$repo_output_files) {
+    cat(sprintf("- Synced snapshot: %s\n", path))
 }
-if (!is.null(results$output$technical_dashboard)) {
-    cat(sprintf("- Technical dashboard: %s\n", results$output$technical_dashboard))
+if (!is.null(rendered_dashboards$technical_dashboard)) {
+    cat(sprintf("- Technical dashboard: %s\n", rendered_dashboards$technical_dashboard))
+}
+if (!is.null(rendered_dashboards$model_comparison_dashboard)) {
+    cat(sprintf("- Model comparison dashboard: %s\n", rendered_dashboards$model_comparison_dashboard))
 }
 if (!is.null(results$output$model_quality_latest)) {
     cat(sprintf("- Model quality latest: %s\n", results$output$model_quality_latest))

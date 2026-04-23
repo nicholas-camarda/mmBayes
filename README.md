@@ -28,15 +28,9 @@ The hub links to the main bracket dashboard plus the optional diagnostics pages.
 
 The authoritative full run now refreshes the tracked repo dashboard snapshot automatically, so a successful `Rscript scripts/run_simulation.R` updates both the runtime HTML bundle and the GitHub Pages source files under `output/`.
 
-If you need to refresh the GitHub-linked dashboards from already-rendered runtime HTML without rerunning simulation, run:
-
-`Rscript scripts/publish_github_pages.R`
-
 If you changed only dashboard rendering code and want a fast refresh from the cached full results bundle, run:
 
 `Rscript scripts/regenerate_and_sync_dashboards.R`
-
-If you published the latest bundle to the cloud output tree instead of the local runtime root, set `MMBAYES_PAGES_SOURCE` to that folder before running the sync.
 
 The main review loop usually looks like this:
 
@@ -160,7 +154,7 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 | `Rscript scripts/regenerate_and_sync_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds HTML from the saved full results bundle and syncs repo `output/` copies |
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
 | `Rscript scripts/publish_release.R` | Copy approved deliverables into the dated release folder under the configured synced project home |
-| `Rscript scripts/publish_github_pages.R` | Lower-level sync helper that copies already-rendered dashboard HTML into tracked repo `output/` files without rerunning the simulation |
+| `Rscript scripts/publish_github_pages.R` | Internal plumbing helper that copies already-rendered dashboard HTML into tracked repo `output/` files; not part of the normal user workflow |
 
 Notes:
 
@@ -168,6 +162,7 @@ Notes:
 - Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
 - `scripts/run_simulation.R` syncs the tracked repo dashboard HTML snapshot after a successful full run so the committed `output/` files stay aligned with the latest runtime dashboard bundle.
 - `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_and_sync_dashboards.R` when the saved full results bundle already exists.
+- `scripts/publish_github_pages.R` is internal plumbing. It does not regenerate dashboards and should only copy a bundle you already know is the right one.
 - `scripts/publish_release.R` publishes from the runtime output directory, not the cloud output tree, and includes every generated `bracket_candidate_{id}.csv` file in that run's output.
 - Dated releases contain a `deliverables/` folder and a plain-text manifest; non-deliverable runtime artifacts are not part of the release contract.
 - `Rscript tests/testthat.R` is the authoritative branch-health check for `master`.

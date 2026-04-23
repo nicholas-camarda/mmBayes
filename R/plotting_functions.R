@@ -3981,6 +3981,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     watchlist_rows <- dashboard_context$watchlist_rows %||% tibble::tibble()
     matchup_context_rows <- dashboard_context$matchup_context_rows %||% tibble::tibble()
     bracket_tree_data <- dashboard_context$bracket_tree_data
+    build_metadata <- dashboard_context$build_metadata %||% list()
 
     primary_candidate <- if (length(candidates) >= 1L) candidates[[1]] else list(candidate_id = 1L, type = "safe", champion = NA_character_, final_four = NA_character_, bracket_log_prob = NA_real_, mean_game_prob = NA_real_, diff_summary = "Primary bracket.")
     alternate_candidate <- if (length(candidates) >= 2L) candidates[[2]] else primary_candidate
@@ -3997,6 +3998,52 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         quality_backtest <- backtest
     }
     quality_source_label <- quality_context$source_label %||% "Current run backtest"
+
+    render_build_metadata_html <- function(metadata) {
+        if (length(metadata) == 0L) {
+            return("")
+        }
+
+        chips <- character()
+        if (!is.null(metadata$rendered_at_label) && nzchar(metadata$rendered_at_label)) {
+            chips <- c(
+                chips,
+                paste0(
+                    "<div class='hero-meta__chip'><span>Updated</span><strong>",
+                    html_escape(metadata$rendered_at_label),
+                    "</strong></div>"
+                )
+            )
+        }
+        if (!is.null(metadata$commit_short) && !is.na(metadata$commit_short) && nzchar(metadata$commit_short)) {
+            chips <- c(
+                chips,
+                paste0(
+                    "<div class='hero-meta__chip'><span>Built from commit</span><strong><code>",
+                    html_escape(metadata$commit_short),
+                    "</code></strong></div>"
+                )
+            )
+        }
+        if (!is.null(metadata$repo_snapshot_label) && nzchar(metadata$repo_snapshot_label)) {
+            chips <- c(
+                chips,
+                paste0(
+                    "<div class='hero-meta__chip'><span>Repo snapshot</span><strong>",
+                    html_escape(metadata$repo_snapshot_label),
+                    "</strong></div>"
+                )
+            )
+        }
+
+        if (length(chips) == 0L) {
+            return("")
+        }
+
+        paste0("<div class='hero-meta'>", paste(chips, collapse = ""), "</div>")
+    }
+
+    build_metadata_html <- render_build_metadata_html(build_metadata)
 
     status_panel <- ""
     if (!is.null(play_in_resolution) && nrow(play_in_resolution) > 0 && isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
@@ -4900,6 +4947,11 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "h1,h2,h3,h4{margin:0 0 8px 0;line-height:1.1;}",
         "h1{font-size:34px;} h2{font-size:24px;margin-top:4px;} h3{font-size:18px;} h4{font-size:16px;}",
         ".lede{max-width:940px;color:#374151;margin:0 0 14px 0;font-size:16px;}",
+        ".hero-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:0 0 16px 0;}",
+        ".hero-meta__chip{border:1px solid #e2e8f0;border-radius:14px;padding:10px 12px;background:#f8fafc;min-width:0;}",
+        ".hero-meta__chip span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:4px;}",
+        ".hero-meta__chip strong{display:block;font-size:14px;color:#0f172a;overflow-wrap:anywhere;}",
+        ".hero-meta__chip code{font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;}",
         ".jump-nav{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;}",
         ".jump-nav a,.filter-chip,.show-more-button,.jump-button{border:1px solid #d6d3d1;background:#fff;border-radius:999px;padding:9px 14px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}",
         ".jump-nav a{background:#101827;color:#fff;border-color:#101827;}",
@@ -5176,6 +5228,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<div class='eyebrow'>mmBayes Bracket Workspace</div>",
         "<h1>Bracket-building decision workspace</h1>",
         "<p class='lede'>Bracket year ", html_escape(bracket_year), ". Start with the review queue to decide what actually deserves manual attention, then lock your entries and use the evidence drawers only for the calls that still matter.</p>",
+        build_metadata_html,
         top_links,
         render_dashboard_disclosure_html(
             title = "How to read this workspace",

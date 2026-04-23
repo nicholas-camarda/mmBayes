@@ -439,6 +439,18 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         decision_sheet = decision_sheet,
         candidates = candidates,
         current_teams = loaded$current_teams,
+        dashboard_context = build_bracket_dashboard_context(
+            current_teams = loaded$current_teams,
+            decision_sheet = decision_sheet,
+            candidates = candidates,
+            total_points_predictions = total_predictions,
+            play_in_resolution = play_in_resolution,
+            dashboard_build_metadata = list(
+                rendered_at_label = "April 23, 2026 at 01:15 PM EDT",
+                commit_short = "abc1234",
+                repo_snapshot_label = "Synced to tracked repo output in this run"
+            )
+        ),
         backtest = NULL,
         play_in_resolution = play_in_resolution,
         total_points_predictions = total_predictions,
@@ -458,6 +470,12 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(dashboard_html, "Full candidate paths")
     expect_match(dashboard_html, "Technical appendix")
     expect_match(dashboard_html, "Need more diagnostics?")
+    expect_match(dashboard_html, "Updated")
+    expect_match(dashboard_html, "April 23, 2026 at 01:15 PM EDT")
+    expect_match(dashboard_html, "Built from commit")
+    expect_match(dashboard_html, "abc1234")
+    expect_match(dashboard_html, "Repo snapshot")
+    expect_match(dashboard_html, "Synced to tracked repo output in this run")
     expect_match(dashboard_html, "Open technical_dashboard.html")
     expect_match(dashboard_html, "href='technical_dashboard.html'")
     expect_match(dashboard_html, "href='model_comparison_dashboard.html'")

@@ -1,5 +1,9 @@
 #!/usr/bin/env Rscript
 
+# Internal helper: copy an already-rendered dashboard bundle into tracked repo
+# output files. This script does not regenerate dashboards and is not the
+# authoritative publish workflow.
+
 #' Find the absolute path to the current script
 #'
 #' @return A normalized absolute path to the running script or working directory.
@@ -19,33 +23,27 @@ setwd(project_root)
 
 pkgload::load_all(project_root, export_all = TRUE, helpers = FALSE, quiet = TRUE)
 
-candidate_roots <- unique(c(
-    path.expand(Sys.getenv("MMBAYES_PAGES_SOURCE", unset = "")),
-    default_runtime_output_root(),
-    file.path(default_runtime_output_root(), "workflow_redesign_preview"),
-    default_cloud_output_root()
-))
-candidate_roots <- candidate_roots[nzchar(candidate_roots)]
 dashboard_files <- dashboard_html_manifest()
+runtime_output_root <- path.expand(Sys.getenv(
+    "MMBAYES_PAGES_SOURCE",
+    unset = default_runtime_output_root()
+))
 
-source_candidates <- candidate_roots[vapply(candidate_roots, function(root) {
-    dir.exists(root) && all(file.exists(file.path(root, dashboard_files)))
-}, logical(1))]
-
-if (length(source_candidates) == 0L) {
+if (!dir.exists(runtime_output_root) || !all(file.exists(file.path(runtime_output_root, dashboard_files)))) {
     stop_with_message(
         sprintf(
-            "No dashboard bundle found in any candidate source: %s",
-            paste(candidate_roots, collapse = ", ")
+            paste(
+                "Internal helper scripts/publish_github_pages.R requires an already-rendered dashboard bundle at %s.",
+                "Use `Rscript scripts/run_simulation.R` for the authoritative full workflow or",
+                "`Rscript scripts/regenerate_and_sync_dashboards.R` to rebuild HTML from the saved results bundle."
+            ),
+            runtime_output_root
         )
     )
 }
 
-bundle_mtime <- vapply(source_candidates, function(root) {
-    as.numeric(max(file.info(file.path(root, dashboard_files))$mtime, na.rm = TRUE))
-}, numeric(1))
-runtime_output_root <- source_candidates[[which.max(bundle_mtime)]]
-cat(sprintf("Using dashboard source bundle: %s\n", runtime_output_root))
+cat("Internal helper: copying already-rendered dashboard HTML into tracked repo output.\n")
+cat(sprintf("Source bundle: %s\n", runtime_output_root))
 synced_paths <- sync_dashboard_html_files(
     source_dir = runtime_output_root,
     destination_dir = file.path(project_root, "output"),
@@ -56,4 +54,4 @@ for (filename in dashboard_files) {
 }
 
 cat("\nGitHub Pages dashboard files are now synced into the repo.\n")
-cat("Commit and push these tracked HTML files to update the public links.\n")
+cat("This script does not regenerate dashboards; commit and push these tracked HTML files to update the public links.\n")

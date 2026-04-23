@@ -21,9 +21,14 @@ pkgload::load_all(project_root, export_all = TRUE, helpers = FALSE, quiet = TRUE
 
 config <- load_project_config("config.yml")
 repo_output_dir <- file.path(project_root, "output")
+dashboard_build_metadata <- build_dashboard_build_metadata(
+    project_root = project_root,
+    repo_snapshot_synced = TRUE
+)
 rendered <- regenerate_dashboards_from_saved_results(
     config = config,
-    repo_output_dir = repo_output_dir
+    repo_output_dir = repo_output_dir,
+    dashboard_build_metadata = dashboard_build_metadata
 )
 
 cat(sprintf("Loaded cached results bundle: %s\n", rendered$results_bundle_path))

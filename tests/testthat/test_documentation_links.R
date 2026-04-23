@@ -37,10 +37,11 @@ test_that("README documents the dashboard regeneration workflow and command role
     expect_match(readme_text, "Preferred dashboard-refresh command")
     expect_match(readme_text, "run_simulation\\.R.*syncs the tracked repo dashboard HTML snapshot|successful `Rscript scripts/run_simulation\\.R` updates both the runtime HTML bundle and the GitHub Pages source files")
     expect_match(readme_text, "run_bracket_candidates\\.R.*not the right command for CSS/layout-only iteration")
-    expect_match(readme_text, "publish_github_pages\\.R.*Lower-level sync helper")
+    expect_match(readme_text, "publish_github_pages\\.R.*Internal plumbing helper")
     expect_match(readme_text, "configured runtime output directory")
     expect_match(readme_text, "dashboard HTML snapshots")
     expect_match(readme_text, "CSV/TXT/RDS outputs live in runtime/release bundles|CSV, TXT, RDS, cache, and log artifacts")
+    expect_match(readme_text, "publish_github_pages\\.R.*not part of the normal user workflow")
 })
 
 test_that("README quick start explains the runtime output bundle and browser launch step", {
@@ -71,6 +72,19 @@ test_that("methods guide documents operational entrypoint roles", {
     expect_match(methods_text, "scripts/run_bracket_candidates\\.R")
     expect_match(methods_text, "scripts/regenerate_and_sync_dashboards\\.R")
     expect_match(methods_text, "scripts/publish_github_pages\\.R")
+    expect_match(methods_text, "publish_github_pages\\.R.*internal plumbing")
+})
+
+test_that("publish_github_pages script stays a deterministic internal helper", {
+    repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
+    script_text <- paste(readLines(file.path(repo_root, "scripts", "publish_github_pages.R"), warn = FALSE), collapse = "\n")
+
+    expect_match(script_text, "Internal helper")
+    expect_match(script_text, "default_runtime_output_root")
+    expect_no_match(script_text, "which.max\\(bundle_mtime\\)")
+    expect_no_match(script_text, "candidate_roots")
+    expect_no_match(script_text, "workflow_redesign_preview")
+    expect_match(script_text, "does not regenerate dashboards")
 })
 
 test_that("runtime and methods docs describe current artifact and model contracts", {

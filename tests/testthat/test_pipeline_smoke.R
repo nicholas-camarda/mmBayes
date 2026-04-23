@@ -65,10 +65,16 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
         generate_bracket_candidates = function(...) stop("regeneration should not regenerate candidates")
     )
 
+    dashboard_build_metadata <- build_dashboard_build_metadata(
+        project_root = normalizePath(file.path(testthat::test_path(), "..", "..")),
+        rendered_at = as.POSIXct("2026-04-23 13:15:00", tz = "America/New_York"),
+        repo_snapshot_synced = TRUE
+    )
     regenerated <- regenerate_dashboard_outputs_from_results(
         results = results,
         output_dir = output_dir,
-        repo_output_dir = repo_output_dir
+        repo_output_dir = repo_output_dir,
+        dashboard_build_metadata = dashboard_build_metadata
     )
 
     expect_true(file.exists(regenerated$dashboard))
@@ -80,4 +86,16 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
         basename(regenerated$repo_output_files),
         dashboard_html_manifest()
     )
+
+    rendered_dashboard_html <- paste(readLines(regenerated$dashboard, warn = FALSE), collapse = "\n")
+    synced_dashboard_html <- paste(readLines(regenerated$repo_output_files[[1]], warn = FALSE), collapse = "\n")
+    expect_match(rendered_dashboard_html, "Updated")
+    expect_match(rendered_dashboard_html, "April 23, 2026")
+    expect_match(rendered_dashboard_html, "Built from commit")
+    expect_match(rendered_dashboard_html, "Repo snapshot")
+    expect_match(rendered_dashboard_html, "Synced to tracked repo output in this run")
+    expect_match(synced_dashboard_html, "Synced to tracked repo output in this run")
+    if (!is.na(dashboard_build_metadata$commit_short)) {
+        expect_match(rendered_dashboard_html, dashboard_build_metadata$commit_short)
+    }
 })

@@ -74,6 +74,54 @@ sync_dashboard_html_files <- function(source_dir,
     if (is.null(x)) y else x
 }
 
+#' Build shareable dashboard metadata for rendered HTML artifacts
+#'
+#' @param project_root Repository root used for git metadata.
+#' @param rendered_at Render timestamp to stamp into the dashboard.
+#' @param repo_snapshot_synced Whether the tracked repo dashboard snapshot was
+#'   synced as part of the same operator run.
+#'
+#' @return A named list of dashboard build metadata.
+#' @keywords internal
+build_dashboard_build_metadata <- function(project_root,
+                                           rendered_at = Sys.time(),
+                                           repo_snapshot_synced = FALSE) {
+    project_root <- normalizePath(project_root, winslash = "/", mustWork = FALSE)
+
+    run_git <- function(args) {
+        output <- tryCatch(
+            system2("git", c("-C", project_root, args), stdout = TRUE, stderr = FALSE),
+            error = function(e) structure(character(), status = 1L)
+        )
+        status <- attr(output, "status")
+        if (is.null(status)) {
+            status <- 0L
+        }
+        if (!identical(status, 0L) || length(output) == 0L) {
+            return(NA_character_)
+        }
+        trimws(output[[1]])
+    }
+
+    rendered_at <- as.POSIXct(rendered_at, tz = Sys.timezone())
+    rendered_label <- format(rendered_at, "%B %d, %Y at %I:%M %p %Z")
+    commit_full <- run_git(c("rev-parse", "HEAD"))
+    commit_short <- if (!is.na(commit_full)) substr(commit_full, 1L, 7L) else NA_character_
+
+    list(
+        rendered_at = rendered_at,
+        rendered_at_label = rendered_label,
+        commit_full = commit_full,
+        commit_short = commit_short,
+        repo_snapshot_synced = isTRUE(repo_snapshot_synced),
+        repo_snapshot_label = if (isTRUE(repo_snapshot_synced)) {
+            "Synced to tracked repo output in this run"
+        } else {
+            "Runtime render only"
+        }
+    )
+}
+
 #' Normalize a model-overview payload for dashboard rendering
 #'
 #' @param model_overview A model overview object or wrapper bundle.
@@ -1342,7 +1390,7 @@ build_candidate_usage_label <- function(candidate_1_pick, candidate_2_pick, cand
 #'
 #' @return A named list of dashboard-ready context tables.
 #' @keywords internal
-build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet = tibble::tibble(), candidates = list(), total_points_predictions = NULL, play_in_resolution = NULL) {
+build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet = tibble::tibble(), candidates = list(), total_points_predictions = NULL, play_in_resolution = NULL, dashboard_build_metadata = NULL) {
     decision_sheet <- decision_sheet %||% tibble::tibble()
     candidates <- candidates %||% list()
 
@@ -1760,7 +1808,8 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
         candidate_summary_rows = candidate_summary_rows,
         play_in_resolution = play_in_resolution %||% tibble::tibble(),
         team_lookup = team_lookup,
-        bracket_tree_data = build_bracket_tree_data(candidates)
+        bracket_tree_data = build_bracket_tree_data(candidates),
+        build_metadata = dashboard_build_metadata %||% list()
     )
 }
 
@@ -2474,7 +2523,7 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
 #' @return A list of decision-artifact file paths and the in-memory decision
 #'   sheet.
 #' @export
-save_decision_outputs <- function(bracket_year, candidates, output_dir = default_runtime_output_root(), current_teams = NULL, backtest = NULL, model_overview = NULL, quality_signature = NULL, play_in_resolution = NULL, total_points_predictions = NULL, live_performance = NULL, model_comparison = NULL, allow_cached_quality = FALSE) {
+save_decision_outputs <- function(bracket_year, candidates, output_dir = default_runtime_output_root(), current_teams = NULL, backtest = NULL, model_overview = NULL, quality_signature = NULL, play_in_resolution = NULL, total_points_predictions = NULL, live_performance = NULL, model_comparison = NULL, allow_cached_quality = FALSE, dashboard_build_metadata = NULL) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- build_decision_sheet(candidates)
@@ -2483,7 +2532,8 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         decision_sheet = decision_sheet,
         candidates = candidates,
         total_points_predictions = total_points_predictions,
-        play_in_resolution = play_in_resolution
+        play_in_resolution = play_in_resolution,
+        dashboard_build_metadata = dashboard_build_metadata
     )
     model_overview <- normalize_model_overview(model_overview)
     summary_path <- file.path(output_dir, "bracket_candidates.txt")
@@ -2566,7 +2616,8 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         model_comparison = model_comparison,
         decision_sheet = decision_sheet,
         dashboard_context = dashboard_context,
-        allow_cached_quality = allow_cached_quality
+        allow_cached_quality = allow_cached_quality,
+        dashboard_build_metadata = dashboard_build_metadata
     )
 
     list(
@@ -2622,7 +2673,8 @@ write_dashboard_outputs <- function(bracket_year,
                                     model_comparison = NULL,
                                     decision_sheet = NULL,
                                     dashboard_context = NULL,
-                                    allow_cached_quality = FALSE) {
+                                    allow_cached_quality = FALSE,
+                                    dashboard_build_metadata = NULL) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
     decision_sheet <- decision_sheet %||% build_decision_sheet(candidates)
@@ -2631,7 +2683,8 @@ write_dashboard_outputs <- function(bracket_year,
         decision_sheet = decision_sheet,
         candidates = candidates,
         total_points_predictions = total_points_predictions,
-        play_in_resolution = play_in_resolution
+        play_in_resolution = play_in_resolution,
+        dashboard_build_metadata = dashboard_build_metadata
     )
     model_overview <- normalize_model_overview(model_overview)
     model_quality_context <- resolve_model_quality_context(
@@ -2706,7 +2759,8 @@ write_dashboard_outputs <- function(bracket_year,
 #' @keywords internal
 regenerate_dashboard_outputs_from_results <- function(results,
                                                       output_dir = default_runtime_output_root(),
-                                                      repo_output_dir = NULL) {
+                                                      repo_output_dir = NULL,
+                                                      dashboard_build_metadata = NULL) {
     if (is.null(results) || !is.list(results)) {
         stop_with_message("Saved results bundle is missing or invalid.")
     }
@@ -2745,7 +2799,8 @@ regenerate_dashboard_outputs_from_results <- function(results,
         live_performance = results$live_performance %||% NULL,
         model_comparison = results$model_comparison %||% NULL,
         decision_sheet = results$decision_sheet %||% NULL,
-        allow_cached_quality = TRUE
+        allow_cached_quality = TRUE,
+        dashboard_build_metadata = dashboard_build_metadata
     )
 
     synced_repo_files <- if (!is.null(repo_output_dir)) {
@@ -2768,7 +2823,8 @@ regenerate_dashboard_outputs_from_results <- function(results,
 #' @return A list describing the loaded bundle path and regenerated dashboards.
 #' @keywords internal
 regenerate_dashboards_from_saved_results <- function(config = NULL,
-                                                     repo_output_dir = NULL) {
+                                                     repo_output_dir = NULL,
+                                                     dashboard_build_metadata = NULL) {
     config <- config %||% load_project_config()
     output_dir <- path.expand(config$output$path %||% default_runtime_output_root())
     prefix <- config$output$prefix %||% "tournament_sim"
@@ -2784,7 +2840,8 @@ regenerate_dashboards_from_saved_results <- function(config = NULL,
     regenerated <- regenerate_dashboard_outputs_from_results(
         results = readRDS(results_path),
         output_dir = output_dir,
-        repo_output_dir = repo_output_dir
+        repo_output_dir = repo_output_dir,
+        dashboard_build_metadata = dashboard_build_metadata
     )
 
     c(list(results_bundle_path = results_path), regenerated)
