@@ -78,6 +78,7 @@ build_model_quality_signature <- function(results) {
 #'
 #' @param model_results A fitted model bundle from [fit_tournament_model()].
 #' @param draws Posterior draw budget used for simulation and scoring.
+#' @param history_summary An optional history-window summary tibble.
 #'
 #' @return A named list of display-friendly model details.
 #' @keywords internal
@@ -172,6 +173,7 @@ build_model_metric_comparison_table <- function(current_summary,
     current_row <- current_summary[1, , drop = FALSE]
     alternate_row <- alternate_summary[1, , drop = FALSE]
 
+    # Pull a metric value from a one-row summary table.
     extract_metric <- function(row, field) {
         if (!field %in% names(row)) {
             return(NA_real_)
@@ -179,6 +181,7 @@ build_model_metric_comparison_table <- function(current_summary,
         row[[field]][[1]]
     }
 
+    # Format a metric for side-by-side dashboard display.
     format_metric_value <- function(value, digits, percent = FALSE) {
         value <- safe_numeric(value, default = NA_real_)
         if (!is.finite(value)) {
@@ -193,6 +196,7 @@ build_model_metric_comparison_table <- function(current_summary,
         sprintf(paste0("%.", digits, "f"), value)
     }
 
+    # Format a model-to-model metric delta with the right scale.
     format_metric_delta <- function(delta, digits, percent = FALSE) {
         delta <- safe_numeric(delta, default = NA_real_)
         if (!is.finite(delta)) {
@@ -315,6 +319,12 @@ summarize_prediction_round_performance <- function(predictions) {
         dplyr::mutate(round = as.character(round))
 }
 
+#' Format a calibration-bin label for human-readable diagnostics
+#'
+#' @param bin_value A stored calibration-bin label.
+#'
+#' @return A plain-text range label.
+#' @keywords internal
 format_calibration_bin <- function(bin_value) {
     label <- as.character(bin_value %||% "")
     if (!nzchar(label)) {
@@ -334,6 +344,13 @@ format_calibration_bin <- function(bin_value) {
     label
 }
 
+#' Describe a single calibration bin in plain English
+#'
+#' @param bin_row A one-row calibration summary table.
+#' @param label Which explanatory template to use.
+#'
+#' @return A single sentence, or `NULL` when the row is unusable.
+#' @keywords internal
 describe_calibration_bin <- function(bin_row, label = c("closest", "widest")) {
     label <- match.arg(label)
     if (!inherits(bin_row, "data.frame") || nrow(bin_row) != 1L) {

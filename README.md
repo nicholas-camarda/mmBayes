@@ -20,13 +20,11 @@ An R-based NCAA tournament bracket lab. Turns pre-tournament team data and histo
 
 This repo is meant to produce bracket-entry materials you can review quickly in a browser or spreadsheet.
 
-If you only open one file, open the main bracket dashboard:
-
-[Open the bracket dashboard](https://nicholas-camarda.github.io/mmBayes/output/bracket_dashboard.html)
-
-The GitHub Pages hub is just a convenience landing page:
+If you want the published dashboard entrypoint, start at the GitHub Pages hub:
 
 [Open the GitHub Pages dashboard hub](https://nicholas-camarda.github.io/mmBayes/)
+
+The hub links to the main bracket dashboard plus the optional diagnostics pages.
 
 To refresh the GitHub-linked dashboards from the latest runtime HTML, run:
 
@@ -40,9 +38,9 @@ If you published the latest bundle to the cloud output tree instead of the local
 
 The main review loop usually looks like this:
 
-1. open [output/bracket_dashboard.html](output/bracket_dashboard.html) to build the two entries and review the evidence trail
-2. scan [output/bracket_decision_sheet.csv](output/bracket_decision_sheet.csv) for the hardest decisions first
-3. use the generated `output/bracket_candidate_{id}.csv` files if you want the underlying pick paths; the default workflow currently writes Candidate 1 and Candidate 2
+1. open the checked-in main dashboard snapshot under `output/` to build the two entries and review the evidence trail
+2. scan `bracket_decision_sheet.csv` in the configured runtime output directory for the hardest decisions first
+3. use the generated `bracket_candidate_{id}.csv` files in the configured runtime output directory if you want the underlying pick paths; the default workflow currently writes Candidate 1 and Candidate 2
 4. check the status banner to see whether First Four slots are still simulated or already final
 
 The main dashboard is designed to answer three jobs fast: what Candidate 1 and Candidate 2 are, which evidence drives the key decisions, and which matchups deserve another look before you trust the entries.
@@ -55,19 +53,16 @@ Optional diagnostics:
 
 ## Working Roots
 
-- Code checkout: `~/Projects/mmBayes`
-- Runtime scratch: `~/ProjectsRuntime/mmBayes`
-- Cloud project root: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes`
-- Cloud data: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/`
-- Cloud outputs: published copies under `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/output/`
-- Cloud publish drops: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/releases/<YYYY-MM-DD>/`
+- Local source checkout
+- Configured runtime output directory for live runs, logs, caches, and generated artifacts
+- Configured synced project home for canonical input data and dated published releases
 
-The checkout is a local workspace. The cloud project root holds the canonical input data and published release bundles. The runtime root stays available for local scratch artifacts and live generated outputs.
+The checkout is the working tree. The synced project home holds the canonical input data and published release bundles. The runtime output directory stays available for live generated outputs and scratch artifacts. Maintainer-specific absolute paths belong in internal docs such as `AGENTS.md`, not in the public README.
 
 ## Quick Start
 
 ```sh
-# 1. Refresh the canonical data files in the cloud project root
+# 1. Refresh the canonical data files
 Rscript scripts/update_data.R
 
 # If the script ends with "Refresh status: Success", continue normally.
@@ -78,15 +73,13 @@ Rscript scripts/update_data.R
 # 2. Run the full simulation and generate all outputs
 Rscript scripts/run_simulation.R
 
-# This writes the live dashboard bundle to ~/ProjectsRuntime/mmBayes/output.
-# The main file to open first is ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html.
+# This writes the live dashboard bundle to the configured runtime output directory.
+# Open `bracket_dashboard.html` in that directory first.
 # Expect this step to take longer than the refresh step because it fits/loads models,
 # runs the backtest workflow, and then renders the dashboard bundle.
-
-# 3. Open the main bracket dashboard in your browser
-# macOS example:
-open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
+
+Then open `bracket_dashboard.html` from the configured runtime output directory in your browser.
 
 For dashboard or CSS/layout iteration after the full results bundle already exists:
 
@@ -98,21 +91,16 @@ Rscript scripts/run_simulation.R
 
 # 3. Regenerate only the dashboard HTML from the cached results bundle
 Rscript scripts/regenerate_and_sync_dashboards.R
-
-# 4. Inspect the runtime dashboard HTML copies in ~/ProjectsRuntime/mmBayes/output
-# macOS: use `open`
-# macOS example:
-open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard.html
 ```
 
-Then scan `~/ProjectsRuntime/mmBayes/output/bracket_decision_sheet.csv` to identify the highest-leverage picks before filling out your entry.
-The pipeline writes its live outputs under `~/ProjectsRuntime/mmBayes/output` by default. The tracked files under `output/` in this repo are dashboard HTML snapshots for GitHub Pages, not the live run directory and not the CSV/TXT source of truth. Publish scripts can copy approved runtime deliverables into the cloud project tree when you want a shared release bundle.
+Then scan `bracket_decision_sheet.csv` in the configured runtime output directory to identify the highest-leverage picks before filling out your entry.
+The pipeline writes its live outputs under the configured runtime output directory. The tracked files under `output/` in this repo are dashboard HTML snapshots for GitHub Pages, not the live run directory and not the CSV/TXT source of truth. Publish scripts can copy approved runtime deliverables into the configured synced project home when you want a shared release bundle.
 
 ---
 
 ## Outputs
 
-After a pipeline run the following files are generated in the runtime output directory, which defaults to `~/ProjectsRuntime/mmBayes/output`. The repository tracks only the dashboard HTML snapshots under `output/` for GitHub Pages. CSV, TXT, RDS, cache, and log artifacts should be read from the runtime output directory or from a dated release bundle.
+After a pipeline run the following artifacts are generated in the configured runtime output directory. The repository tracks only the dashboard HTML snapshots under `output/` for GitHub Pages. CSV, TXT, RDS, cache, and log artifacts should be read from the runtime output directory or from a dated release bundle.
 
 ### Primary Dashboard (HTML)
 
@@ -133,13 +121,12 @@ After a pipeline run the following files are generated in the runtime output dir
 |------|-------------|
 | `bracket_decision_sheet.csv` | Ranked picks sorted by leverage - start here |
 | `bracket_matchup_context.csv` | Enriched matchup evidence used by the dashboard |
-| `bracket_candidate_1.csv` | Safe bracket path in the default two-candidate workflow |
-| `bracket_candidate_2.csv` | Alternate bracket path in the default two-candidate workflow |
+| `bracket_candidate_{id}.csv` | One CSV per retained bracket candidate |
 | `candidate_matchup_total_points.csv` | Matchup-level total-points support |
 | `championship_tiebreaker_summary.csv` | Championship tiebreaker summary |
 | `championship_tiebreaker_distribution.csv` | Full tiebreaker score distribution |
 
-Release publishing includes every generated `bracket_candidate_{id}.csv` file found in the runtime output directory for that run.
+Release publishing includes every generated `bracket_candidate_{id}.csv` file found in the runtime output directory for that run. The exact deliverable contract is defined by `save_decision_outputs()` and `release_deliverable_manifest()`.
 
 ### Summaries (TXT)
 
@@ -156,7 +143,7 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 - `bracket_candidates.rds` - serialized bracket candidates
 - `model_cache/` - cached model fits
 - `model_quality/` - model-quality snapshots
-- any `betting_*`, legacy PNG, old RDS, or non-manifest files in runtime output - scratch artifacts outside the supported `master` release contract
+- other non-deliverable runtime artifacts - scratch outputs outside the supported `master` release contract
 
 ---
 
@@ -169,7 +156,7 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 | `Rscript scripts/run_bracket_candidates.R` | Lighter rerun without the full backtest, but it still fits or reloads models and regenerates candidates |
 | `Rscript scripts/regenerate_and_sync_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds HTML from the saved full results bundle and syncs repo `output/` copies |
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
-| `Rscript scripts/publish_release.R` | Copy approved deliverables into the dated OneDrive release folder |
+| `Rscript scripts/publish_release.R` | Copy approved deliverables into the dated release folder under the configured synced project home |
 | `Rscript scripts/publish_github_pages.R` | Lower-level sync helper that copies already-rendered dashboard HTML into tracked repo `output/` files |
 
 Notes:
@@ -178,7 +165,7 @@ Notes:
 - Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
 - `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_and_sync_dashboards.R` when the saved full results bundle already exists.
 - `scripts/publish_release.R` publishes from the runtime output directory, not the cloud output tree, and includes every generated `bracket_candidate_{id}.csv` file in that run's output.
-- Dated releases contain a `deliverables/` folder and `release_manifest.txt`; caches, logs, RDS bundles, data snapshots, and scratch artifacts are not part of the release contract.
+- Dated releases contain a `deliverables/` folder and a plain-text manifest; non-deliverable runtime artifacts are not part of the release contract.
 - `Rscript tests/testthat.R` is the authoritative branch-health check for `master`.
 
 ---
@@ -198,8 +185,8 @@ The model estimates game-by-game win probabilities rather than predicting the wh
 
 Data sources:
 
-- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` - Bart Torvik pre-tournament season metrics and tournament-field construction
-- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` - historical tournament game results plus current-year monitoring rows
+- Canonical team-features workbook in the configured synced project home - Bart Torvik pre-tournament season metrics and tournament-field construction
+- Canonical game-results workbook in the configured synced project home - historical tournament game results plus current-year monitoring rows
 
 Current-year monitoring rows are not used to retrain the bracket model or alter the pre-tournament matchup features. They exist so the live performance panels can report how the model is doing as the tournament unfolds.
 
@@ -250,12 +237,6 @@ A separate total-points model estimates championship points, powering the tiebre
 
 ---
 
-## Branch Notes
-
-`master` is the supported betting-free workflow. Betting-line experiments are parked on the `betting-lines-spike` branch and are not part of the active guidance on this branch.
-
----
-
 ## Repository Layout
 
 ```
@@ -263,14 +244,14 @@ mmBayes/
 ├── R/                  # Active package runtime
 ├── scripts/            # Command-line entry points
 ├── tests/              # Automated tests and fixtures
-├── data/               # Checked-in reference inputs; live canonical data lives in the cloud project root
-├── output/             # Checked-in dashboard HTML snapshots; active runs use the runtime output root
+├── data/               # Checked-in reference inputs; live canonical data live in the configured synced project home
+├── output/             # Checked-in dashboard HTML snapshots; active runs use the configured runtime output directory
 ├── docs/               # Methods guide and reference material
 ├── archive/            # Historical material no longer in the active workflow
 └── config.yml          # Pipeline configuration
 ```
 
-Local runtime artifacts such as transient logs and scratch caches live under `~/ProjectsRuntime/mmBayes`. The canonical data live under the cloud project root, and published release bundles are written there as dated releases.
+Local runtime artifacts such as transient logs and scratch caches live under the configured runtime output directory. The canonical data live under the configured synced project home, and published release bundles are written there as dated releases.
 
 ---
 

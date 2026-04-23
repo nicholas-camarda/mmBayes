@@ -55,6 +55,8 @@ resolve_comparison_engine_options <- function(alternate_engine, interaction_term
 #' @param prior_type Prior type forwarded to Stan fits.
 #' @param matchup_predictors Predictor columns used for the matchup model.
 #' @param run_backtest Whether the comparison should include a backtest.
+#' @param allow_unavailable Whether comparison should degrade to an unavailable
+#'   status instead of stopping when the alternate engine cannot be fit.
 #'
 #' @return A comparison bundle or `NULL` when the alternate engine could not be fit.
 #' @keywords internal
@@ -263,10 +265,12 @@ build_model_comparison_bundle <- function(data,
 #' Run the tournament simulation end-to-end
 #'
 #' @param config Optional project configuration list. Defaults to the loaded
-#'   project config.
+#'   project config and drives paths, engine settings, comparison mode, and
+#'   output publishing.
 #'
 #' @return A result bundle containing loaded data, fitted model, backtests,
-#'   simulation outputs, candidate artifacts, and saved file paths.
+#'   simulation outputs, candidate artifacts, comparison summaries, and saved
+#'   file paths.
 #' @export
 run_tournament_simulation <- function(config = NULL) {
     config <- config %||% load_project_config()

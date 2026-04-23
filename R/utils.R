@@ -260,7 +260,9 @@ team_name_aliases <- function() {
         "arizonast" = "Arizona State",
         "boisest" = "Boise State",
         "calbaptist" = "Cal Baptist",
+        "cabaptist" = "Cal Baptist",
         "californiabaptist" = "Cal Baptist",
+        "californiabaptistlancers" = "Cal Baptist",
         "calstfullerton" = "Cal State Fullerton",
         "clevelandst" = "Cleveland State",
         "collegeofcharleston" = "Charleston",
@@ -277,11 +279,14 @@ team_name_aliases <- function() {
         "kentst" = "Kent State",
         "longbeachst" = "Long Beach State",
         "liubrooklyn" = "LIU",
+        "longisland" = "LIU",
+        "longislanduniversity" = "LIU",
         "longislanduniversitybrooklyn" = "LIU",
         "loyolail" = "Loyola Chicago",
         "louisianalafayette" = "Louisiana",
         "mcneese" = "McNeese State",
         "mcneesest" = "McNeese State",
+        "miami" = "Miami (FL)",
         "miamifl" = "Miami (FL)",
         "miamioh" = "Miami OH",
         "michiganst" = "Michigan State",
@@ -294,6 +299,7 @@ team_name_aliases <- function() {
         "ncstate" = "NC State",
         "ncst" = "NC State",
         "ncstatewolfpack" = "NC State",
+        "ndakotast" = "North Dakota State",
         "northdakotast" = "North Dakota State",
         "northcarolina" = "North Carolina",
         "northcarolinast" = "NC State",
@@ -684,6 +690,22 @@ expected_completed_round_counts <- function(year = NULL) {
     counts
 }
 
+#' Return expected historical teams without a completed game
+#'
+#' @param year Optional tournament year.
+#'
+#' @return A character vector of canonical team names whose lack of a completed
+#'   result is expected for that year.
+#' @keywords internal
+expected_historical_unplayed_teams <- function(year = NULL) {
+    year_value <- suppressWarnings(as.integer(year))
+    if (length(year_value) == 1L && !is.na(year_value) && year_value == 2021L) {
+        return("VCU")
+    }
+
+    character()
+}
+
 #' Return an empty tournament game-results table
 #'
 #' @return A zero-row tibble with the canonical tournament game-results schema.
@@ -821,12 +843,15 @@ build_total_points_feature_row <- function(team_a, team_b, round_name, total_poi
     conf_b <- stringr::str_squish(dplyr::coalesce(as.character(team_b$Conf[1]), ""))
     same_conf_value <- if (nzchar(conf_a) && nzchar(conf_b) && conf_a == conf_b) 1L else 0L
 
+    # Build aggregate predictors from the paired team rows.
     sum_feature <- function(feature_name) {
         safe_numeric(team_a[[feature_name]][1]) + safe_numeric(team_b[[feature_name]][1])
     }
+    # Average tempo-like features across the two teams.
     mean_feature <- function(feature_name) {
         mean(c(safe_numeric(team_a[[feature_name]][1]), safe_numeric(team_b[[feature_name]][1])), na.rm = TRUE)
     }
+    # Track matchup spread for features where distance matters more than level.
     gap_feature <- function(feature_name) {
         abs(safe_numeric(team_a[[feature_name]][1]) - safe_numeric(team_b[[feature_name]][1]))
     }
@@ -1281,6 +1306,7 @@ build_flip_rationale <- function(comparison_row) {
 #' @return A single-line usage label for dashboard cards and evidence chips.
 #' @keywords internal
 build_candidate_usage_label <- function(candidate_1_pick, candidate_2_pick, candidate_1_upset = FALSE, candidate_2_upset = FALSE) {
+    # Keep candidate-usage labels compact while surfacing upset selections.
     format_pick <- function(prefix, pick, upset_flag) {
         pick_text <- NA_character_
         if (length(pick) > 0) {
@@ -1628,6 +1654,7 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
         total_points_summary <- tibble::tibble()
     }
 
+    # Pull scalar values from optional summaries without repeated index checks.
     first_or_default <- function(x, default = NA) {
         if (length(x) == 0) {
             return(default)
@@ -1636,6 +1663,7 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
         if (is.null(value) || (length(value) == 1 && is.na(value))) default else value
     }
 
+    # Read a column from a one-row tibble using the same fallback semantics.
     first_or_default_from_df <- function(data, name, default = NA) {
         if (nrow(data) == 0 || !(name %in% names(data))) {
             return(default)
@@ -1643,6 +1671,7 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
         first_or_default(data[[name]], default)
     }
 
+    # Explain each candidate card relative to the baseline bracket.
     build_identity_text <- function(candidate, diff_count, late_round_diff_count) {
         candidate_type <- candidate$type %||% ""
         if (identical(candidate_type, "safe")) {
@@ -1665,6 +1694,7 @@ build_bracket_dashboard_context <- function(current_teams = NULL, decision_sheet
         )
     }
 
+    # Surface the card's comparison metric in a fixed label/value shape.
     build_candidate_comparison_summary <- function(candidate_id, diff_count, late_round_diff_count) {
         if (identical(as.integer(candidate_id), 1L)) {
             return(list(
@@ -1776,6 +1806,7 @@ build_bracket_tree_data <- function(
     round_depth_map  <- c("Round of 64" = 0L, "Round of 32" = 1L, "Sweet 16" = 2L, "Elite 8" = 3L)
     regional_rounds  <- names(round_depth_map)
 
+    # Position each regional matchup within its region band.
     regional_game_y <- function(region_name, round_name, matchup_num) {
         row_idx   <- region_row_index[[as.character(region_name)]]
         depth     <- round_depth_map[[as.character(round_name)]]
@@ -1785,6 +1816,7 @@ build_bracket_tree_data <- function(
         y_offset + (matchup_num - 0.5) * slot_h
     }
 
+    # Reuse the vertical center for Final Four connectors and labels.
     region_center_y <- function(region_name) {
         row_idx <- region_row_index[[as.character(region_name)]]
         TOP_MARGIN + row_idx * REGION_HEIGHT + REGION_HEIGHT / 2L
@@ -1796,6 +1828,7 @@ build_bracket_tree_data <- function(
 
     champ_y <- mean(ff_y)
 
+    # Connect each node to its parent matchup to form the tree paths.
     build_edges <- function(nodes) {
         parent_round_map <- c(
             "Round of 64" = "Round of 32",

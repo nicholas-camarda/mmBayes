@@ -32,9 +32,6 @@ prepare_prediction_row <- function(teamA, teamB, round_name) {
 #' @param round_name The round label for the matchup.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
-#' @param deterministic Whether to take the higher posterior-mean team or sample
-#'   a stochastic winner from that probability.
-#' @param log_matchup Whether to emit a log line for the matchup.
 #'
 #' @return A numeric vector of posterior win probabilities for team A.
 #' @export
@@ -97,6 +94,9 @@ generate_matchup_stats <- function(teamA, teamB, win_probs) {
 #' @param win_probs A summarized win-probability list.
 #' @param matchup_stats A one-row tibble of derived matchup statistics.
 #' @param winner The chosen winner name.
+#' @param decision_prob_A The probability used to resolve a stochastic winner.
+#' @param posterior_draw_index The posterior draw index reused across the
+#'   bracket, if any.
 #'
 #' @return A one-row tibble describing the simulated matchup result.
 #' @keywords internal
@@ -139,6 +139,11 @@ create_matchup_result <- function(teamA, teamB, round_name, matchup_number, win_
 #' @param matchup_number The game index within the round.
 #' @param model_results A fitted matchup-model result bundle.
 #' @param draws Number of posterior draws to use.
+#' @param deterministic Whether to resolve the matchup from the posterior mean
+#'   or sample a stochastic winner.
+#' @param log_matchup Whether to emit a log line for the matchup.
+#' @param posterior_draw_index The posterior draw index reused across the
+#'   bracket, if any.
 #'
 #' @return A one-row tibble describing the matchup result.
 #' @export
@@ -187,6 +192,8 @@ simulate_matchup <- function(teamA, teamB, round_name, matchup_number, model_res
 #' @param draws Number of posterior draws to use.
 #' @param deterministic Whether each matchup is resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
+#' @param posterior_draw_index The posterior draw index reused across the
+#'   bracket, if any.
 #'
 #' @return A list containing round results and advancing teams.
 #' @keywords internal
@@ -225,6 +232,8 @@ simulate_round <- function(teams, round_name, model_results, draws, deterministi
 #'   winner is already known.
 #' @param deterministic Whether play-in winners are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
+#' @param posterior_draw_index The posterior draw index reused across the
+#'   bracket, if any.
 #'
 #' @return A list containing resolved teams and optional First Four results.
 #' @keywords internal
@@ -331,6 +340,8 @@ resolve_play_in_games <- function(region_teams, model_results, draws, actual_pla
 #' @param deterministic Whether regional games are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
 #' @param log_stage_progress Whether to emit region and round progress lines.
+#' @param posterior_draw_index The posterior draw index reused across the
+#'   bracket, if any.
 #'
 #' @return A list containing regional round results and the region champion.
 #' @export
@@ -392,6 +403,8 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, 
 #' @param deterministic Whether national games are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
 #' @param log_stage_progress Whether to emit Final Four progress lines.
+#' @param posterior_draw_index The posterior draw index reused across the
+#'   bracket, if any.
 #'
 #' @return A list containing semifinal, championship, and champion results.
 #' @export
@@ -472,6 +485,8 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
 #' @param deterministic Whether all matchups are resolved deterministically.
 #' @param log_matchups Whether to emit per-matchup log lines.
 #' @param log_stage_progress Whether to emit region and Final Four progress lines.
+#' @param posterior_draw_index The posterior draw index reused across the
+#'   bracket, if any.
 #'
 #' @return A list containing regional results and Final Four results.
 #' @export

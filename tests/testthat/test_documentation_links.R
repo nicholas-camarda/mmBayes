@@ -37,8 +37,7 @@ test_that("README documents the dashboard regeneration workflow and command role
     expect_match(readme_text, "Preferred dashboard-refresh command")
     expect_match(readme_text, "run_bracket_candidates\\.R.*not the right command for CSS/layout-only iteration")
     expect_match(readme_text, "publish_github_pages\\.R.*Lower-level sync helper")
-    expect_match(readme_text, "~/ProjectsRuntime/mmBayes/output")
-    expect_match(readme_text, "macOS: use `open`")
+    expect_match(readme_text, "configured runtime output directory")
     expect_match(readme_text, "dashboard HTML snapshots")
     expect_match(readme_text, "CSV/TXT/RDS outputs live in runtime/release bundles|CSV, TXT, RDS, cache, and log artifacts")
 })
@@ -47,10 +46,9 @@ test_that("README quick start explains the runtime output bundle and browser lau
     repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
     readme_text <- paste(readLines(file.path(repo_root, "README.md"), warn = FALSE), collapse = "\n")
 
-    expect_match(readme_text, "The main file to open first is ~/ProjectsRuntime/mmBayes/output/bracket_dashboard\\.html")
+    expect_match(readme_text, "Open `bracket_dashboard\\.html` in that directory first")
     expect_match(readme_text, "Expect this step to take longer than the refresh step")
-    expect_match(readme_text, "macOS example:")
-    expect_match(readme_text, "open ~/ProjectsRuntime/mmBayes/output/bracket_dashboard\\.html")
+    expect_match(readme_text, "Then open `bracket_dashboard\\.html` from the configured runtime output directory in your browser")
 })
 
 test_that("README explains update_data refresh status outcomes", {
@@ -79,7 +77,7 @@ test_that("runtime and methods docs describe current artifact and model contract
     methods_text <- paste(readLines(file.path(repo_root, "docs", "methods-and-interpretation.md"), warn = FALSE), collapse = "\n")
 
     expect_match(runtime_text, "deliverables/")
-    expect_match(runtime_text, "release_manifest\\.txt")
+    expect_match(runtime_text, "plain-text release manifest")
     expect_no_match(runtime_text, "data_snapshot/")
     expect_match(methods_text, "prior_type")
     expect_match(methods_text, "globalScale")

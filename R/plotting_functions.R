@@ -370,6 +370,7 @@ render_probability_track_html <- function(mean_probability, lower_probability, u
     clip_probability <- function(x) {
         pmin(pmax(safe_numeric(x, default = axis_min), axis_min), axis_max)
     }
+    # Convert clipped probabilities into percentage offsets on the track.
     to_percent <- function(x) {
         ((clip_probability(x) - axis_min) / (axis_max - axis_min)) * 100
     }
@@ -580,9 +581,11 @@ render_championship_distribution_svg <- function(summary_row, distribution, scal
         max_total <- max_total + 1
     }
 
+    # Project total-points bins onto the horizontal SVG axis.
     to_x <- function(total_points) {
         margin_left + ((safe_numeric(total_points, default = min_total) - min_total) / (max_total - min_total)) * plot_width
     }
+    # Project probabilities onto the vertical SVG axis.
     to_y <- function(probability) {
         margin_top + plot_height - (safe_numeric(probability, default = 0) / max_probability) * plot_height
     }
@@ -1068,6 +1071,7 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
         return(if (compact) empty_html else paste0("<div class='panel'><h2>Model Overview</h2>", empty_html, "</div>"))
     }
 
+    # Summarize whether the engine uses explicit interaction structure.
     feature_mix_note <- function(overview) {
         interaction_terms <- overview$interaction_terms %||% character(0)
         if (length(interaction_terms) > 0) {
@@ -1081,6 +1085,7 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
         "No explicit interaction terms were supplied."
     }
 
+    # Expand engine-specific settings and predictor detail into disclosure cards.
     render_model_detail_html <- function(overview) {
         interaction_terms <- overview$interaction_terms %||% character(0)
         predictor_columns <- overview$predictor_columns %||% character(0)
@@ -1184,6 +1189,7 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
     }
 
     if (!is.null(model_overview$matchup) || !is.null(model_overview$totals)) {
+        # Reuse the same summary card layout for matchup and totals models.
         render_model_card <- function(title, overview) {
             if (is.null(overview) || length(overview) == 0) {
                 return("")
@@ -1556,6 +1562,7 @@ render_model_comparison_summary_html <- function(model_comparison) {
         )
     )
 
+    # Reuse the same evidence stack for whichever engine tab is active.
     render_engine_panel <- function(engine_label, model_bundle, live_model_label) {
         paste0(
             "<div class='engine-stack'>",
@@ -1723,6 +1730,10 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
 #'   [predict_candidate_total_points()].
 #' @param model_quality_context Optional resolved model-quality bundle used for
 #'   reading the latest backtest snapshot.
+#' @param model_overview Optional model-overview bundle used for the summary
+#'   strip and reference section.
+#' @param model_comparison Optional model-comparison bundle used for the link
+#'   out to the dedicated comparison dashboard.
 #'
 #' @return A complete HTML document as a scalar character string.
 #' @keywords internal
@@ -1772,6 +1783,7 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
     candidate_diff <- candidate_diff %>%
         dplyr::select(-inspection_level)
 
+    # Build an ordered round-by-round table for one candidate path.
     build_sequence_view <- function(matchup_column, winner_column) {
         sequence_round_levels <- c("First Four", "Round of 64", "Round of 32", "Sweet 16", "Elite 8", "Final Four", "Championship")
         sequence_region_levels <- c("East", "South", "West", "Midwest")
@@ -1838,6 +1850,7 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
     if (!"candidate_id" %in% names(championship_distribution)) {
         championship_distribution <- tibble::tibble()
     }
+    # Fetch the candidate-specific title-game summary row.
     lookup_candidate_tiebreaker <- function(candidate_id_value) {
         if (!"candidate_id" %in% names(tiebreaker_summary)) {
             return(tibble::tibble())
@@ -1845,6 +1858,7 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         tiebreaker_summary %>%
             dplyr::filter(candidate_id == candidate_id_value)
     }
+    # Fetch the candidate-specific title-game distribution rows.
     lookup_candidate_distribution <- function(candidate_id_value) {
         if (!"candidate_id" %in% names(championship_distribution)) {
             return(tibble::tibble())
@@ -2227,6 +2241,7 @@ render_round_risk_heatmap_svg <- function(decision_sheet) {
     }
 
     color_fn <- grDevices::colorRamp(c("#f8fafc", "#fdba74", "#dc2626"))
+    # Map normalized risk scores onto the heatmap palette.
     to_fill <- function(score) {
         rgb_matrix <- color_fn(pmin(pmax(score / max_risk, 0), 1))
         grDevices::rgb(rgb_matrix[1, 1], rgb_matrix[1, 2], rgb_matrix[1, 3], maxColorValue = 255)
@@ -2503,12 +2518,14 @@ render_bracket_tree_svg <- function(tree_data) {
         collapse = "\n"
     )
 
+    # Strip control characters before embedding tooltip data attributes.
     clean_attr <- function(value) {
         value <- as.character(value %||% "")
         value <- gsub("[\r\n\t]+", " ", value)
         html_escape(value)
     }
 
+    # Render one candidate's tree panel and tooltip-ready node metadata.
     render_tree_panel <- function(tree, is_active = FALSE) {
         nodes <- tree$nodes %||% tibble::tibble()
         edges <- tree$edges %||% tibble::tibble()
@@ -2744,6 +2761,7 @@ render_live_performance_html <- function(live_performance, model_label = NULL) {
     interpretive_status <- live_performance$interpretive_status %||% "early read"
     main_bracket_games_played <- safe_numeric(live_performance$main_bracket_games_played %||% 0, default = 0)
 
+    # Format live-performance scalars consistently across summary cards.
     format_metric_value <- function(value, digits = 3L, percent = FALSE) {
         value <- safe_numeric(value, default = NA_real_)
         if (!is.finite(value)) {
@@ -2755,6 +2773,7 @@ render_live_performance_html <- function(live_performance, model_label = NULL) {
         sprintf(paste0("%.", digits, "f"), value)
     }
 
+    # Render one live-performance summary card.
     render_summary_card <- function(title, summary_row, note_text) {
         if (nrow(summary_row) == 0) {
             return(
@@ -2870,6 +2889,7 @@ render_model_overview_html_legacy <- function(model_overview) {
         return("")
     }
 
+    # Reuse the same legacy card shell for each model overview block.
     render_model_card <- function(title, overview) {
         if (is.null(overview) || length(overview) == 0) {
             return("")
@@ -3177,6 +3197,7 @@ render_candidate_fragility_svg <- function(candidate_matchups, top_n = 8L) {
     plot_width <- width - margin_left - margin_right
     height <- margin_top + (nrow(plot_data) * row_height) + 34
 
+    # Map chosen win probabilities onto the fragility chart axis.
     to_x <- function(probability) {
         clipped <- pmin(pmax(safe_numeric(probability, default = 0), 0), 1)
         margin_left + (clipped * plot_width)
@@ -3267,6 +3288,7 @@ render_calibration_svg <- function(calibration_tbl) {
     margin_bottom <- 42
     plot_width <- width - margin_left - margin_right
     plot_height <- height - margin_bottom - plot_top
+    # Map predicted and observed probabilities into calibration-plot coordinates.
     to_x <- function(probability) margin_left + (safe_numeric(probability, default = 0) * plot_width)
     to_y <- function(probability) plot_top + ((1 - safe_numeric(probability, default = 0)) * plot_height)
 
@@ -3398,9 +3420,6 @@ render_model_overview_html_legacy <- function(model_overview) {
     )
 }
 
-#' Render a model-diagnostics panel
-#'
-#' @param backtest A backtest result bundle.
 #' Create the technical bracket dashboard HTML
 #'
 #' @param bracket_year The active bracket year.
@@ -3414,6 +3433,12 @@ render_model_overview_html_legacy <- function(model_overview) {
 #'   First Four slots remain in the active bracket.
 #' @param model_quality_context Optional resolved model-quality bundle used for
 #'   the quality section and fallback dashboard copy.
+#' @param live_performance Optional live-performance bundle used for the
+#'   current-year monitoring section.
+#' @param model_overview Optional model-overview bundle used for the reference
+#'   section.
+#' @param model_comparison Optional model-comparison bundle used for the engine
+#'   comparison link panel.
 #'
 #' @return A complete HTML document as a scalar character string.
 #' @export
@@ -3488,6 +3513,8 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
     comparison_panel <- render_model_comparison_link_html(model_comparison)
     diagnostics_panel <- render_model_diagnostics_html(quality_backtest, quality_source_label = quality_source_label)
 
+    # Local counters and candidate-specific lookups keep the comparison view
+    # assembly readable while preserving the existing dashboard structure.
     tier_counts <- decision_sheet %>%
         dplyr::mutate(confidence_tier = as.character(confidence_tier)) %>%
         dplyr::count(confidence_tier, .drop = FALSE)
@@ -3523,6 +3550,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         championship_distribution <- tibble::tibble()
     }
 
+    # Read one candidate's tiebreaker summary for the technical dashboard.
     lookup_candidate_tiebreaker <- function(candidate_id_value) {
         if (nrow(tiebreaker_summary) == 0) {
             return(tibble::tibble())
@@ -3530,6 +3558,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         tiebreaker_summary %>%
             dplyr::filter(candidate_id == candidate_id_value)
     }
+    # Read one candidate's full championship-total distribution.
     lookup_candidate_distribution <- function(candidate_id_value) {
         if (nrow(championship_distribution) == 0) {
             return(tibble::tibble())
@@ -3611,6 +3640,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         )
     }
 
+    # Render the candidate-specific tab with path, totals, and fragility views.
     candidate_view_panel <- function(candidate, candidate_key, sequence_view, row_classes) {
         tiebreaker_row <- lookup_candidate_tiebreaker(candidate$candidate_id)
         tiebreaker_html <- if (nrow(tiebreaker_row) == 1L) {
@@ -3929,6 +3959,10 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
 #'   [predict_candidate_total_points()].
 #' @param model_quality_context Optional resolved model-quality bundle used for
 #'   reading the latest backtest snapshot.
+#' @param model_overview Optional model-overview bundle used for the reference
+#'   section.
+#' @param model_comparison Optional model-comparison bundle used for the engine
+#'   comparison link panel.
 #'
 #' @return A complete HTML document as a scalar character string.
 #' @export
@@ -3984,6 +4018,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     round_order <- round_levels()
     region_order <- bracket_region_levels()
 
+    # Local value formatters and slug helpers keep the long HTML builder
+    # readable without changing the rendered dashboard output.
     row_value <- function(row, name, default = NA_character_) {
         if (!name %in% names(row) || length(row[[name]]) == 0) {
             return(default)
@@ -3992,6 +4028,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         if (is.null(value) || (length(value) == 1L && is.na(value))) default else value
     }
 
+    # Format scalar metrics while preserving missing-value fallbacks.
     display_value <- function(value, digits = 1L, scale_percent = FALSE) {
         if (length(value) == 0 || all(is.na(value))) {
             return("n/a")
@@ -4006,10 +4043,12 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         sprintf(paste0("%.", digits, "f"), value)
     }
 
+    # Convert watchlist surface names into CSS-safe class suffixes.
     surface_class <- function(surface) {
         paste0("surface-", gsub("[^a-z0-9]+", "-", tolower(surface)))
     }
 
+    # Convert headings into stable in-page anchor fragments.
     slugify_fragment <- function(value) {
         value <- tolower(as.character(value %||% ""))
         value <- gsub("[^a-z0-9]+", "-", value)
@@ -4017,10 +4056,12 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         if (!nzchar(value)) "na" else value
     }
 
+    # Namespace round anchors so divergence jump links stay unique.
     divergence_round_anchor_id <- function(round_name) {
         paste0("candidate-divergence-round-", slugify_fragment(round_name))
     }
 
+    # Reuse the mini-table card shell across evidence sections.
     render_value_table <- function(title, data) {
         paste0(
             "<div class='mini-table-card'>",
@@ -4030,6 +4071,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
+    # Render compact metric pills for team summary cards.
     render_metric_grid <- function(metrics) {
         paste0(
             "<div class='metric-grid'>",
@@ -4047,6 +4089,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
+    # Render one team evidence card from the matchup context row.
     render_team_card <- function(row, prefix, fallback_name, role_label = NA_character_) {
         team_name <- row_value(row, paste0(prefix, "_Team"), fallback_name)
         seed <- row_value(row, paste0(prefix, "_Seed"), row_value(row, paste0(prefix, "_seed"), NA_integer_))
@@ -4102,6 +4145,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
+    # Compare model-facing inputs side by side for the evidence drawer.
     render_matchup_comparison <- function(row) {
         team_a_name <- row_value(row, "teamA", row_value(row, "teamA_Team", "Team A"))
         team_b_name <- row_value(row, "teamB", row_value(row, "teamB_Team", "Team B"))
@@ -4114,6 +4158,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             preferred_direction = c("neutral", "lower", "higher", "higher", "lower", "higher", "lower", "higher", "higher", "higher", "higher", "lower", "neutral")
         )
 
+        # Translate signed feature differences into a team-facing advantage label.
         favor_label <- function(diff_value, preferred_direction) {
             if (!is.finite(diff_value)) {
                 return("n/a")
@@ -4244,6 +4289,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
+    # Build the overview card for one bracket candidate.
     render_candidate_card <- function(summary_row) {
         candidate_id <- row_value(summary_row, "candidate_id", 1L)
         tiebreaker_points <- row_value(summary_row, "recommended_tiebreaker_points", NA_integer_)
@@ -4313,6 +4359,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
+    # Render one round's exact candidate-difference reference table.
     render_delta_round <- function(round_name, round_rows) {
         if (nrow(round_rows) == 0) {
             return("")
@@ -4361,6 +4408,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
+    # Group divergence buckets by round for the evidence jump UI.
     render_divergence_map <- function(data) {
         if (nrow(data) == 0) {
             return("<p class='empty-state'>No divergence buckets are available for this run.</p>")
@@ -4473,6 +4521,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
+    # Render one review-queue card on the dashboard surface.
     render_watchlist_card <- function(row, hidden = FALSE) {
         surface <- row_value(row, "reason_surface", "Bracket-changing toss-ups")
         surface_attr <- html_escape(surface)
@@ -4507,6 +4556,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         )
     }
 
+    # Expand a surfaced matchup into the full evidence drawer.
     render_evidence_detail <- function(row) {
         surface <- row_value(row, "reason_surface", "Bracket-changing toss-ups")
         latest_note <- row_value(row, "downstream_implication_text", NA_character_)
@@ -4609,6 +4659,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             by = "reason_surface"
         ) %>%
         dplyr::mutate(n = dplyr::coalesce(n, 0L))
+    # Safely read per-surface watchlist counts for summary chips.
     get_watchlist_count <- function(surface_name) {
         value <- watchlist_summary_cards$n[watchlist_summary_cards$reason_surface == surface_name]
         if (length(value) == 0) 0L else value[[1]]
@@ -4686,6 +4737,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     reference_evidence <- evidence_seed %>%
         dplyr::filter(reason_surface == "All matchups")
 
+    # Render a stack of surfaced or reference evidence drawers.
     render_evidence_panel_group <- function(data) {
         if (nrow(data) == 0) {
             return("<p class='empty-state'>No evidence drawers to show yet.</p>")

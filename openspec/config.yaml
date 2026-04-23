@@ -2,7 +2,7 @@ schema: spec-driven
 
 context: |
   mmBayes is an R package with a script-driven analysis pipeline; Node/Playwright exists only as a dashboard interaction test sidecar.
-  Centralize root and path changes in `R/configuration.R`; defaults split local code (`~/Projects/mmBayes`), runtime outputs (`~/ProjectsRuntime/mmBayes`), and shared cloud data/releases (`~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes`).
+  Centralize root and path changes in `R/configuration.R`; defaults split the local source checkout, runtime outputs, and the synced cloud data/releases home.
   `config.yml` is the runtime contract for data paths, model settings, odds options, and output naming; `default_project_config()` also injects defaults such as `compare_engines = TRUE`.
   The authoritative run writes a saved results bundle plus runtime dashboards, CSVs, and TXT artifacts under the runtime `output/` tree.
   Tracked repo `output/` files are publishable mirrors synced from runtime dashboards, not the execution target.

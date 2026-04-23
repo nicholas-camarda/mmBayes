@@ -359,6 +359,11 @@ configure_priors <- function(prior_type = "normal") {
 #' @param model_label Short model label used to namespace the cache entry.
 #' @param interaction_terms Optional interaction terms included in the formula.
 #' @param prior_type Prior type used during fitting.
+#' @param engine Model engine identifier included in the cache signature.
+#' @param engine_config Optional engine-specific settings included in the cache
+#'   signature.
+#' @param encoding_metadata Optional encoding metadata included in the cache
+#'   signature for matrix-based engines.
 #'
 #' @return A cache key suitable for a file name.
 #' @keywords internal
@@ -1258,6 +1263,9 @@ predict_total_points_rows <- function(matchup_rows, model_results, draws = 1000)
 #' @param draws Number of posterior draws used for scoring and simulation.
 #' @param include_diagnostics Whether to compute expensive post-fit diagnostics
 #'   for each holdout fit.
+#' @param cache_dir Optional cache directory forwarded to repeated model fits.
+#' @param use_cache Whether repeated fits should reuse cached models when
+#'   `cache_dir` is available.
 #' @param interaction_terms Optional character vector of interaction terms
 #'   forwarded to [fit_tournament_model()].
 #' @param prior_type Prior type forwarded to [fit_tournament_model()].
@@ -1420,6 +1428,8 @@ compare_model_configurations <- function(
     draws = 500,
     cache_dir = NULL
 ) {
+    # Reuse the same rolling-backtest entry point for each candidate config so
+    # both summaries are evaluated on identical year splits.
     run_backtest <- function(cfg, label) {
         logger::log_info("compare_model_configurations: running backtest for '{label}'")
         run_rolling_backtest(
@@ -1441,6 +1451,8 @@ compare_model_configurations <- function(
     backtest_a <- run_backtest(config_a, config_a_label)
     backtest_b <- run_backtest(config_b, config_b_label)
 
+    # Collapse each backtest bundle to the same one-row metric schema before
+    # computing deltas.
     summarize_backtest <- function(bt, label) {
         if (!model_quality_has_backtest(bt)) {
             return(tibble::tibble(
@@ -1461,6 +1473,8 @@ compare_model_configurations <- function(
 
     metric_cols <- c("mean_log_loss", "mean_brier", "mean_accuracy", "mean_bracket_score", "mean_correct_picks")
     delta <- stats::setNames(
+        # Deltas are always candidate minus baseline so the sign carries the
+        # direction of change for each metric.
         vapply(metric_cols, function(m) {
             safe_numeric(summary_b[[m]][[1]]) - safe_numeric(summary_a[[m]][[1]])
         }, numeric(1)),

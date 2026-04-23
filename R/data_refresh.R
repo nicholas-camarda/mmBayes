@@ -1387,6 +1387,7 @@ scrape_espn_tournament_results <- function(bracket_year, team_features, date_val
         return(empty_game_results_table())
     }
 
+    # Normalize ESPN's event payload into one row per scoreboard event.
     coerce_espn_events <- function(events, scoreboard_date) {
         if (is.null(events) || length(events) == 0) {
             return(tibble::tibble())
@@ -1602,6 +1603,7 @@ merge_current_year_tournament_results <- function(game_results, team_features, b
     current_teams <- team_features %>%
         dplyr::filter(Year == bracket_year)
 
+    # Ensure optional monitoring metadata exists before combining sources.
     normalize_monitoring_columns <- function(tbl) {
         if (!"completed_at" %in% names(tbl)) {
             tbl <- tbl %>%
@@ -1655,6 +1657,7 @@ merge_current_year_tournament_results <- function(game_results, team_features, b
         ) %>%
         dplyr::distinct()
 
+    # Build deterministic deduplication keys across existing and fallback rows.
     add_sort_keys <- function(tbl, source_priority) {
         if (nrow(tbl) == 0) {
             return(tbl %>% dplyr::mutate(source_priority = integer(), teamA_key = character(), teamB_key = character(), game_pair_key = character()))
@@ -1776,6 +1779,7 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
     dir.create(dirname(game_results_file), showWarnings = FALSE, recursive = TRUE)
 
     refresh_issues <- empty_refresh_issues_table()
+    # Accumulate refresh warnings from per-year scrapers into the run summary.
     register_refresh_issues <- function(issues) {
         issues <- issues %||% empty_refresh_issues_table()
         if (nrow(issues) > 0) {
@@ -1784,7 +1788,8 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
         invisible(NULL)
     }
 
-    if (is.null(start_year)) {
+    explicit_start_year <- !is.null(start_year)
+    if (!explicit_start_year) {
         historical_years <- c(
             configured_completed_historical_years(bracket_year, history_window = history_window),
             as.integer(bracket_year)
@@ -1972,13 +1977,46 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
             Year %in% as.character(required_historical_years),
             team_feature_rows == 0L | post_result_rows == 0L
         )
+    available_historical_years <- refresh_forensics %>%
+        dplyr::filter(
+            Year %in% as.character(required_historical_years),
+            team_feature_rows > 0L,
+            post_result_rows > 0L
+        ) %>%
+        dplyr::pull(Year)
     unrecoverable_current_years <- refresh_forensics %>%
         dplyr::filter(
             Year == as.character(bracket_year),
             team_feature_rows == 0L
         )
-    if (nrow(unrecoverable_historical_years) > 0 || nrow(unrecoverable_current_years) > 0) {
-        blocked_years <- dplyr::bind_rows(unrecoverable_historical_years, unrecoverable_current_years) %>%
+    if (!explicit_start_year && nrow(unrecoverable_historical_years) > 0 && length(available_historical_years) > 0) {
+        shortfall_message <- sprintf(
+            "Configured historical window could not be fully produced; proceeding with %s available historical year%s instead of %s. Omitted years: %s",
+            length(available_historical_years),
+            ifelse(length(available_historical_years) == 1L, "", "s"),
+            as.integer(history_window),
+            paste(sprintf("%s (%s)", unrecoverable_historical_years$Year, dplyr::coalesce(unrecoverable_historical_years$first_missing_stage, "unknown")), collapse = ", ")
+        )
+        logger::log_warn(shortfall_message)
+        register_refresh_issues(
+            append_refresh_issue(
+                empty_refresh_issues_table(),
+                step = "historical_window_shortfall",
+                source = "Canonical refresh coverage",
+                severity = "warning",
+                message = shortfall_message
+            )
+        )
+    }
+
+    blocking_historical_years <- if (explicit_start_year || length(available_historical_years) == 0L) {
+        unrecoverable_historical_years
+    } else {
+        unrecoverable_historical_years %>% dplyr::slice(0)
+    }
+
+    if (nrow(blocking_historical_years) > 0 || nrow(unrecoverable_current_years) > 0) {
+        blocked_years <- dplyr::bind_rows(blocking_historical_years, unrecoverable_current_years) %>%
             dplyr::mutate(
                 label = sprintf("%s (%s)", Year, dplyr::coalesce(first_missing_stage, "unknown"))
             )

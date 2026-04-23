@@ -1,3 +1,11 @@
+#' Override a single candidate matchup row for bracket-tree fixtures
+#'
+#' @param matchups Candidate matchup table.
+#' @param slot_key Slot identifier to rewrite.
+#' @param values Named list of replacement field values.
+#'
+#' @return The matchup table with one row updated in place.
+#' @keywords internal
 override_candidate_matchup <- function(matchups, slot_key, values) {
     row_index <- which(as.character(matchups$slot_key) == slot_key)
     if (length(row_index) != 1L) {
@@ -43,6 +51,12 @@ override_candidate_matchup <- function(matchups, slot_key, values) {
     matchups
 }
 
+#' Prepare deterministic bracket-tree test candidates
+#'
+#' @param candidates Candidate list returned by [generate_bracket_candidates()].
+#'
+#' @return The candidate list with deterministic East-region divergence applied.
+#' @keywords internal
 prepare_bracket_tree_test_candidates <- function(candidates) {
     if (length(candidates) < 2L) {
         stop("Expected two candidates for bracket tree tests")
@@ -166,6 +180,11 @@ prepare_bracket_tree_test_candidates <- function(candidates) {
     candidates
 }
 
+#' Build the shared bracket-tree test context
+#'
+#' @return A list containing prepared candidates, a decision sheet, and
+#'   play-in resolution data for bracket-tree tests.
+#' @keywords internal
 build_bracket_tree_test_context <- function() {
     team_file <- tempfile(fileext = ".xlsx")
     results_file <- tempfile(fileext = ".xlsx")
@@ -240,6 +259,7 @@ test_that("bracket tree renders candidate-specific trees and maps evidence drawe
     expect_equal(nrow(ff_nodes), 2L)
     expect_equal(nrow(e8_nodes), 4L)
 
+    # Resolve which region nodes feed each Final Four slot in the rendered tree.
     feeder_regions <- function(tree, ff_matchup_number) {
         ff_slot <- tree$nodes$slot_key[tree$nodes$round == "Final Four" & tree$nodes$matchup_number == ff_matchup_number][[1]]
         feeders <- tree$edges %>%

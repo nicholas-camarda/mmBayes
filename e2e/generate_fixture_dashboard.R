@@ -6,6 +6,15 @@ pkgload::load_all(".")
 
 source(file.path("tests", "testthat", "helper-fixtures.R"))
 
+#' Override a single candidate matchup row in the fixture dashboard
+#'
+#' @param matchups A candidate matchup table containing a `slot_key` column.
+#' @param slot_key Canonical slot identifier for the matchup row to replace.
+#' @param values A named list of replacement values to write into the row.
+#'
+#' @return The matchup table with the targeted row updated and favorite metadata
+#'   recomputed from `win_prob_A`.
+#' @keywords internal
 override_candidate_matchup <- function(matchups, slot_key, values) {
     row_index <- which(as.character(matchups$slot_key) == slot_key)
     if (length(row_index) != 1L) {
@@ -46,6 +55,13 @@ override_candidate_matchup <- function(matchups, slot_key, values) {
     matchups
 }
 
+#' Inject stable bracket-tree edge cases into fixture candidates
+#'
+#' @param candidates A list of generated candidate bracket objects.
+#'
+#' @return The candidate list with deterministic matchup overrides for fixture
+#'   dashboard rendering.
+#' @keywords internal
 prepare_bracket_tree_fixture_candidates <- function(candidates) {
     for (candidate_index in seq_along(candidates)) {
         matchups <- candidates[[candidate_index]]$matchups

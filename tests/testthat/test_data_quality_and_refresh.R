@@ -3,17 +3,22 @@ test_that("team name canonicalization reconciles known source aliases", {
         "UNC",
         "UConn",
         "Pitt",
+        "CA Baptist",
         "California Baptist",
+        "Long Island",
         "UCSB",
         "Queens (NC)",
         "Tennessee State",
         "St. John's (NY)",
         "St. Peter's",
+        "Michigan St",
+        "N Dakota St",
         "North Carolina St.",
         "Louisiana Lafayette",
         "LIU Brooklyn",
         "Texas A&M Corpus Chris",
         "Wichita St.",
+        "Miami",
         "Miami FL"
     )
 
@@ -24,16 +29,21 @@ test_that("team name canonicalization reconciles known source aliases", {
             "Connecticut",
             "Pittsburgh",
             "Cal Baptist",
+            "Cal Baptist",
+            "LIU",
             "UC Santa Barbara",
             "Queens",
             "Tennessee St.",
             "Saint John's",
             "Saint Peter's",
+            "Michigan State",
+            "North Dakota State",
             "NC State",
             "Louisiana",
             "LIU",
             "Texas A&M Corpus Christi",
             "Wichita State",
+            "Miami (FL)",
             "Miami (FL)"
         )
     )
@@ -166,6 +176,70 @@ test_that("quality gates still fail on incomplete historical data", {
         assert_canonical_data_quality(team_data, results_data),
         regexp = "Unexpected per-year round counts"
     )
+})
+
+test_that("canonical tournament audit passes on clean fixture data", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024)
+
+    report <- evaluate_canonical_tournament_audit(team_data, results_data)
+
+    expect_true(report$passed)
+    expect_null(report$roster_validation_issue)
+    expect_equal(nrow(report$duplicate_game_keys), 0L)
+    expect_equal(nrow(report$historical_team_participation_issues), 0L)
+    expect_equal(nrow(report$result_seed_mismatches), 0L)
+})
+
+test_that("canonical tournament audit flags historical teams missing from completed results", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024) %>%
+        dplyr::mutate(
+            teamB = dplyr::if_else(
+                Year == "2024" & round == "Round of 64" & region == "East" & game_index == 1L,
+                "West_16_2024",
+                teamB
+            )
+        )
+
+    expect_error(
+        assert_canonical_tournament_audit(team_data, results_data),
+        regexp = "Historical tournament teams missing from completed results: 2024: East_16_2024"
+    )
+})
+
+test_that("canonical tournament audit flags duplicate game keys", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024)
+    duplicate_row <- results_data %>%
+        dplyr::filter(Year == "2024", region == "East", round == "Round of 64", game_index == 1L)
+
+    expect_error(
+        assert_canonical_tournament_audit(team_data, dplyr::bind_rows(results_data, duplicate_row)),
+        regexp = "Duplicate Year/region/round/game_index keys detected"
+    )
+})
+
+test_that("canonical tournament audit flags result seed mismatches", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024) %>%
+        dplyr::mutate(
+            teamA_seed = dplyr::if_else(
+                Year == "2024" & round == "Round of 64" & region == "East" & game_index == 1L,
+                99L,
+                teamA_seed
+            )
+        )
+
+    expect_error(
+        assert_canonical_tournament_audit(team_data, results_data),
+        regexp = "Result rows disagree with roster seed assignments"
+    )
+})
+
+test_that("expected historical unplayed teams documents the 2021 no-contest exception", {
+    expect_equal(expected_historical_unplayed_teams(2021), "VCU")
+    expect_equal(expected_historical_unplayed_teams(2024), character())
 })
 
 test_that("year-wide Bart join preserves the full tournament roster", {
@@ -556,6 +630,7 @@ test_that("update_tournament_data returns blocked without rewrite when a require
         results_data = existing_results
     )
 
+    # Simulate a year where roster scraping only returns a structured warning.
     failed_conf_assignment <- function(year) {
         conf_tbl <- conf_assignments %>%
             dplyr::filter(Year == as.character(year)) %>%
@@ -615,6 +690,89 @@ test_that("update_tournament_data returns blocked without rewrite when a require
     written_results <- readxl::read_excel(results_file)
     expect_equal(written_team_data, original_team_data)
     expect_equal(written_results, original_results)
+})
+
+test_that("update_tournament_data writes available years when the configured historical window falls short", {
+    team_data <- make_fixture_team_features(current_year = 2019, history_years = 2016:2018)
+    bart_ratings <- make_fixture_bart_ratings(team_data)
+    conf_assignments <- make_fixture_conf_assignments(team_data)
+    historical_results <- make_fixture_game_results(team_data, history_years = 2016:2018)
+    current_results <- make_fixture_current_year_completed_results(team_data, current_year = 2019)
+    existing_team_data <- team_data %>%
+        dplyr::filter(Year %in% c("2017", "2018", "2019"))
+    existing_results <- dplyr::bind_rows(historical_results, current_results) %>%
+        dplyr::filter(Year %in% c("2017", "2018", "2019"))
+
+    team_file <- tempfile(fileext = ".xlsx")
+    results_file <- tempfile(fileext = ".xlsx")
+    config <- default_project_config()
+    config$data$team_features_path <- team_file
+    config$data$game_results_path <- results_file
+    config$output$refresh_log_path <- tempfile(fileext = ".log")
+    config$model$history_window <- 3L
+
+    write_fixture_data_files(
+        team_file,
+        results_file,
+        team_data = existing_team_data,
+        results_data = existing_results
+    )
+
+    # Simulate a partial-window miss that should degrade rather than block.
+    failed_conf_assignment <- function(year) {
+        conf_tbl <- conf_assignments %>%
+            dplyr::filter(Year == as.character(year)) %>%
+            dplyr::slice(0)
+        attr(conf_tbl, "refresh_issues") <- append_refresh_issue(
+            empty_refresh_issues_table(),
+            step = "conference_assignments",
+            source = "Bart Torvik Tourney Time",
+            severity = "warning",
+            message = sprintf(
+                "Skipping conference assignments for year %s: Could not pass browser verification for https://barttorvik.com/tourneytime.php?year=%s&sort=7&conlimit=All",
+                year,
+                year
+            )
+        )
+        conf_tbl
+    }
+
+    testthat::local_mocked_bindings(
+        scrape_bart_data = function(year) {
+            bart_ratings %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_conf_assignments = function(year) {
+            if (year == 2016L) {
+                return(failed_conf_assignment(year))
+            }
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_tournament_results = function(year) {
+            historical_results %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_espn_tournament_results = function(...) {
+            current_results
+        }
+    )
+
+    result <- update_tournament_data(
+        config = config,
+        bracket_year = 2019L
+    )
+
+    expect_identical(result$status, "degraded_success")
+    expect_false("blocked_years" %in% names(result) && nrow(result$blocked_years) > 0)
+    expect_true(any(result$warning_summary$step == "historical_window_shortfall"))
+
+    written_team_data <- readxl::read_excel(team_file)
+    written_results <- readxl::read_excel(results_file)
+    expect_equal(sort(unique(written_team_data$Year)), c("2017", "2018", "2019"))
+    expect_equal(sort(unique(written_results$Year)), c("2017", "2018", "2019"))
+
+    summary_lines <- format_refresh_status_summary(result, log_path = NULL)
+    expect_true(any(grepl("^Refresh status: Degraded success$", summary_lines)))
+    expect_true(any(grepl("^- Omitted years: 2016 \\(conference_assignments\\)$", summary_lines)))
+    expect_true(any(grepl("historical_window_shortfall", result$warning_summary$step, fixed = TRUE)))
 })
 
 test_that("update_tournament_data degrades when current-year fallback is empty but allowed", {

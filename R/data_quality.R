@@ -253,6 +253,240 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
     )
 }
 
+#' Evaluate canonical tournament coverage and bracket integrity
+#'
+#' @param team_features A team feature table.
+#' @param game_results A game-results table.
+#'
+#' @return A list containing audit summaries and issue tables.
+#' @keywords internal
+evaluate_canonical_tournament_audit <- function(team_features, game_results) {
+    team_features <- normalize_team_features(team_features)
+    game_results <- normalize_game_results(game_results)
+
+    quality_report <- evaluate_canonical_data_quality(team_features, game_results)
+    current_year <- max(suppressWarnings(as.integer(team_features$Year)), na.rm = TRUE)
+    current_year <- as.character(current_year)
+
+    roster <- team_features %>%
+        dplyr::transmute(
+            Year = as.character(Year),
+            Team = canonicalize_team_name(Team),
+            Seed = as.integer(Seed),
+            Region = as.character(Region),
+            Conf = as.character(Conf),
+            team_key = normalize_team_key(Team)
+        ) %>%
+        dplyr::distinct()
+
+    roster_validation_issue <- tryCatch(
+        {
+            validate_tournament_roster(
+                roster %>%
+                    dplyr::select(Year, Team, Seed, Region, Conf),
+                require_seed = TRUE
+            )
+            NULL
+        },
+        error = function(err) err$message
+    )
+
+    duplicate_game_keys <- game_results %>%
+        dplyr::count(Year, region, round, game_index, name = "n") %>%
+        dplyr::filter(n > 1L) %>%
+        dplyr::arrange(Year, round, region, game_index)
+
+    participant_rows <- dplyr::bind_rows(
+        game_results %>%
+            dplyr::transmute(
+                Year = as.character(Year),
+                source_column = "teamA",
+                Team = canonicalize_team_name(teamA),
+                reported_seed = as.integer(teamA_seed)
+            ),
+        game_results %>%
+            dplyr::transmute(
+                Year = as.character(Year),
+                source_column = "teamB",
+                Team = canonicalize_team_name(teamB),
+                reported_seed = as.integer(teamB_seed)
+            )
+    ) %>%
+        dplyr::mutate(team_key = normalize_team_key(Team)) %>%
+        dplyr::distinct()
+
+    roster_lookup <- roster %>%
+        dplyr::select(Year, Team, team_key, expected_seed = Seed, expected_region = Region)
+
+    historical_years <- sort(setdiff(unique(roster$Year), current_year))
+    allowed_historical_nonparticipants <- purrr::map_dfr(historical_years, function(year) {
+        teams <- expected_historical_unplayed_teams(year)
+        if (length(teams) == 0) {
+            return(tibble::tibble(Year = character(), team_key = character()))
+        }
+
+        tibble::tibble(
+            Year = as.character(year),
+            team_key = normalize_team_key(teams)
+        )
+    })
+
+    historical_team_participation_issues <- roster %>%
+        dplyr::filter(Year %in% historical_years) %>%
+        dplyr::anti_join(
+            participant_rows %>%
+                dplyr::select(Year, team_key) %>%
+                dplyr::distinct(),
+            by = c("Year", "team_key")
+        ) %>%
+        dplyr::anti_join(allowed_historical_nonparticipants, by = c("Year", "team_key")) %>%
+        dplyr::select(Year, Team, Seed, Region) %>%
+        dplyr::arrange(Year, Region, Seed, Team)
+
+    current_year_unplayed_teams <- roster %>%
+        dplyr::filter(Year == current_year) %>%
+        dplyr::anti_join(
+            participant_rows %>%
+                dplyr::filter(Year == current_year) %>%
+                dplyr::select(Year, team_key) %>%
+                dplyr::distinct(),
+            by = c("Year", "team_key")
+        ) %>%
+        dplyr::select(Year, Team, Seed, Region) %>%
+        dplyr::arrange(Region, Seed, Team)
+
+    result_seed_mismatches <- participant_rows %>%
+        dplyr::inner_join(roster_lookup, by = c("Year", "team_key")) %>%
+        dplyr::filter(!is.na(reported_seed), !is.na(expected_seed), reported_seed != expected_seed) %>%
+        dplyr::select(Year, source_column, Team = Team.x, reported_seed, expected_seed, expected_region) %>%
+        dplyr::distinct() %>%
+        dplyr::arrange(Year, Team, source_column)
+
+    historical_participation_summary <- roster %>%
+        dplyr::filter(Year %in% historical_years) %>%
+        dplyr::count(Year, name = "roster_teams") %>%
+        dplyr::left_join(
+            participant_rows %>%
+                dplyr::filter(Year %in% historical_years) %>%
+                dplyr::distinct(Year, team_key) %>%
+                dplyr::count(Year, name = "teams_with_results"),
+            by = "Year"
+        ) %>%
+        dplyr::left_join(
+            allowed_historical_nonparticipants %>%
+                dplyr::count(Year, name = "expected_unplayed_teams"),
+            by = "Year"
+        ) %>%
+        dplyr::mutate(
+            teams_with_results = dplyr::coalesce(teams_with_results, 0L),
+            expected_unplayed_teams = dplyr::coalesce(expected_unplayed_teams, 0L),
+            missing_teams = roster_teams - teams_with_results - expected_unplayed_teams
+        ) %>%
+        dplyr::select(Year, roster_teams, teams_with_results, expected_unplayed_teams, missing_teams) %>%
+        dplyr::arrange(Year)
+
+    summary <- tibble::tibble(
+        roster_years = dplyr::n_distinct(roster$Year),
+        roster_rows = nrow(roster),
+        result_rows = nrow(game_results),
+        duplicate_game_key_rows = nrow(duplicate_game_keys),
+        historical_participation_issue_rows = nrow(historical_team_participation_issues),
+        result_seed_mismatch_rows = nrow(result_seed_mismatches),
+        current_year_unplayed_team_rows = nrow(current_year_unplayed_teams),
+        passed = is.null(roster_validation_issue) &&
+            isTRUE(quality_report$passed) &&
+            nrow(duplicate_game_keys) == 0 &&
+            nrow(historical_team_participation_issues) == 0 &&
+            nrow(result_seed_mismatches) == 0
+    )
+
+    list(
+        summary = summary,
+        quality_report = quality_report,
+        roster_validation_issue = roster_validation_issue,
+        duplicate_game_keys = duplicate_game_keys,
+        historical_participation_summary = historical_participation_summary,
+        historical_team_participation_issues = historical_team_participation_issues,
+        current_year_unplayed_teams = current_year_unplayed_teams,
+        result_seed_mismatches = result_seed_mismatches,
+        passed = isTRUE(summary$passed[[1]])
+    )
+}
+
+#' Assert canonical tournament coverage and bracket integrity
+#'
+#' @param team_features A team feature table.
+#' @param game_results A game-results table.
+#'
+#' @return Invisibly returns the audit report when all checks pass.
+#' @keywords internal
+assert_canonical_tournament_audit <- function(team_features, game_results) {
+    quality_issue <- tryCatch(
+        {
+            assert_canonical_data_quality(team_features, game_results)
+            NULL
+        },
+        error = function(err) err$message
+    )
+    report <- evaluate_canonical_tournament_audit(team_features, game_results)
+
+    issues <- character()
+    if (!is.null(quality_issue)) {
+        issues <- c(issues, quality_issue)
+    }
+
+    if (!is.null(report$roster_validation_issue)) {
+        issues <- c(issues, report$roster_validation_issue)
+    }
+
+    if (nrow(report$duplicate_game_keys) > 0) {
+        duplicate_text <- report$duplicate_game_keys %>%
+            dplyr::mutate(text = sprintf("%s %s %s #%s=%s", Year, round, region, game_index, n)) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Duplicate Year/region/round/game_index keys detected:", paste(duplicate_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$historical_team_participation_issues) > 0) {
+        historical_text <- report$historical_team_participation_issues %>%
+            dplyr::group_by(Year) %>%
+            dplyr::summarise(teams = paste(Team, collapse = ", "), .groups = "drop") %>%
+            dplyr::mutate(text = sprintf("%s: %s", Year, teams)) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Historical tournament teams missing from completed results:", paste(historical_text, collapse = "; "))
+        )
+    }
+
+    if (nrow(report$result_seed_mismatches) > 0) {
+        mismatch_text <- report$result_seed_mismatches %>%
+            dplyr::mutate(
+                text = sprintf(
+                    "%s %s %s-seed (expected %s, %s)",
+                    Year,
+                    Team,
+                    reported_seed,
+                    expected_seed,
+                    source_column
+                )
+            ) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste("Result rows disagree with roster seed assignments:", paste(mismatch_text, collapse = "; "))
+        )
+    }
+
+    if (length(issues) > 0) {
+        stop_with_message(paste(issues, collapse = "\n"))
+    }
+
+    invisible(report)
+}
+
 #' Assert that canonical data is ready for modeling
 #'
 #' @param team_features A team feature table.

@@ -1,6 +1,13 @@
 fixture_regions <- c("East", "West", "South", "Midwest")
 
+#' Build synthetic team features for tests
+#'
+#' @param current_year Current bracket year to include.
+#' @param history_years Historical seasons to include.
+#'
+#' @return A tibble of pre-tournament team features with deterministic values.
 make_fixture_team_features <- function(current_year = 2025, history_years = 2022:2024) {
+    # Build the standard 64-team regional field for one season.
     build_base_rows <- function(year) {
         expand.grid(
             Region = fixture_regions,
@@ -28,6 +35,7 @@ make_fixture_team_features <- function(current_year = 2025, history_years = 2022
             add_safe_pre_tournament_features()
     }
 
+    # Add duplicate-seed rows that exercise First Four paths.
     build_play_in_rows <- function(year) {
         dplyr::tribble(
             ~Region, ~Seed, ~Team, ~Conf, ~Barthag, ~AdjOE, ~AdjDE, ~WAB, ~TOR, ~TORD, ~ORB, ~DRB, ~`3P%`, ~`3P%D`, ~`Adj T.`,
@@ -47,6 +55,11 @@ make_fixture_team_features <- function(current_year = 2025, history_years = 2022
         dplyr::arrange(Year, Region, Seed, Team)
 }
 
+#' Score a fixture team row for deterministic winner selection
+#'
+#' @param team_row A one-row team feature tibble.
+#'
+#' @return A numeric strength score.
 fixture_team_score <- function(team_row) {
     safe_numeric(team_row$barthag_logit) +
         (safe_numeric(team_row$AdjOE) / 10) -
@@ -106,6 +119,16 @@ make_fixture_matchup_scores <- function(team_a, team_b, winner, round_name, matc
     }
 }
 
+#' Pick a deterministic fixture winner for a matchup
+#'
+#' @param team_a A one-row team feature tibble for team A.
+#' @param team_b A one-row team feature tibble for team B.
+#' @param year Season year used to seed deterministic variation.
+#' @param round_name The round label for the matchup.
+#' @param region Region label used to seed deterministic variation.
+#' @param matchup_number The matchup number within the round.
+#'
+#' @return The winning one-row team tibble.
 pick_fixture_winner <- function(team_a, team_b, year, round_name, region, matchup_number) {
     score_a <- fixture_team_score(team_a)
     score_b <- fixture_team_score(team_b)
@@ -120,7 +143,14 @@ pick_fixture_winner <- function(team_a, team_b, year, round_name, region, matchu
     }
 }
 
+#' Build deterministic historical game results for tests
+#'
+#' @param team_features A fixture team-feature tibble.
+#' @param history_years Historical seasons to materialize.
+#'
+#' @return A tibble of synthetic completed tournament games.
 make_fixture_game_results <- function(team_features, history_years = 2022:2024) {
+    # Simulate one region from First Four through Elite 8.
     build_region_results <- function(region_teams, year, region_name) {
         results <- list()
         survivors <- region_teams
@@ -198,6 +228,7 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
         )
     }
 
+    # Combine the four regions with Final Four and championship results.
     build_year_results <- function(year) {
         year_teams <- team_features %>%
             dplyr::filter(Year == as.character(year))
@@ -270,10 +301,17 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
     purrr::map_dfr(history_years, build_year_results)
 }
 
+#' Build a partial current-year results table for live-scoring tests
+#'
+#' @param team_features A fixture team-feature tibble.
+#' @param current_year Current bracket year to materialize.
+#'
+#' @return A tibble of current-year completed games.
 make_fixture_current_year_completed_results <- function(team_features, current_year = 2025) {
     current_teams <- team_features %>%
         dplyr::filter(Year == as.character(current_year))
 
+    # Stamp a completed-game row with deterministic winner and score data.
     build_result_row <- function(team_a, team_b, round_name, region_name, game_index, completed_at) {
         winner <- pick_fixture_winner(team_a, team_b, current_year, round_name, region_name, game_index)
         matchup_scores <- make_fixture_matchup_scores(team_a, team_b, winner, round_name, game_index)
@@ -322,6 +360,14 @@ make_fixture_current_year_completed_results <- function(team_features, current_y
     )
 }
 
+#' Write fixture team and result workbooks for tests
+#'
+#' @param team_path Output path for the team workbook.
+#' @param results_path Output path for the results workbook.
+#' @param team_data Optional fixture team-feature tibble.
+#' @param results_data Optional fixture results tibble.
+#'
+#' @return A named list with the written workbook paths.
 write_fixture_data_files <- function(team_path, results_path, team_data = NULL, results_data = NULL) {
     team_data <- team_data %||% make_fixture_team_features()
     results_data <- results_data %||% make_fixture_game_results(team_data)
@@ -332,11 +378,21 @@ write_fixture_data_files <- function(team_path, results_path, team_data = NULL, 
     list(team_path = team_path, results_path = results_path)
 }
 
+#' Build conference assignments from fixture team data
+#'
+#' @param team_features A fixture team-feature tibble.
+#'
+#' @return A compact conference-assignment tibble.
 make_fixture_conf_assignments <- function(team_features) {
     team_features %>%
         dplyr::select(Year, Team, Seed, Region, Conf)
 }
 
+#' Build BART rating inputs from fixture team data
+#'
+#' @param team_features A fixture team-feature tibble.
+#'
+#' @return A tibble containing the rating columns used by BART tests.
 make_fixture_bart_ratings <- function(team_features) {
     team_features %>%
         dplyr::select(
@@ -357,6 +413,11 @@ make_fixture_bart_ratings <- function(team_features) {
         )
 }
 
+#' Apply parser alias remaps to fixture results
+#'
+#' @param results_data A fixture results tibble.
+#'
+#' @return The results tibble with parser-compatible team-name aliases.
 apply_fixture_result_aliases <- function(results_data) {
     alias_map <- c(
         "North Carolina" = "UNC",
@@ -375,6 +436,7 @@ apply_fixture_result_aliases <- function(results_data) {
         "Saint Francis" = "Saint Francis (PA)"
     )
 
+    # Mirror the parser's preferred aliases when generating fixture winners.
     remap_name <- function(x) {
         mapped <- alias_map[x]
         dplyr::coalesce(unname(mapped), x)
@@ -388,11 +450,18 @@ apply_fixture_result_aliases <- function(results_data) {
         )
 }
 
+#' Build synthetic parser input lines for a tournament year
+#'
+#' @param year Tournament year to emulate.
+#'
+#' @return A character vector of parser input lines.
 make_parser_fixture_lines <- function(year = 2025L) {
+    # Format one completed-game line in the parser's bracket text style.
     build_game_line <- function(seed_a, team_a, score_a, seed_b, team_b, score_b) {
         sprintf("(%s) %s %s, (%s) %s %s", seed_a, team_a, score_a, seed_b, team_b, score_b)
     }
 
+    # Add a trailing champion line that is not attached to a box score.
     build_orphan_team_line <- function(seed, team_name) {
         sprintf("team %s %s", seed, team_name)
     }

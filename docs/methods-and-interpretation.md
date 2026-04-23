@@ -48,7 +48,7 @@ The project is matchup-based. It does not fit a team-level "who wins the title?"
 
 The core winner model and championship total-points model do not require betting inputs. On `master`, betting-line experimentation is not part of the supported workflow.
 Current-year monitoring outcomes are deliberately separated from prediction-time inputs: only First Four results affect bracket-path resolution, while completed Round of 64+ games are used for live evaluation and commentary only.
-Runtime files whose names start with `betting_`, legacy PNGs, old RDS bundles, and other non-manifest artifacts are scratch outputs unless they are explicitly listed by `release_deliverable_manifest()`.
+Runtime artifacts that are not explicitly listed by `release_deliverable_manifest()` are scratch outputs rather than part of the release contract.
 
 ## Betting Status
 
@@ -62,10 +62,10 @@ The canonical data refresh in `update_tournament_data()` pulls from these source
 
 | Canonical output | Function | Source | URL pattern | Purpose |
 | --- | --- | --- | --- | --- |
-| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` | `scrape_bart_data()` | Bart Torvik season ratings | `https://barttorvik.com/?year={year}&...` | Pre-tournament team metrics |
-| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx` | `scrape_conf_assignments()` | Bart Torvik Tourney Time | `https://barttorvik.com/tourneytime.php?year={year}&sort=7&conlimit=All` | Tournament field, seeds, regions, conferences |
-| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` | `scrape_tournament_results()` | Sports-Reference NCAA bracket page | `https://www.sports-reference.com/cbb/postseason/men/{year}-ncaa.html` | Historical completed tournament game results and scores |
-| `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx` | `scrape_espn_tournament_results()` | ESPN scoreboard API | `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?...` | Current-year completed-game fallback when Sports-Reference is incomplete |
+| `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_bart_data()` | Bart Torvik season ratings | `https://barttorvik.com/?year={year}&...` | Pre-tournament team metrics |
+| `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_conf_assignments()` | Bart Torvik Tourney Time | `https://barttorvik.com/tourneytime.php?year={year}&sort=7&conlimit=All` | Tournament field, seeds, regions, conferences |
+| `data/tournament_game_results.xlsx` under the configured synced project home | `scrape_tournament_results()` | Sports-Reference NCAA bracket page | `https://www.sports-reference.com/cbb/postseason/men/{year}-ncaa.html` | Historical completed tournament game results and scores |
+| `data/tournament_game_results.xlsx` under the configured synced project home | `scrape_espn_tournament_results()` | ESPN scoreboard API | `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?...` | Current-year completed-game fallback when Sports-Reference is incomplete |
 
 Bart Torvik remains the pre-tournament source for team features and tournament-field construction. Completed current-year tournament outcomes are allowed in the canonical results workbook for live monitoring, but they are not fed back into the current bracket fit or the pre-tournament matchup features. Only current-year First Four results affect bracket-path resolution.
 
@@ -73,8 +73,8 @@ Bart Torvik remains the pre-tournament source for team features and tournament-f
 
 The refresh writes exactly two canonical files:
 
-- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx`
-- `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx`
+- `data/pre_tournament_team_features.xlsx` under the configured synced project home
+- `data/tournament_game_results.xlsx` under the configured synced project home
 
 Those two files are the only data inputs used by the active modeling runtime.
 
