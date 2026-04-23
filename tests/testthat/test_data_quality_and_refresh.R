@@ -273,6 +273,21 @@ test_that("year-wide Bart join fails fast when ratings miss tournament teams", {
     )
 })
 
+test_that("historical roster rows inherit conference labels from Bart ratings", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    historical_roster <- make_fixture_conf_assignments(team_data) %>%
+        dplyr::mutate(Conf = NA_character_)
+    bart_ratings <- make_fixture_bart_ratings(team_data)
+
+    built <- build_team_feature_dataset(bart_ratings, historical_roster)
+
+    expect_false(any(is.na(built$Conf)))
+    expect_equal(
+        built %>% dplyr::arrange(Year, Region, Seed, Team) %>% dplyr::pull(Conf),
+        team_data %>% dplyr::arrange(Year, Region, Seed, Team) %>% dplyr::pull(Conf)
+    )
+})
+
 test_that("year-wide Bart join fails fast on duplicate rating rows", {
     team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
     conf_assignments <- make_fixture_conf_assignments(team_data)
@@ -321,6 +336,20 @@ test_that("parser keeps national 1-seed games out of First Four for affected yea
         expect_equal(sum(parsed$region == "National" & parsed$round == "Championship"), 1)
         expect_true(all(c("teamA_score", "teamB_score", "total_points") %in% names(parsed)))
         expect_true(all(parsed$total_points == parsed$teamA_score + parsed$teamB_score))
+    }
+})
+
+test_that("historical Sports-Reference roster parsing yields canonical 68-team fields", {
+    for (year in c(2018L, 2021L, 2024L, 2025L)) {
+        parsed <- parse_historical_tournament_roster_lines(make_parser_fixture_lines(year), year)
+        duplicate_slots <- parsed %>%
+            dplyr::count(Year, Region, Seed, name = "n") %>%
+            dplyr::filter(n == 2L)
+
+        expect_equal(nrow(parsed), 68L)
+        expect_true(all(parsed$Region %in% c("East", "Midwest", "South", "West")))
+        expect_equal(nrow(duplicate_slots), 4L)
+        expect_true(all(is.na(parsed$Conf)))
     }
 })
 
@@ -455,6 +484,9 @@ test_that("update_tournament_data returns success when refresh sources complete 
         scrape_bart_data = function(year) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
+        scrape_historical_tournament_roster = function(year) {
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
         scrape_conf_assignments = function(year) {
             conf_assignments %>% dplyr::filter(Year == as.character(year))
         },
@@ -496,6 +528,9 @@ test_that("update_tournament_data returns degraded success for optional fallback
     testthat::local_mocked_bindings(
         scrape_bart_data = function(year) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_historical_tournament_roster = function(year) {
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
         },
         scrape_conf_assignments = function(year) {
             conf_assignments %>% dplyr::filter(Year == as.character(year))
@@ -551,7 +586,8 @@ test_that("update_tournament_data reuses complete historical years, refreshes in
     )
 
     scraped_bart_years <- integer()
-    scraped_roster_years <- integer()
+    scraped_historical_roster_years <- integer()
+    scraped_current_roster_years <- integer()
     scraped_result_years <- integer()
 
     testthat::local_mocked_bindings(
@@ -559,8 +595,12 @@ test_that("update_tournament_data reuses complete historical years, refreshes in
             scraped_bart_years <<- c(scraped_bart_years, year)
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
+        scrape_historical_tournament_roster = function(year) {
+            scraped_historical_roster_years <<- c(scraped_historical_roster_years, year)
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
         scrape_conf_assignments = function(year) {
-            scraped_roster_years <<- c(scraped_roster_years, year)
+            scraped_current_roster_years <<- c(scraped_current_roster_years, year)
             conf_assignments %>% dplyr::filter(Year == as.character(year))
         },
         scrape_tournament_results = function(year) {
@@ -578,7 +618,8 @@ test_that("update_tournament_data reuses complete historical years, refreshes in
     )
 
     expect_identical(sort(unique(scraped_bart_years)), c(2018L, 2019L))
-    expect_identical(sort(unique(scraped_roster_years)), c(2018L, 2019L))
+    expect_identical(sort(unique(scraped_historical_roster_years)), 2018L)
+    expect_identical(sort(unique(scraped_current_roster_years)), 2019L)
     expect_identical(sort(unique(scraped_result_years)), 2018L)
     expect_true(file.exists(result$team_features))
     expect_true(file.exists(result$game_results))
@@ -631,18 +672,17 @@ test_that("update_tournament_data returns blocked without rewrite when a require
     )
 
     # Simulate a year where roster scraping only returns a structured warning.
-    failed_conf_assignment <- function(year) {
+    failed_historical_roster <- function(year) {
         conf_tbl <- conf_assignments %>%
             dplyr::filter(Year == as.character(year)) %>%
             dplyr::slice(0)
         attr(conf_tbl, "refresh_issues") <- append_refresh_issue(
             empty_refresh_issues_table(),
-            step = "conference_assignments",
-            source = "Bart Torvik Tourney Time",
+            step = "historical_tournament_roster",
+            source = "Sports-Reference postseason page",
             severity = "warning",
             message = sprintf(
-                "Skipping conference assignments for year %s: Could not pass browser verification for https://barttorvik.com/tourneytime.php?year=%s&sort=7&conlimit=All",
-                year,
+                "Skipping historical tournament roster for year %s: Sports-Reference parser failed",
                 year
             )
         )
@@ -653,10 +693,13 @@ test_that("update_tournament_data returns blocked without rewrite when a require
         scrape_bart_data = function(year) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
-        scrape_conf_assignments = function(year) {
+        scrape_historical_tournament_roster = function(year) {
             if (year %in% c(2016L, 2017L)) {
-                return(failed_conf_assignment(year))
+                return(failed_historical_roster(year))
             }
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_conf_assignments = function(year) {
             conf_assignments %>% dplyr::filter(Year == as.character(year))
         },
         scrape_tournament_results = function(year) {
@@ -680,11 +723,11 @@ test_that("update_tournament_data returns blocked without rewrite when a require
     expect_identical(result$status, "blocked")
     expect_true(any(result$warning_summary$step == "required_refresh_years_unavailable"))
     expect_equal(result$blocked_years$Year, c("2016", "2017"))
-    expect_equal(result$blocked_years$first_missing_stage, c("conference_assignments", "conference_assignments"))
+    expect_equal(result$blocked_years$first_missing_stage, c("historical_tournament_roster", "historical_tournament_roster"))
 
     summary_lines <- format_refresh_status_summary(result, log_path = NULL)
     expect_true(any(grepl("^Refresh status: Blocked$", summary_lines)))
-    expect_true(any(grepl("^- Blocked required years: 2016 \\(conference_assignments\\), 2017 \\(conference_assignments\\)$", summary_lines)))
+    expect_true(any(grepl("^- Blocked required years: 2016 \\(historical_tournament_roster\\), 2017 \\(historical_tournament_roster\\)$", summary_lines)))
 
     written_team_data <- readxl::read_excel(team_file)
     written_results <- readxl::read_excel(results_file)
@@ -719,18 +762,17 @@ test_that("update_tournament_data writes available years when the configured his
     )
 
     # Simulate a partial-window miss that should degrade rather than block.
-    failed_conf_assignment <- function(year) {
+    failed_historical_roster <- function(year) {
         conf_tbl <- conf_assignments %>%
             dplyr::filter(Year == as.character(year)) %>%
             dplyr::slice(0)
         attr(conf_tbl, "refresh_issues") <- append_refresh_issue(
             empty_refresh_issues_table(),
-            step = "conference_assignments",
-            source = "Bart Torvik Tourney Time",
+            step = "historical_tournament_roster",
+            source = "Sports-Reference postseason page",
             severity = "warning",
             message = sprintf(
-                "Skipping conference assignments for year %s: Could not pass browser verification for https://barttorvik.com/tourneytime.php?year=%s&sort=7&conlimit=All",
-                year,
+                "Skipping historical tournament roster for year %s: Sports-Reference parser failed",
                 year
             )
         )
@@ -741,10 +783,13 @@ test_that("update_tournament_data writes available years when the configured his
         scrape_bart_data = function(year) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
-        scrape_conf_assignments = function(year) {
+        scrape_historical_tournament_roster = function(year) {
             if (year == 2016L) {
-                return(failed_conf_assignment(year))
+                return(failed_historical_roster(year))
             }
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_conf_assignments = function(year) {
             conf_assignments %>% dplyr::filter(Year == as.character(year))
         },
         scrape_tournament_results = function(year) {
@@ -771,7 +816,7 @@ test_that("update_tournament_data writes available years when the configured his
 
     summary_lines <- format_refresh_status_summary(result, log_path = NULL)
     expect_true(any(grepl("^Refresh status: Degraded success$", summary_lines)))
-    expect_true(any(grepl("^- Omitted years: 2016 \\(conference_assignments\\)$", summary_lines)))
+    expect_true(any(grepl("^- Omitted years: 2016 \\(historical_tournament_roster\\)$", summary_lines)))
     expect_true(any(grepl("historical_window_shortfall", result$warning_summary$step, fixed = TRUE)))
 })
 
@@ -790,6 +835,9 @@ test_that("update_tournament_data degrades when current-year fallback is empty b
     testthat::local_mocked_bindings(
         scrape_bart_data = function(year) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
+        },
+        scrape_historical_tournament_roster = function(year) {
+            conf_assignments %>% dplyr::filter(Year == as.character(year))
         },
         scrape_conf_assignments = function(year) {
             conf_assignments %>% dplyr::filter(Year == as.character(year))

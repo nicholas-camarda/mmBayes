@@ -62,12 +62,13 @@ The canonical data refresh in `update_tournament_data()` pulls from these source
 
 | Canonical output | Function | Source | URL pattern | Purpose |
 | --- | --- | --- | --- | --- |
-| `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_bart_data()` | Bart Torvik season ratings | `https://barttorvik.com/?year={year}&...` | Pre-tournament team metrics |
-| `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_conf_assignments()` | Bart Torvik Tourney Time | `https://barttorvik.com/tourneytime.php?year={year}&sort=7&conlimit=All` | Tournament field, seeds, regions, conferences |
+| `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_bart_data()` | Bart Torvik season ratings | `https://barttorvik.com/?year={year}&...` | Pre-tournament team metrics and conference labels |
+| `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_historical_tournament_roster()` | Sports-Reference NCAA bracket page | `https://www.sports-reference.com/cbb/postseason/men/{year}-ncaa.html` | Completed historical tournament field, seeds, and regions |
+| `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_conf_assignments()` | Bart Torvik Tourney Time | `https://barttorvik.com/tourneytime.php?year={year}&sort=7&conlimit=All` | Current bracket-year tournament field, seeds, regions, conferences |
 | `data/tournament_game_results.xlsx` under the configured synced project home | `scrape_tournament_results()` | Sports-Reference NCAA bracket page | `https://www.sports-reference.com/cbb/postseason/men/{year}-ncaa.html` | Historical completed tournament game results and scores |
 | `data/tournament_game_results.xlsx` under the configured synced project home | `scrape_espn_tournament_results()` | ESPN scoreboard API | `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?...` | Current-year completed-game fallback when Sports-Reference is incomplete |
 
-Bart Torvik remains the pre-tournament source for team features and tournament-field construction. Completed current-year tournament outcomes are allowed in the canonical results workbook for live monitoring, but they are not fed back into the current bracket fit or the pre-tournament matchup features. Only current-year First Four results affect bracket-path resolution.
+Bart Torvik is the pre-tournament metrics source. Completed historical tournament-field construction comes from Sports-Reference, while the current bracket-year field still comes from Bart Torvik Tourney Time. Completed current-year tournament outcomes are allowed in the canonical results workbook for live monitoring, but they are not fed back into the current bracket fit or the pre-tournament matchup features. Only current-year First Four results affect bracket-path resolution.
 
 ### What gets written to disk
 

@@ -3,8 +3,8 @@
 ### Requirement: Historical refresh runs SHALL emit year-scoped evidence
 The data refresh workflow SHALL produce year-scoped evidence that identifies which historical years were intended, which years refreshed successfully, which years were omitted, and the first stage where omission occurred.
 
-#### Scenario: A browser-verification failure is traceable by year
-- **WHEN** `update_data` refreshes a historical season and Bart Torvik conference-assignment scraping fails browser verification for one or more years
+#### Scenario: A historical roster-source failure is traceable by year
+- **WHEN** `update_data` refreshes a historical season and historical roster extraction fails for one or more years
 - **THEN** the refresh evidence SHALL identify the affected year numbers
 - **THEN** the refresh evidence SHALL identify the stage where each affected year stopped progressing
 - **THEN** later years in the requested range SHALL still be accounted for in the same evidence trail
@@ -21,8 +21,8 @@ The refresh workflow SHALL make it possible to determine whether a missing histo
 ### Requirement: Roster-join omission SHALL be observable
 The refresh pipeline SHALL surface whether historical years disappear during roster ingestion or during `build_team_feature_dataset()` rather than silently reducing the canonical dataset.
 
-#### Scenario: Missing roster data affects feature construction
-- **WHEN** a historical year has Bart ratings but no usable tournament roster or conference-assignment data
+#### Scenario: Missing historical roster data affects feature construction
+- **WHEN** a historical year has Bart ratings but no usable historical roster data from the configured roster source
 - **THEN** the refresh evidence SHALL show whether that year reached feature construction
 - **THEN** the evidence SHALL show whether the year contributed rows to the canonical team-feature dataset
 

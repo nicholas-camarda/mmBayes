@@ -399,6 +399,7 @@ make_fixture_bart_ratings <- function(team_features) {
             Year,
             Team,
             Seed,
+            Conf,
             Barthag,
             AdjOE,
             AdjDE,
@@ -456,84 +457,60 @@ apply_fixture_result_aliases <- function(results_data) {
 #'
 #' @return A character vector of parser input lines.
 make_parser_fixture_lines <- function(year = 2025L) {
-    # Format one completed-game line in the parser's bracket text style.
-    build_game_line <- function(seed_a, team_a, score_a, seed_b, team_b, score_b) {
-        sprintf("(%s) %s %s, (%s) %s %s", seed_a, team_a, score_a, seed_b, team_b, score_b)
-    }
-
-    # Add a trailing champion line that is not attached to a box score.
-    build_orphan_team_line <- function(seed, team_name) {
-        sprintf("team %s %s", seed, team_name)
-    }
-
-    parser_regions <- c("East", "Midwest", "South", "West")
-    play_in_specs_by_year <- list(
-        `2018` = list(East = c(16L, 11L), Midwest = c(16L), South = integer(), West = c(11L)),
-        `2021` = list(East = c(16L, 11L), Midwest = integer(), South = integer(), West = c(16L, 11L)),
-        `2024` = list(East = integer(), Midwest = c(16L), South = c(10L), West = c(16L, 11L)),
-        `2025` = list(East = c(16L), Midwest = c(11L), South = c(11L, 16L), West = integer())
-    )
-    play_in_specs <- play_in_specs_by_year[[as.character(year)]] %||%
-        list(East = c(16L), Midwest = c(16L), South = c(11L), West = c(11L))
-
-    regional_sections <- purrr::imap(
-        parser_regions,
-        function(region_name, region_index) {
-            play_in_lines <- play_in_specs[[region_name]]
-            counter_lines <- purrr::map_chr(seq_len(15), function(counter) {
-                if (counter <= 8) {
-                    seed_a <- c(1, 8, 5, 4, 6, 3, 7, 2)[counter]
-                    seed_b <- c(16, 9, 12, 13, 11, 14, 10, 15)[counter]
-                } else if (counter <= 12) {
-                    seed_a <- c(1, 5, 6, 7)[counter - 8]
-                    seed_b <- c(8, 4, 3, 2)[counter - 8]
-                } else if (counter <= 14) {
-                    seed_a <- c(1, 6)[counter - 12]
-                    seed_b <- c(4, 2)[counter - 12]
-                } else {
-                    seed_a <- 1
-                    seed_b <- 2
-                }
-
-                team_a <- sprintf("%s_%sA_%02d", region_name, counter, year)
-                team_b <- sprintf("%s_%sB_%02d", region_name, counter, year)
-                score_a <- 80 + region_index + counter
-                score_b <- 60 + region_index + counter
-                build_game_line(seed_a, team_a, score_a, seed_b, team_b, score_b)
-            })
-
-            first_four_block <- character()
-            if (length(play_in_lines) > 0) {
-                first_four_block <- c(
-                    sprintf("%s First Four", region_name),
-                    purrr::map_chr(seq_along(play_in_lines), function(idx) {
-                        build_game_line(
-                            play_in_lines[[idx]],
-                            sprintf("%s_PlayIn_%sA_%s", region_name, idx, year),
-                            70 + region_index + idx,
-                            play_in_lines[[idx]],
-                            sprintf("%s_PlayIn_%sB_%s", region_name, idx, year),
-                            63 + region_index + idx
-                        )
-                    })
+    build_game_lines <- function(game_rows) {
+        game_rows %>%
+            dplyr::transmute(
+                line = sprintf(
+                    "(%s) %s %s, (%s) %s %s",
+                    teamA_seed,
+                    teamA,
+                    teamA_score,
+                    teamB_seed,
+                    teamB,
+                    teamB_score
                 )
-            }
+            ) %>%
+            dplyr::pull(line)
+    }
+
+    year_chr <- as.character(year)
+    team_data <- make_fixture_team_features(current_year = year, history_years = integer())
+    results_data <- make_fixture_game_results(team_data, history_years = year) %>%
+        dplyr::filter(Year == year_chr)
+
+    regional_sections <- purrr::map(
+        c("East", "Midwest", "South", "West"),
+        function(region_name) {
+            first_four_games <- results_data %>%
+                dplyr::filter(region == region_name, round == "First Four") %>%
+                dplyr::arrange(game_index)
+            round_games <- results_data %>%
+                dplyr::filter(region == region_name, round %in% c("Round of 64", "Round of 32", "Sweet 16", "Elite 8")) %>%
+                dplyr::arrange(
+                    match(round, c("Round of 64", "Round of 32", "Sweet 16", "Elite 8")),
+                    game_index
+                )
 
             c(
-                first_four_block,
-                counter_lines,
-                build_orphan_team_line(1L, sprintf("%s_Champion_%s", region_name, year))
+                if (nrow(first_four_games) > 0) c(
+                    sprintf("%s First Four", region_name),
+                    build_game_lines(first_four_games)
+                ) else character(),
+                build_game_lines(round_games)
             )
         }
     )
 
+    national_lines <- results_data %>%
+        dplyr::filter(region == "National") %>%
+        dplyr::arrange(match(round, c("Final Four", "Championship")), game_index) %>%
+        build_game_lines()
+
     c(
-        parser_regions,
+        c("East", "Midwest", "South", "West"),
         "National",
         unlist(regional_sections, use.names = FALSE),
         "National",
-        build_game_line(1, sprintf("National_Semi_1A_%s", year), 71, 1, sprintf("National_Semi_1B_%s", year), 67),
-        build_game_line(1, sprintf("National_Semi_2A_%s", year), 75, 1, sprintf("National_Semi_2B_%s", year), 70),
-        build_game_line(1, sprintf("National_Title_A_%s", year), 69, 1, sprintf("National_Title_B_%s", year), 64)
+        national_lines
     )
 }

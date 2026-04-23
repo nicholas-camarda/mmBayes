@@ -311,7 +311,7 @@ build_refresh_forensics <- function(intended_years,
                     pre_team_feature_rows,
                     pre_result_rows,
                     bart_rating_rows,
-                    conference_assignment_rows,
+                    roster_rows,
                     team_feature_rows,
                     post_result_rows
                 ),
@@ -321,7 +321,8 @@ build_refresh_forensics <- function(intended_years,
             completed_year = Year %in% completed_years,
             first_missing_stage = dplyr::case_when(
                 intended_year & team_feature_rows == 0L & bart_rating_rows == 0L ~ "bart_ratings",
-                intended_year & team_feature_rows == 0L & conference_assignment_rows == 0L ~ "conference_assignments",
+                completed_year & team_feature_rows == 0L & roster_rows == 0L ~ "historical_tournament_roster",
+                intended_year & !completed_year & team_feature_rows == 0L & roster_rows == 0L ~ "conference_assignments",
                 intended_year & team_feature_rows == 0L ~ "team_features",
                 completed_year & post_result_rows == 0L ~ "completed_results",
                 TRUE ~ NA_character_
@@ -717,6 +718,7 @@ scrape_bart_data <- function(year) {
         dplyr::mutate(
             Year = as.character(year),
             raw_team = as.character(Team),
+            Conf = dplyr::na_if(stringr::str_squish(as.character(Conf)), ""),
             Seed = suppressWarnings(as.integer(stringr::str_match(raw_team, "\\b(\\d{1,2})\\s*seed\\b")[, 2])),
             Rk = suppressWarnings(as.numeric(Rk)),
             G = suppressWarnings(as.numeric(G)),
@@ -739,6 +741,7 @@ scrape_bart_data <- function(year) {
             Team,
             team_key,
             Seed,
+            Conf,
             Barthag,
             AdjOE,
             AdjDE,
@@ -891,6 +894,7 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
                     Year,
                     team_key,
                     Seed,
+                    Conf,
                     Barthag,
                     AdjOE,
                     AdjDE,
@@ -906,11 +910,12 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
             by = c("Year", "team_key")
         ) %>%
         dplyr::mutate(
-            Seed = dplyr::coalesce(Seed.x, Seed.y)
+            Seed = dplyr::coalesce(Seed.x, Seed.y),
+            Conf = dplyr::na_if(dplyr::coalesce(Conf.x, Conf.y), "")
         )
 
     unresolved_roster <- joined %>%
-        dplyr::filter(dplyr::if_any(c(Barthag, AdjOE, AdjDE, WAB, TOR, TORD, ORB, DRB, `3P%`, `3P%D`, `Adj T.`), is.na)) %>%
+        dplyr::filter(dplyr::if_any(c(Conf, Barthag, AdjOE, AdjDE, WAB, TOR, TORD, ORB, DRB, `3P%`, `3P%D`, `Adj T.`), is.na)) %>%
         dplyr::distinct(Year, Team)
     if (nrow(unresolved_roster) > 0) {
         stop_with_message(
@@ -1045,15 +1050,50 @@ parse_tournament_team_name_line <- function(line) {
     )
 }
 
-#' Parse tournament bracket text into explicit game results
+#' Read Sports-Reference tournament page text lines
+#'
+#' @param year The tournament year to read.
+#' @param allow_empty Whether to allow an unavailable page to return `NULL`.
+#'
+#' @return A character vector of page text lines, or `NULL` when allowed and the
+#'   page is unavailable.
+#' @keywords internal
+read_sports_reference_page_lines <- function(year, allow_empty = FALSE) {
+    url <- sprintf("https://www.sports-reference.com/cbb/postseason/men/%s-ncaa.html", year)
+    logger::log_info("Scraping Sports-Reference tournament page from {url}")
+
+    page_text <- tryCatch(
+        {
+            response <- httr::GET(url, httr::user_agent("mmBayes/1.0"))
+            httr::stop_for_status(response)
+            httr::content(response, as = "text", encoding = "UTF-8")
+        },
+        error = function(err) {
+            if (!isTRUE(allow_empty)) {
+                stop(err)
+            }
+            logger::log_warn("Sports-Reference tournament page for {year} was unavailable: {conditionMessage(err)}")
+            return(NULL)
+        }
+    )
+    if (is.null(page_text)) {
+        return(NULL)
+    }
+
+    page_text %>%
+        stringr::str_split("\\n", simplify = FALSE) %>%
+        purrr::pluck(1)
+}
+
+#' Parse tournament bracket text into explicit game rows
 #'
 #' @param lines A character vector of bracket text lines.
 #' @param year The tournament year represented by `lines`.
 #'
-#' @return A game-level results table including region, round, teams, scores,
-#'   total points, and winner.
+#' @return A game-level table including bracket metadata, teams, scores, and
+#'   winner.
 #' @keywords internal
-parse_tournament_results_lines <- function(lines, year) {
+parse_tournament_bracket_games <- function(lines, year) {
     lines <- lines %>%
         stringr::str_trim() %>%
         .[nzchar(.)]
@@ -1142,6 +1182,7 @@ parse_tournament_results_lines <- function(lines, year) {
                 dplyr::mutate(
                     Year = as.character(year),
                     region = "First Four",
+                    play_in_region = current_first_four_region,
                     round = "First Four",
                     game_index = first_four_counter,
                     winner = ifelse(teamA_score > teamB_score, teamA, teamB)
@@ -1168,6 +1209,7 @@ parse_tournament_results_lines <- function(lines, year) {
                 dplyr::mutate(
                     Year = as.character(year),
                     region = current_region,
+                    play_in_region = NA_character_,
                     round = round_name,
                     game_index = round_game_index,
                     winner = ifelse(teamA_score > teamB_score, teamA, teamB)
@@ -1184,13 +1226,89 @@ parse_tournament_results_lines <- function(lines, year) {
             dplyr::mutate(
                 Year = as.character(year),
                 region = "National",
+                play_in_region = NA_character_,
                 round = results_round_label("National", national_counter),
                 game_index = ifelse(national_counter <= 2L, national_counter, 1L),
                 winner = ifelse(teamA_score > teamB_score, teamA, teamB)
             )
     }
 
-    final_results <- dplyr::bind_rows(results) %>%
+    parsed_games <- dplyr::bind_rows(results) %>%
+        dplyr::select(
+            Year,
+            region,
+            play_in_region,
+            round,
+            game_index,
+            teamA,
+            teamB,
+            teamA_seed,
+            teamB_seed,
+            teamA_score,
+            teamB_score,
+            winner
+        )
+
+    if (nrow(parsed_games) == 0) {
+        stop_with_message(sprintf("No tournament results parsed for year %s", year))
+    }
+
+    parsed_games
+}
+
+#' Parse historical Sports-Reference bracket text into canonical roster rows
+#'
+#' @param lines A character vector of bracket text lines.
+#' @param year The tournament year represented by `lines`.
+#'
+#' @return A canonical roster table with year, team, seed, region, and `Conf`.
+#' @keywords internal
+parse_historical_tournament_roster_lines <- function(lines, year) {
+    parsed_games <- parse_tournament_bracket_games(lines, year)
+
+    unresolved_first_four <- parsed_games %>%
+        dplyr::filter(region == "First Four", is.na(play_in_region))
+    if (nrow(unresolved_first_four) > 0) {
+        stop_with_message(
+            sprintf("Historical First Four games were missing region assignments for year %s", year)
+        )
+    }
+
+    roster <- dplyr::bind_rows(
+        parsed_games %>%
+            dplyr::transmute(
+                Year,
+                Team = teamA,
+                Seed = teamA_seed,
+                Region = dplyr::if_else(region == "First Four", play_in_region, region),
+                Conf = NA_character_
+            ),
+        parsed_games %>%
+            dplyr::transmute(
+                Year,
+                Team = teamB,
+                Seed = teamB_seed,
+                Region = dplyr::if_else(region == "First Four", play_in_region, region),
+                Conf = NA_character_
+            )
+    ) %>%
+        dplyr::filter(Region %in% c("East", "Midwest", "South", "West")) %>%
+        dplyr::distinct(Year, Team, Seed, Region, .keep_all = TRUE) %>%
+        dplyr::arrange(suppressWarnings(as.integer(Year)), Region, Seed, Team)
+
+    validate_tournament_roster(roster, require_seed = TRUE)
+}
+
+#' Parse tournament bracket text into explicit game results
+#'
+#' @param lines A character vector of bracket text lines.
+#' @param year The tournament year represented by `lines`.
+#'
+#' @return A game-level results table including region, round, teams, scores,
+#'   total points, and winner.
+#' @keywords internal
+parse_tournament_results_lines <- function(lines, year) {
+    parse_tournament_bracket_games(lines, year) %>%
         dplyr::mutate(
             total_points = teamA_score + teamB_score
         ) %>%
@@ -1208,12 +1326,49 @@ parse_tournament_results_lines <- function(lines, year) {
             total_points,
             winner
         )
+}
 
-    if (nrow(final_results) == 0) {
-        stop_with_message(sprintf("No tournament results parsed for year %s", year))
-    }
+#' Scrape explicit tournament game results
+#'
+#' @param year The tournament year to scrape.
+#'
+#' @return A canonical historical roster table derived from the Sports-Reference
+#'   postseason page. Refresh issues are attached via the `refresh_issues`
+#'   attribute when the source cannot be parsed.
+#' @keywords internal
+scrape_historical_tournament_roster <- function(year) {
+    refresh_issues <- empty_refresh_issues_table()
+    roster <- tryCatch(
+        {
+            lines <- read_sports_reference_page_lines(year, allow_empty = FALSE)
+            parse_historical_tournament_roster_lines(lines, year)
+        },
+        error = function(err) {
+            issue_message <- sprintf(
+                "Skipping historical tournament roster for year %s: %s",
+                year,
+                err$message
+            )
+            logger::log_warn(issue_message)
+            refresh_issues <<- append_refresh_issue(
+                refresh_issues,
+                step = "historical_tournament_roster",
+                source = "Sports-Reference postseason page",
+                severity = "warning",
+                message = issue_message
+            )
+            tibble::tibble(
+                Year = character(),
+                Team = character(),
+                Seed = integer(),
+                Region = character(),
+                Conf = character()
+            )
+        }
+    )
 
-    final_results
+    attr(roster, "refresh_issues") <- refresh_issues
+    roster
 }
 
 #' Scrape explicit tournament game results
@@ -1226,27 +1381,10 @@ parse_tournament_results_lines <- function(lines, year) {
 #'   total points, and winner.
 #' @keywords internal
 scrape_tournament_results <- function(year, allow_empty = FALSE) {
-    url <- sprintf("https://www.sports-reference.com/cbb/postseason/men/%s-ncaa.html", year)
-    logger::log_info("Scraping tournament results from {url}")
-
-    page_text <- tryCatch(
-        rvest::read_html(url) %>%
-            rvest::html_text2(),
-        error = function(err) {
-            if (!isTRUE(allow_empty)) {
-                stop(err)
-            }
-            logger::log_warn("Current-year results page for {year} was unavailable: {conditionMessage(err)}")
-            return(NULL)
-        }
-    )
-    if (is.null(page_text)) {
+    lines <- read_sports_reference_page_lines(year, allow_empty = allow_empty)
+    if (is.null(lines)) {
         return(empty_game_results_table())
     }
-
-    lines <- page_text %>%
-        stringr::str_split("\\n", simplify = FALSE) %>%
-        purrr::pluck(1)
 
     parsed_results <- tryCatch(
         parse_tournament_results_lines(lines, year),
@@ -1858,16 +1996,23 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
     })
     bart_counts <- count_rows_by_year(bart_data, count_name = "bart_rating_rows")
 
-    conf_assignments <- purrr::map_dfr(scrape_years, function(year) {
+    historical_rosters <- purrr::map_dfr(scrape_years[scrape_years < bracket_year], function(year) {
+        logger::log_info("Refreshing historical tournament roster for {year}")
+        roster_tbl <- scrape_historical_tournament_roster(year)
+        register_refresh_issues(attr(roster_tbl, "refresh_issues", exact = TRUE))
+        roster_tbl
+    })
+    current_roster <- purrr::map_dfr(scrape_years[scrape_years == bracket_year], function(year) {
         logger::log_info("Refreshing tournament roster for {year}")
         conf_tbl <- scrape_conf_assignments(year)
         register_refresh_issues(attr(conf_tbl, "refresh_issues", exact = TRUE))
         conf_tbl
     })
-    roster_counts <- count_rows_by_year(conf_assignments, count_name = "conference_assignment_rows")
+    tournament_rosters <- dplyr::bind_rows(historical_rosters, current_roster)
+    roster_counts <- count_rows_by_year(tournament_rosters, count_name = "roster_rows")
 
     logger::log_info("Joining tournament rosters to year-wide Bart ratings")
-    refreshed_team_features <- build_team_feature_dataset(bart_data, conf_assignments)
+    refreshed_team_features <- build_team_feature_dataset(bart_data, tournament_rosters)
     reused_team_features <- existing_team_features %>%
         dplyr::filter(Year %in% reused_historical_years)
     team_features <- dplyr::bind_rows(reused_team_features, refreshed_team_features) %>%
