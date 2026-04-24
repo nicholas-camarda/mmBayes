@@ -23,7 +23,7 @@ If you want the published dashboard entrypoint, start at the GitHub Pages hub:
 
 [Open the GitHub Pages dashboard hub](https://nicholas-camarda.github.io/mmBayes/)
 
-The hub links to the main bracket dashboard plus the optional diagnostics pages.
+The hub links to the main bracket dashboard plus the technical diagnostics page.
 
 The authoritative full run now refreshes the tracked repo dashboard snapshot automatically, so a successful `Rscript scripts/run_simulation.R` updates both the runtime HTML bundle and the GitHub Pages source files under `output/`.
 
@@ -43,8 +43,7 @@ Live tournament commentary is separate from the prediction-time inputs: First Fo
 
 Optional diagnostics:
 
-- [Technical dashboard](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) - diagnostics and simulation detail
-- [Model comparison dashboard](https://nicholas-camarda.github.io/mmBayes/output/model_comparison_dashboard.html) - engine comparison and calibration appendix
+- [Technical dashboard](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) - ensemble diagnostics, calibration, and simulation detail
 
 ## Working Roots
 
@@ -108,8 +107,7 @@ After a pipeline run the following artifacts are generated in the configured run
 
 | File | Description |
 |------|-------------|
-| [technical_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) | Secondary diagnostics and simulation detail |
-| [model_comparison_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/model_comparison_dashboard.html) | Secondary calibration and engine-comparison appendix |
+| [technical_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) | Ensemble diagnostics, calibration, and simulation detail |
 
 ### Decision Artifacts (CSV)
 
@@ -173,13 +171,13 @@ Notes:
 The pipeline runs in six steps:
 
 1. Load `config.yml` and read team features plus historical results from the configured data workbook paths
-2. Build one training row per historical tournament game at the matchup level
-3. Fit a Bayesian logistic regression for game-winner probability
-4. Run a rolling held-out-tournament backtest to validate calibration
+2. Build ordered matchup-level training rows from historical tournament games
+3. Fit Stan GLM and BART component winner models
+4. Learn the constrained logit-scale ensemble combiner from rolling held-out predictions
 5. Simulate the current bracket forward round by round using posterior draws
 6. Export dashboards, the decision sheet, and candidate bracket files
 
-The model estimates game-by-game win probabilities rather than predicting the whole bracket at once. Posterior draws surface those probabilities as ranked picks, uncertainty intervals, and alternate bracket paths, so the dashboard shows where the bracket is settled and where it is still sensitive to unresolved play-in games.
+The primary bracket picker estimates game-by-game win probabilities by combining Stan GLM and BART component probabilities on the logit scale. Posterior draws surface those probabilities as ranked picks, uncertainty intervals, and alternate bracket paths, so the dashboard shows where the bracket is settled and where it is still sensitive to unresolved play-in games.
 
 Data sources:
 
@@ -196,14 +194,23 @@ The default configuration requests the eight most recent completed tournaments a
 
 ### Winner Model
 
-`mmBayes` currently supports two engines for winner prediction:
+The supported winner workflow is an ensemble bracket picker:
 
-- `stan_glm` for Bayesian logistic regression with explicit priors
-- `bart` for Bayesian additive regression trees
+- `stan_glm` supplies a Bayesian logistic-regression component with explicit priors
+- `bart` supplies a Bayesian additive-regression-tree component
+- the primary bracket probabilities combine the two on the logit scale with learned constrained weights
 
 There is no neural-network engine in this repo today.
 
-`interaction_terms` are a `stan_glm`-only formula option in this repo. BART comparison runs use the same base predictors but omit explicit interaction terms by design, because BART learns interaction structure implicitly through tree splits.
+`interaction_terms` are a `stan_glm`-only formula option in this repo. BART component fits use the same base predictors but omit explicit interaction terms by design, because BART learns interaction structure implicitly through tree splits.
+
+The ensemble combiner has the form:
+
+$$
+\Pr(\text{team A wins}) = \text{logit}^{-1}(\delta + w \cdot \text{logit}(p_{\text{Stan}}) + (1-w) \cdot \text{logit}(p_{\text{BART}}))
+$$
+
+where `0 <= w <= 1`. Current production integration requires the learned ensemble to pass a real-data proof gate before it is used as the primary bracket picker.
 
 A Bayesian logistic regression with a logit link:
 
@@ -231,7 +238,7 @@ The seed and efficiency terms (`seed_diff`, `barthag_logit_diff`, `AdjOE_diff`, 
 
 ### Tiebreaker Model
 
-A separate total-points model estimates championship points, powering the tiebreaker outputs in the dashboard. It uses the same engine family selected for the winner model and stays betting-free in the core pipeline.
+A separate total-points model estimates championship points, powering the tiebreaker outputs in the dashboard. It stays betting-free in the core pipeline.
 
 ---
 

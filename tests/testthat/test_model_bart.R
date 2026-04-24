@@ -51,6 +51,34 @@ test_that("BART engine fits matchup and total-points models and returns draw mat
     expect_true(all(is.finite(prob_draws)))
     expect_true(all(prob_draws >= 0 & prob_draws <= 1))
 
+    old_options <- options(
+        mmBayes.stan_chains = 1L,
+        mmBayes.stan_iter = 60L,
+        mmBayes.stan_refresh = 0L
+    )
+    on.exit(options(old_options), add = TRUE)
+    stan_model <- fit_tournament_model(
+        historical_matchups = loaded$historical_matchups,
+        predictor_columns = config$model$required_predictors,
+        engine = "stan_glm",
+        bart_config = bart_config,
+        random_seed = 123,
+        include_diagnostics = FALSE,
+        use_cache = FALSE
+    )
+    ensemble_model <- list(
+        engine = "ensemble",
+        components = list(stan_glm = stan_model, bart = model_results),
+        combiner = list(intercept = 0, weight_stan_glm = 0.5),
+        predictor_columns = config$model$required_predictors
+    )
+    ensemble_draws_1 <- predict_matchup_rows(loaded$historical_matchups[1:4, , drop = FALSE], ensemble_model, draws = 10)
+    ensemble_draws_2 <- predict_matchup_rows(loaded$historical_matchups[1:4, , drop = FALSE], ensemble_model, draws = 10)
+    expect_true(is.matrix(ensemble_draws_1))
+    expect_equal(dim(ensemble_draws_1), c(10L, 4L))
+    expect_equal(ensemble_draws_1, ensemble_draws_2)
+    expect_true(all(ensemble_draws_1 >= 0 & ensemble_draws_1 <= 1))
+
     total_fit_stdout <- capture.output(
         total_points_model <- fit_total_points_model(
             historical_total_points = build_total_points_training_rows(loaded$historical_actual_results),

@@ -7,7 +7,9 @@ library(logger)
 #' @return A display label for the engine.
 #' @keywords internal
 engine_display_label <- function(engine) {
-    if (identical(engine, "bart")) {
+    if (identical(engine, "ensemble")) {
+        "Stan GLM + BART ensemble"
+    } else if (identical(engine, "bart")) {
         "BART"
     } else {
         "Stan GLM"
@@ -276,10 +278,11 @@ run_tournament_simulation <- function(config = NULL) {
     config <- config %||% load_project_config()
     output_dir <- config$output$path %||% default_runtime_output_root()
     engine <- config$model$engine %||% "stan_glm"
-    compare_engines <- isTRUE(config$model$compare_engines %||% TRUE)
+    ensemble_primary <- ensemble_enabled(config)
+    compare_engines <- isTRUE(config$model$compare_engines %||% TRUE) && !isTRUE(ensemble_primary)
     allow_unavailable_comparison <- isTRUE(config$model$allow_unavailable_comparison %||% FALSE)
     bart_config <- config$model$bart %||% list()
-    draws_budget <- if (identical(engine, "bart")) {
+    draws_budget <- if (!isTRUE(ensemble_primary) && identical(engine, "bart")) {
         as.integer(bart_config$n_post %||% 1000L)
     } else {
         as.integer(config$model$n_draws %||% 1000L)
@@ -292,23 +295,65 @@ run_tournament_simulation <- function(config = NULL) {
     use_model_cache <- isTRUE(config$output$use_model_cache %||% TRUE)
 
     logger::log_info("Pipeline started")
+    logger::log_info(
+        "Pipeline configuration: engine={engine}, ensemble_enabled={ensemble_primary}, compare_engines={compare_engines}, draws={draws_budget}, backtest={isTRUE(config$model$backtest)}, model_cache={use_model_cache}"
+    )
+    logger::log_info("Runtime output directory: {output_dir}")
+    logger::log_info("Run log path: {run_log_path}")
     logger::log_info("Loading tournament data")
     data <- load_tournament_data(config)
+    logger::log_info(
+        "Loaded tournament data: bracket_year={data$bracket_year}, current_teams={nrow(data$current_teams)}, historical_team_rows={nrow(data$historical_teams)}, historical_game_rows={nrow(data$historical_games)}, matchup_training_rows={nrow(data$historical_matchups)}, completed_current_games={nrow(data$current_completed_results)}"
+    )
     logger::log_info("Fitting tournament model")
     interaction_terms <- as.character(unlist(config$model$interaction_terms %||% character(0)))
     if (length(interaction_terms) == 0L) interaction_terms <- NULL
     matchup_predictors <- core_matchup_predictor_columns(config$model$required_predictors)
-    model_results <- fit_tournament_model(
-        historical_matchups = data$historical_matchups,
-        predictor_columns = matchup_predictors,
-        engine = engine,
-        bart_config = bart_config,
-        random_seed = config$model$random_seed,
-        cache_dir = model_cache_dir,
-        use_cache = use_model_cache,
-        interaction_terms = interaction_terms,
-        prior_type = config$model$prior_type %||% "normal"
+    logger::log_info(
+        "Matchup predictors: {length(matchup_predictors)} columns; interaction_terms={if (is.null(interaction_terms)) 'none' else paste(interaction_terms, collapse = ', ')}"
     )
+    model_results <- if (isTRUE(ensemble_primary)) {
+        fit_ensemble_tournament_model(
+            data = data,
+            predictor_columns = matchup_predictors,
+            bart_config = bart_config,
+            random_seed = config$model$random_seed,
+            draws = draws_budget,
+            cache_dir = model_cache_dir,
+            use_cache = use_model_cache,
+            interaction_terms = interaction_terms,
+            prior_type = config$model$prior_type %||% "normal",
+            ensemble_config = config$model$ensemble
+        )
+    } else {
+        fit_tournament_model(
+            historical_matchups = data$historical_matchups,
+            predictor_columns = matchup_predictors,
+            engine = engine,
+            bart_config = bart_config,
+            random_seed = config$model$random_seed,
+            cache_dir = model_cache_dir,
+            use_cache = use_model_cache,
+            interaction_terms = interaction_terms,
+            prior_type = config$model$prior_type %||% "normal"
+        )
+    }
+    logger::log_info("Tournament model ready: primary_engine={model_results$engine %||% engine}")
+    if (identical(model_results$engine %||% NULL, "ensemble")) {
+        combiner <- model_results$combiner %||% list()
+        logger::log_info(
+            "Ensemble combiner ready: intercept={round(safe_numeric(combiner$intercept %||% 0, default = 0), 3)}, stan_glm_weight={round(safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5), 3)}, bart_weight={round(1 - safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5), 3)}"
+        )
+        validation_summary <- model_results$validation$comparison$summary %||% NULL
+        if (!is.null(validation_summary) && nrow(validation_summary) > 0L) {
+            learned_summary <- dplyr::filter(validation_summary, model == "learned_ensemble")
+            if (nrow(learned_summary) > 0L) {
+                logger::log_info(
+                    "Ensemble validation summary: mean_bracket_score={round(learned_summary$mean_bracket_score[[1]], 2)}, mean_correct_picks={round(learned_summary$mean_correct_picks[[1]], 2)}, log_loss={round(learned_summary$mean_log_loss[[1]], 3)}, brier={round(learned_summary$mean_brier[[1]], 3)}"
+                )
+            }
+        }
+    }
     logger::log_info("Fitting total-points model")
     total_points_model <- fit_total_points_model(
         historical_total_points = build_total_points_training_rows(data$historical_actual_results),
@@ -318,23 +363,33 @@ run_tournament_simulation <- function(config = NULL) {
         cache_dir = model_cache_dir,
         use_cache = use_model_cache
     )
+    logger::log_info("Total-points model ready: engine={total_points_model$engine %||% engine}")
     logger::log_info("Running backtest")
     backtest_results <- if (isTRUE(config$model$backtest)) {
-        run_rolling_backtest(
-            historical_teams = data$historical_teams,
-            historical_actual_results = data$historical_actual_results,
-            predictor_columns = matchup_predictors,
-            engine = engine,
-            bart_config = bart_config,
-            random_seed = config$model$random_seed,
-            draws = draws_budget,
-            cache_dir = model_cache_dir,
-            use_cache = use_model_cache,
-            interaction_terms = interaction_terms,
-            prior_type = config$model$prior_type %||% "normal"
-        )
+        if (isTRUE(ensemble_primary)) {
+            model_results$validation$backtest
+        } else {
+            run_rolling_backtest(
+                historical_teams = data$historical_teams,
+                historical_actual_results = data$historical_actual_results,
+                predictor_columns = matchup_predictors,
+                engine = engine,
+                bart_config = bart_config,
+                random_seed = config$model$random_seed,
+                draws = draws_budget,
+                cache_dir = model_cache_dir,
+                use_cache = use_model_cache,
+                interaction_terms = interaction_terms,
+                prior_type = config$model$prior_type %||% "normal"
+            )
+        }
     } else {
         NULL
+    }
+    if (!is.null(backtest_results$summary)) {
+        logger::log_info("Backtest summary rows available: {nrow(backtest_results$summary)}")
+    } else {
+        logger::log_info("Backtest skipped or unavailable")
     }
     logger::log_info("Simulating deterministic reference bracket")
     simulation_results <- simulate_full_bracket(
@@ -344,6 +399,10 @@ run_tournament_simulation <- function(config = NULL) {
         actual_play_in_results = data$current_play_in_results,
         log_matchups = FALSE,
         log_stage_progress = FALSE
+    )
+    deterministic_final_four <- paste(vapply(simulation_results$final_four$semifinalists, function(team) team$Team[[1]], character(1)), collapse = ", ")
+    logger::log_info(
+        "Deterministic simulation complete: champion={simulation_results$final_four$champion$Team[[1]]}; final_four={deterministic_final_four}"
     )
     candidate_simulations <- 50L
     n_candidates <- 2L
@@ -358,6 +417,7 @@ run_tournament_simulation <- function(config = NULL) {
         random_seed = config$model$random_seed
     )
     decision_sheet <- build_decision_sheet(candidate_results)
+    logger::log_info("Decision sheet built with {nrow(decision_sheet)} matchup row(s)")
     logger::log_info("Predicting candidate championship tiebreakers and matchup totals")
     total_points_predictions <- predict_candidate_total_points(
         candidates = candidate_results,
@@ -365,6 +425,9 @@ run_tournament_simulation <- function(config = NULL) {
         total_points_model = total_points_model,
         draws = draws_budget
     )
+    if (!is.null(total_points_predictions$candidate_summaries)) {
+        logger::log_info("Tiebreaker summaries built for {nrow(total_points_predictions$candidate_summaries)} candidate(s)")
+    }
     live_performance <- summarize_live_tournament_performance(
         data = data,
         model_results = model_results,
@@ -421,6 +484,9 @@ run_tournament_simulation <- function(config = NULL) {
     )
 
     result_bundle$output <- c(result_bundle$output, save_results(result_bundle, config$output))
+    logger::log_info("Saved results bundle: {result_bundle$output$results}")
+    logger::log_info("Saved bracket dashboard: {result_bundle$output$dashboard}")
+    logger::log_info("Saved technical dashboard: {result_bundle$output$technical_dashboard}")
     logger::log_info("Pipeline complete; decision sheet at {result_bundle$output$decision_sheet}")
 
     result_bundle

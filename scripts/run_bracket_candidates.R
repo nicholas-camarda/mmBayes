@@ -24,8 +24,9 @@ load_dotenv_file(".env", override = FALSE)
 config <- load_project_config("config.yml")
 config$model$backtest <- FALSE
 engine <- config$model$engine %||% "stan_glm"
+ensemble_primary <- ensemble_enabled(config)
 bart_config <- config$model$bart %||% list()
-draws_budget <- if (identical(engine, "bart")) {
+draws_budget <- if (!isTRUE(ensemble_primary) && identical(engine, "bart")) {
     as.integer(bart_config$n_post %||% 1000L)
 } else {
     as.integer(config$model$n_draws %||% 1000L)
@@ -39,15 +40,34 @@ logger::log_info("Running fast bracket-candidate pipeline")
 
 data <- load_tournament_data(config)
 matchup_predictors <- core_matchup_predictor_columns(config$model$required_predictors)
-model_results <- fit_tournament_model(
-    historical_matchups = data$historical_matchups,
-    predictor_columns = matchup_predictors,
-    engine = engine,
-    bart_config = bart_config,
-    random_seed = config$model$random_seed,
-    cache_dir = model_cache_dir,
-    use_cache = isTRUE(config$output$use_model_cache %||% TRUE)
-)
+interaction_terms <- as.character(unlist(config$model$interaction_terms %||% character(0)))
+if (length(interaction_terms) == 0L) interaction_terms <- NULL
+model_results <- if (isTRUE(ensemble_primary)) {
+    fit_ensemble_tournament_model(
+        data = data,
+        predictor_columns = matchup_predictors,
+        bart_config = bart_config,
+        random_seed = config$model$random_seed,
+        draws = draws_budget,
+        cache_dir = model_cache_dir,
+        use_cache = isTRUE(config$output$use_model_cache %||% TRUE),
+        interaction_terms = interaction_terms,
+        prior_type = config$model$prior_type %||% "normal",
+        ensemble_config = config$model$ensemble
+    )
+} else {
+    fit_tournament_model(
+        historical_matchups = data$historical_matchups,
+        predictor_columns = matchup_predictors,
+        engine = engine,
+        bart_config = bart_config,
+        random_seed = config$model$random_seed,
+        cache_dir = model_cache_dir,
+        use_cache = isTRUE(config$output$use_model_cache %||% TRUE),
+        interaction_terms = interaction_terms,
+        prior_type = config$model$prior_type %||% "normal"
+    )
+}
 total_points_model <- fit_total_points_model(
     historical_total_points = build_total_points_training_rows(data$historical_actual_results),
     engine = engine,
@@ -98,7 +118,7 @@ decision_outputs <- save_decision_outputs(
     candidates = candidates,
     output_dir = output_dir,
     current_teams = data$current_teams,
-    backtest = NULL,
+    backtest = if (isTRUE(ensemble_primary)) model_results$validation$backtest else NULL,
     model_overview = model_overview,
     quality_signature = quality_signature,
     play_in_resolution = play_in_resolution,

@@ -11,6 +11,7 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     config$data$game_results_path <- fixture_paths$results_path
     config$model$history_window <- 3L
     config$model$n_draws <- 25L
+    config$model$ensemble$enabled <- FALSE
     config$runtime$root <- runtime_root
     config$output$path <- output_dir
     config <- normalize_project_paths(config)
@@ -31,7 +32,7 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     expect_false(file.exists(file.path(output_dir, "fixture_bracket.png")))
     expect_true(file.exists(file.path(output_dir, "bracket_dashboard.html")))
     expect_true(file.exists(file.path(output_dir, "technical_dashboard.html")))
-    expect_true(file.exists(file.path(output_dir, "model_comparison_dashboard.html")))
+    expect_false(file.exists(file.path(output_dir, "model_comparison_dashboard.html")))
     expect_true(file.exists(file.path(output_dir, "bracket_decision_sheet.csv")))
     expect_true(file.exists(file.path(output_dir, "bracket_candidate_1.csv")))
     expect_true(file.exists(file.path(output_dir, "model_quality", "latest_model_quality.rds")))
@@ -44,7 +45,7 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     expect_true(file.exists(results$output$model_quality_latest))
     expect_true(file.exists(results$output$model_quality_archive))
     expect_identical(results$output$model_quality_archive, results$output$model_quality_latest)
-    expect_true(file.exists(results$output$model_comparison_dashboard))
+    expect_null(results$output$model_comparison_dashboard)
     expect_false(any(startsWith(results$model$predictor_columns, "betting_")))
     expect_false(any(startsWith(results$total_points_model$predictor_columns, "betting_")))
     expect_null(results$visualization)
@@ -55,7 +56,6 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     dir.create(repo_output_dir, recursive = TRUE, showWarnings = FALSE)
     unlink(file.path(output_dir, "bracket_dashboard.html"))
     unlink(file.path(output_dir, "technical_dashboard.html"))
-    unlink(file.path(output_dir, "model_comparison_dashboard.html"))
 
     testthat::local_mocked_bindings(
         run_tournament_simulation = function(...) stop("regeneration should not rerun the full simulation"),
@@ -79,8 +79,8 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
 
     expect_true(file.exists(regenerated$dashboard))
     expect_true(file.exists(regenerated$technical_dashboard))
-    expect_true(file.exists(regenerated$model_comparison_dashboard))
-    expect_length(regenerated$repo_output_files, 3L)
+    expect_null(regenerated$model_comparison_dashboard)
+    expect_length(regenerated$repo_output_files, 2L)
     expect_true(all(file.exists(regenerated$repo_output_files)))
     expect_equal(
         basename(regenerated$repo_output_files),

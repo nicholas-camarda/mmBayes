@@ -12,6 +12,15 @@ default:
     engine: "stan_glm"
     compare_engines: true
     allow_unavailable_comparison: false
+    ensemble:
+      enabled: true
+      component_engines:
+        - "stan_glm"
+        - "bart"
+      combiner: "logit_weight"
+      primary_acceptance_target: "bracket_score"
+      log_loss_guardrail_delta: 0.005
+      brier_guardrail_delta: 0.005
     bart:
       n_trees: 200
       n_burn: 500

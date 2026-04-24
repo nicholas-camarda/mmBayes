@@ -37,12 +37,13 @@ At a high level, the workflow is:
 1. scrape season-level team data and tournament results
 2. normalize team names and validate the tournament field
 3. build historical matchup-level training rows
-4. fit a Bayesian logistic regression for game winners
-5. fit a Bayesian Gaussian model for total points
-6. draw posterior predictions for each matchup in the current bracket
-7. simulate the bracket forward round by round
-8. rank and export bracket candidates plus review artifacts
-9. score any completed current-year games for live monitoring only, without feeding those outcomes back into model fitting or bracket generation
+4. fit Stan GLM and BART component models for game winners
+5. learn the constrained logit-scale ensemble combiner from rolling held-out predictions
+6. fit a Bayesian Gaussian model for total points
+7. draw posterior predictions for each matchup in the current bracket
+8. simulate the bracket forward round by round
+9. rank and export bracket candidates plus review artifacts
+10. score any completed current-year games for live monitoring only, without feeding those outcomes back into model fitting or bracket generation
 
 The project is matchup-based. It does not fit a team-level "who wins the title?" target directly. Instead, it estimates game-level probabilities and then propagates them through the bracket.
 
@@ -309,18 +310,30 @@ This means the logistic model coefficients for continuous predictors are interpr
 
 ### Model engine
 
-`mmBayes` supports two interchangeable Bayesian engines for producing per-game win probabilities:
+`mmBayes` uses an ensemble winner model for the primary bracket picker. The component engines are:
 
-- `stan_glm` (default): Bayesian logistic regression via `rstanarm::stan_glm()`.
+- `stan_glm`: Bayesian logistic regression via `rstanarm::stan_glm()`.
 - `bart`: Bayesian additive regression trees via `BART::pbart()`.
 
-Both engines ultimately produce a **draw-by-game matrix** of posterior win probabilities, and everything downstream (bracket simulation, candidate generation, decision-sheet uncertainty tiers) consumes those draws in the same way.
+Both engines produce a **draw-by-game matrix** of posterior win probabilities. The primary ensemble combines aligned component draw matrices on the logit scale:
+
+$$
+p_{\text{ensemble}, i}
+= \text{logit}^{-1}\left(
+\delta + w \cdot \text{logit}(p_{\text{Stan}, i})
++ (1-w) \cdot \text{logit}(p_{\text{BART}, i})
+\right)
+$$
+
+with `0 <= w <= 1`. The fitted production combiner is learned from rolling held-out historical predictions. The proof gate requires the learned ensemble to beat Stan GLM, BART, and equal-weight averaging on mean bracket score; tie or beat the best component on mean correct picks; and stay within the configured log-loss and Brier guardrails.
+
+Everything downstream (bracket simulation, candidate generation, decision-sheet uncertainty tiers) consumes the ensemble draw matrix in the same way it previously consumed a single component draw matrix.
 
 When using `bart`, the draw budget is controlled by `config$model$bart$n_post` (the number of post-burn-in draws stored by BART).
 
-### Likelihood (when `engine: stan_glm`)
+### Stan GLM component likelihood
 
-When `engine` is `stan_glm` (the default in `default_project_config()`), the game-winner model in `fit_tournament_model()` is Bayesian logistic regression fit with `rstanarm::stan_glm(..., family = binomial(link = "logit"))`.
+The Stan GLM component in `fit_tournament_model()` is Bayesian logistic regression fit with `rstanarm::stan_glm(..., family = binomial(link = "logit"))`.
 
 For game `i`, the full model is:
 
@@ -380,7 +393,7 @@ $$
 p_i = \frac{1}{1 + e^{-\eta_i}}
 $$
 
-When `engine` is `bart`, the runtime uses `BART::pbart()` to learn a nonlinear Bernoulli probability surface instead of an explicit logit-linear formula, but the downstream exported summaries (`mean`, intervals, SD, candidate scoring) are computed from the same draw-by-game probability matrix interface.
+The BART component uses `BART::pbart()` to learn a nonlinear Bernoulli probability surface instead of an explicit logit-linear formula, but the downstream exported summaries (`mean`, intervals, SD, candidate scoring) are computed from the ensemble draw-by-game probability matrix interface.
 
 ### Priors
 
@@ -459,7 +472,7 @@ These two interactions capture that the predictive value of team-quality and see
 
 The interaction terms receive the same `prior_type` prior as the other fixed effects.
 
-This repo's BART implementation does not accept explicit `interaction_terms`. When comparing `stan_glm` to BART, the comparison uses the same base predictors for both engines, while BART learns interaction structure implicitly through tree splits.
+This repo's BART implementation does not accept explicit `interaction_terms`. BART component fits use the same base predictors as the Stan GLM component, while BART learns interaction structure implicitly through tree splits.
 
 ### Round handling
 

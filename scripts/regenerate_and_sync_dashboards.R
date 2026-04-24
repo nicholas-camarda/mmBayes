@@ -35,7 +35,6 @@ cat(sprintf("Loaded cached results bundle: %s\n", rendered$results_bundle_path))
 cat("Regenerated runtime dashboards:\n")
 cat(sprintf("- %s\n", rendered$dashboard))
 cat(sprintf("- %s\n", rendered$technical_dashboard))
-cat(sprintf("- %s\n", rendered$model_comparison_dashboard))
 cat("Synced tracked repo dashboards:\n")
 for (path in rendered$repo_output_files) {
     cat(sprintf("- %s\n", path))

@@ -534,10 +534,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(dashboard_html, "Synced to tracked repo output in this run")
     expect_match(dashboard_html, "Open technical_dashboard.html")
     expect_match(dashboard_html, "href='technical_dashboard.html'")
-    expect_match(dashboard_html, "href='model_comparison_dashboard.html'")
-    expect_match(dashboard_html, "comparison-link-panel__head")
-    expect_match(dashboard_html, "comparison-link-facts")
-    expect_match(dashboard_html, "comparison-link-button")
+    expect_false(grepl("href='model_comparison_dashboard.html'", dashboard_html, fixed = TRUE))
     expect_equal(sum(gregexpr("Open the full model comparison dashboard", dashboard_html, fixed = TRUE)[[1]] > 0), 0L)
     if (isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
         expect_match(dashboard_html, "Status: Simulated bracket path")
@@ -730,7 +727,7 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_match(technical_html, "Candidate 1 Championship Distribution")
     expect_match(technical_html, "Backtest and calibration evidence")
     expect_match(technical_html, "Live performance evidence")
-    expect_match(technical_html, "Model setup and engine comparison")
+    expect_match(technical_html, "Model setup and ensemble diagnostics")
     expect_match(technical_html, "Reference tables")
     expect_false(grepl("Why These Boards Are Ordered This Way", technical_html, fixed = TRUE))
     expect_false(grepl("Differing slot", technical_html, fixed = TRUE))
@@ -874,87 +871,8 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
         ),
         notes = character()
     )
-    comparison_html <- create_model_comparison_dashboard_html(
-        bracket_year = 2026L,
-        model_comparison = comparison_bundle
-    )
-    expect_match(comparison_html, "Model Comparison")
-    expect_match(comparison_html, "<meta name='viewport' content='width=device-width, initial-scale=1'>")
-    expect_match(comparison_html, "compares")
-    expect_match(comparison_html, "Stan GLM")
-    expect_match(comparison_html, "BART")
-    expect_match(comparison_html, "Preferred engine verdict")
-    expect_match(comparison_html, "Comparison scorecards")
-    expect_match(comparison_html, "Historical Backtest Metrics")
-    expect_match(comparison_html, "Current-Year Live Metrics")
-    expect_match(comparison_html, "Preferred engine")
-    expect_match(comparison_html, "Preferred engine from held-out backtest evidence")
-    expect_match(comparison_html, "Monitoring only; does not change the engine verdict")
-    expect_match(comparison_html, "Detailed diagnostics stay on the technical dashboard")
-    expect_false(grepl("Backtest Calibration Curve", comparison_html, fixed = TRUE))
-    expect_false(grepl("Live By Round", comparison_html, fixed = TRUE))
-    expect_false(grepl("Recent Games", comparison_html, fixed = TRUE))
-    expect_false(grepl("Live Tournament Performance - Stan GLM", comparison_html, fixed = TRUE))
-    expect_false(grepl("Live Tournament Performance - BART", comparison_html, fixed = TRUE))
-    expect_false(grepl("Matchup Model", comparison_html, fixed = TRUE))
-    expect_false(grepl("Total Points Model", comparison_html, fixed = TRUE))
     comparison_link_html <- render_model_comparison_link_html(comparison_bundle)
-    expect_match(comparison_link_html, "comparison-link-panel__head")
-    expect_match(comparison_link_html, "comparison-link-facts")
-    expect_match(comparison_link_html, "comparison-link-button")
-    expect_match(comparison_link_html, "Open comparison dashboard")
-
-    comparison_with_split_current_overview <- comparison_bundle
-    comparison_with_split_current_overview$current$model_overview <- model_overview$matchup
-    comparison_with_split_current_overview$current$totals_overview <- model_overview$totals
-    split_overview_html <- create_model_comparison_dashboard_html(
-        bracket_year = 2026L,
-        model_comparison = comparison_with_split_current_overview
-    )
-    expect_false(grepl("Matchup Model", split_overview_html, fixed = TRUE))
-    expect_false(grepl("Total Points Model", split_overview_html, fixed = TRUE))
-
-    live_conflict_bundle <- comparison_bundle
-    live_conflict_bundle$backtest_comparison <- build_model_metric_comparison_table(
-        current_summary = tibble::tibble(
-            mean_log_loss = 0.401,
-            mean_brier = 0.188,
-            mean_accuracy = 0.713,
-            mean_bracket_score = 85.4,
-            mean_correct_picks = 42.7
-        ),
-        alternate_summary = tibble::tibble(
-            mean_log_loss = 0.410,
-            mean_brier = 0.194,
-            mean_accuracy = 0.700,
-            mean_bracket_score = 84.1,
-            mean_correct_picks = 42.1
-        ),
-        current_label = "Stan GLM",
-        alternate_label = "BART",
-        kind = "backtest"
-    )
-    live_conflict_bundle$live_comparison <- build_model_metric_comparison_table(
-        current_summary = tibble::tibble(
-            games_played = 18L,
-            log_loss = 0.410,
-            brier = 0.190,
-            accuracy = 0.650
-        ),
-        alternate_summary = tibble::tibble(
-            games_played = 18L,
-            log_loss = 0.360,
-            brier = 0.160,
-            accuracy = 0.760
-        ),
-        current_label = "Stan GLM",
-        alternate_label = "BART",
-        kind = "live"
-    )
-    live_conflict_verdict <- summarize_model_comparison_verdict(live_conflict_bundle)
-    expect_equal(live_conflict_verdict$preferred_label, "Stan GLM")
-    expect_match(live_conflict_verdict$justification, "monitoring-only")
-    expect_match(live_conflict_verdict$caveat, "does not override the held-out backtest")
+    expect_identical(comparison_link_html, "")
 
     html_without_quality <- create_technical_dashboard_html(
         bracket_year = 2026L,

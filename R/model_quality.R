@@ -61,6 +61,8 @@ build_model_quality_signature <- function(results) {
             interaction_terms = model_results$interaction_terms %||% character(0),
             prior_type = model_results$prior_type %||% NULL,
             bart_config = model_results$bart_config %||% NULL,
+            combiner = model_results$combiner %||% NULL,
+            ensemble_config = model_results$ensemble_config %||% NULL,
             scaling_reference = model_results$scaling_reference %||% NULL,
             model_matrix_columns = model_results$model_matrix_columns %||% character(0),
             round_levels = model_results$round_levels %||% character(0)
@@ -92,6 +94,7 @@ summarize_model_overview <- function(model_results, draws = NULL, history_summar
     feature_columns <- setdiff(predictor_columns, "round")
     betting_predictor_count <- sum(startsWith(feature_columns, "betting_"), na.rm = TRUE)
     bart_config <- model_results$bart_config %||% list()
+    ensemble_combiner <- model_results$combiner %||% NULL
     draw_budget <- draws %||% (if (identical(engine, "bart")) safe_numeric(bart_config$n_post, default = NA_real_) else NA_real_)
 
     history_summary <- history_summary %||% tibble::tibble()
@@ -103,7 +106,7 @@ summarize_model_overview <- function(model_results, draws = NULL, history_summar
 
     list(
         engine = engine,
-        engine_label = if (identical(engine, "bart")) "BART" else "Stan GLM",
+        engine_label = if (identical(engine, "ensemble")) "Stan GLM + BART ensemble" else if (identical(engine, "bart")) "BART" else "Stan GLM",
         prior_type = model_results$prior_type %||% NULL,
         draw_budget = draw_budget,
         predictor_count = length(feature_columns),
@@ -117,6 +120,8 @@ summarize_model_overview <- function(model_results, draws = NULL, history_summar
             sprintf("%s predictors: %s%s", length(feature_columns), paste(head_labels, collapse = ", "), suffix)
         },
         bart_config = bart_config,
+        ensemble_combiner = ensemble_combiner,
+        ensemble_validation = model_results$validation$comparison %||% NULL,
         interaction_terms = model_results$interaction_terms %||% character(0),
         cache_path = model_results$cache_path %||% NULL,
         configured_history_window = if ("configured_history_window" %in% names(history_row)) history_row$configured_history_window[[1]] else NULL,

@@ -21,6 +21,29 @@ test_that("config loader merges matchup-model defaults with yaml values", {
     expect_equal(config$model$history_window, 5)
     expect_equal(config$output$prefix, "custom_prefix")
     expect_true(length(config$model$required_predictors) > 0)
+    expect_true(isTRUE(config$model$ensemble$enabled))
+    expect_equal(config$model$ensemble$combiner, "logit_weight")
+})
+
+test_that("ensemble configuration validation rejects unsupported primary settings", {
+    file <- tempfile(fileext = ".yml")
+    writeLines(
+        c(
+            "default:",
+            "  model:",
+            "    ensemble:",
+            "      enabled: true",
+            "      component_engines:",
+            "        - stan_glm",
+            "      combiner: logit_weight"
+        ),
+        file
+    )
+
+    expect_error(
+        load_project_config(file),
+        "component_engines"
+    )
 })
 
 test_that("default predictor contracts exclude outcome, score, betting, and leakage fields", {

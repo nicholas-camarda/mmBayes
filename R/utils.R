@@ -21,8 +21,7 @@ stop_with_message <- function(message) {
 dashboard_html_manifest <- function() {
     c(
         "bracket_dashboard.html",
-        "technical_dashboard.html",
-        "model_comparison_dashboard.html"
+        "technical_dashboard.html"
     )
 }
 
@@ -2386,6 +2385,8 @@ predict_candidate_total_points <- function(candidates, current_teams, total_poin
 #' @export
 generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, n_candidates = 2L, n_simulations = 250L, random_seed = 123, simulation_method = c("coherent_draw", "posterior_mean"), parallel_workers = NULL) {
     simulation_method <- match.arg(simulation_method)
+    candidate_start <- Sys.time()
+    deterministic_start <- Sys.time()
     logger::log_info("Building deterministic reference bracket")
     deterministic_bracket <- simulate_full_bracket(
         all_teams = all_teams,
@@ -2399,6 +2400,10 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
     deterministic_flat <- augment_matchup_decisions(flatten_matchup_results(deterministic_bracket))
     deterministic_summary <- summarize_bracket_probability(deterministic_flat)
     deterministic_path <- summarize_candidate_path(deterministic_flat)
+    deterministic_final_four <- paste(vapply(deterministic_bracket$final_four$semifinalists, function(team) team$Team[[1]], character(1)), collapse = ", ")
+    logger::log_info(
+        "Deterministic reference bracket complete in {format_elapsed_seconds(deterministic_start)}; champion={deterministic_bracket$final_four$champion$Team[[1]]}; final_four={deterministic_final_four}; mean_game_prob={round(deterministic_summary$mean_game_prob[[1]], 3)}"
+    )
 
     candidates <- list(
         list(
@@ -2430,6 +2435,8 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
         random_seed = random_seed,
         simulation_method = simulation_method
     )
+    worker_source <- describe_candidate_worker_source(parallel_workers)
+    engine_label <- model_results$engine %||% "stan_glm"
     logger::log_info("Exploring {n_simulations} stochastic bracket simulations with {simulation_method} path sampling on {workers} worker(s)")
     simulated_rows <- vector("list", n_simulations)
     progress_points <- sort(unique(pmax(1L, as.integer(round(seq(0.2, 1, by = 0.2) * n_simulations)))))
@@ -2437,8 +2444,27 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
         seq_len(n_simulations),
         ceiling(seq_len(n_simulations) / max(1L, ceiling(n_simulations / 5L)))
     )
+    chunk_count <- length(task_chunks)
+    chunk_target_size <- max(1L, ceiling(n_simulations / 5L))
+    logger::log_info(
+        "Candidate simulation settings: engine={engine_label}, draws={draws}, random_seed={random_seed}, worker_source={worker_source}, chunks={chunk_count}, chunk_target_size={chunk_target_size}"
+    )
+    if (identical(engine_label, "ensemble")) {
+        combiner <- model_results$combiner %||% list()
+        stan_weight <- safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5)
+        bart_weight <- 1 - stan_weight
+        intercept <- safe_numeric(combiner$intercept %||% 0, default = 0)
+        logger::log_info(
+            "Candidate simulations use ensemble predictions: stan_glm_weight={round(stan_weight, 3)}, bart_weight={round(bart_weight, 3)}, intercept={round(intercept, 3)}"
+        )
+    }
 
-    for (task_indices in task_chunks) {
+    for (chunk_index in seq_along(task_chunks)) {
+        task_indices <- task_chunks[[chunk_index]]
+        chunk_start <- Sys.time()
+        logger::log_info(
+            "Candidate simulation chunk {chunk_index}/{chunk_count} started: simulations {min(task_indices)}-{max(task_indices)} ({length(task_indices)} task(s))"
+        )
         task_list <- lapply(task_indices, function(index) simulation_tasks[index, , drop = FALSE])
         chunk_rows <- if (workers > 1L) {
             parallel::mclapply(
@@ -2470,6 +2496,15 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
         }
         simulated_rows[task_indices] <- chunk_rows
         completed <- max(task_indices)
+        chunk_elapsed_seconds <- as.numeric(difftime(Sys.time(), chunk_start, units = "secs"))
+        chunk_rate <- if (chunk_elapsed_seconds > 0) {
+            sprintf("%.2f", length(task_indices) / chunk_elapsed_seconds)
+        } else {
+            "NA"
+        }
+        logger::log_info(
+            "Candidate simulation chunk {chunk_index}/{chunk_count} complete in {format_elapsed_seconds(chunk_start)}; completed={completed}/{n_simulations}; chunk_rate={chunk_rate} simulations/sec"
+        )
         if (completed %in% progress_points || completed == n_simulations) {
             logger::log_info("Candidate simulations complete: {completed}/{n_simulations}")
         }
@@ -2492,6 +2527,12 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
         dplyr::arrange(dplyr::desc(frequency), dplyr::desc(bracket_log_prob))
 
     logger::log_info("Found {nrow(ranked_candidates)} unique bracket paths")
+    if (nrow(ranked_candidates) > 0L) {
+        top_path <- ranked_candidates[1, , drop = FALSE]
+        logger::log_info(
+            "Top stochastic path: champion={top_path$champion[[1]]}; final_four={top_path$final_four[[1]]}; frequency={top_path$frequency[[1]]}/{n_simulations}; mean_game_prob={round(top_path$mean_game_prob[[1]], 3)}"
+        )
+    }
 
     alternate_candidates <- purrr::map_dfr(seq_len(nrow(ranked_candidates)), function(index) {
         row <- ranked_candidates[index, , drop = FALSE]
@@ -2548,7 +2589,38 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
         )
     }
 
+    candidate_summary <- paste(
+        vapply(candidates, function(candidate) {
+            sprintf(
+                "Candidate %s [%s] champion=%s final_four=%s",
+                candidate$candidate_id,
+                candidate$type,
+                candidate$champion,
+                candidate$final_four
+            )
+        }, character(1)),
+        collapse = " | "
+    )
+    logger::log_info("Selected {length(candidates)} bracket candidate(s) in {format_elapsed_seconds(candidate_start)}: {candidate_summary}")
     candidates
+}
+
+#' Format elapsed wall-clock time for logs
+#'
+#' @param start_time A POSIXct timestamp captured before the work started.
+#' @param end_time A POSIXct timestamp captured after the work finished.
+#'
+#' @return A compact elapsed-time label.
+#' @keywords internal
+format_elapsed_seconds <- function(start_time, end_time = Sys.time()) {
+    elapsed <- as.numeric(difftime(end_time, start_time, units = "secs"))
+    if (is.na(elapsed)) {
+        return("unknown")
+    }
+    if (elapsed < 60) {
+        return(sprintf("%.1fs", elapsed))
+    }
+    sprintf("%dm %.1fs", as.integer(elapsed %/% 60), elapsed %% 60)
 }
 
 #' Choose the candidate-simulation worker count
@@ -2585,6 +2657,22 @@ resolve_candidate_simulation_workers <- function(n_simulations, requested_worker
     }
 
     min(workers, as.integer(n_simulations))
+}
+
+#' Describe where the candidate worker count came from
+#'
+#' @keywords internal
+describe_candidate_worker_source <- function(requested_workers = NULL) {
+    if (!is.null(requested_workers)) {
+        return("function argument")
+    }
+    if (!is.null(getOption("mmBayes.candidate_workers", NULL))) {
+        return("R option mmBayes.candidate_workers")
+    }
+    if (nzchar(Sys.getenv("MMBAYES_CANDIDATE_WORKERS", unset = ""))) {
+        return("environment variable MMBAYES_CANDIDATE_WORKERS")
+    }
+    "automatic local default"
 }
 
 #' Detect whether forked candidate workers are supported
@@ -2792,7 +2880,7 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         decision_sheet_path = decision_sheet_path,
         dashboard = dashboard_outputs$dashboard,
         technical_dashboard = dashboard_outputs$technical_dashboard,
-        model_comparison_dashboard = dashboard_outputs$model_comparison_dashboard,
+        model_comparison_dashboard = NULL,
         matchup_context = matchup_context_path,
         candidates_rds = rds_path,
         candidate_summary = summary_path,
@@ -2864,15 +2952,11 @@ write_dashboard_outputs <- function(bracket_year,
 
     dashboard_path <- file.path(output_dir, "bracket_dashboard.html")
     technical_dashboard_path <- file.path(output_dir, "technical_dashboard.html")
-    comparison_dashboard_path <- file.path(output_dir, "model_comparison_dashboard.html")
+    retired_comparison_dashboard_path <- file.path(output_dir, "model_comparison_dashboard.html")
+    if (file.exists(retired_comparison_dashboard_path)) {
+        unlink(retired_comparison_dashboard_path)
+    }
 
-    writeLines(
-        create_model_comparison_dashboard_html(
-            bracket_year = bracket_year,
-            model_comparison = model_comparison
-        ),
-        comparison_dashboard_path
-    )
     writeLines(
         create_bracket_dashboard_html(
             bracket_year = bracket_year,
@@ -2908,7 +2992,7 @@ write_dashboard_outputs <- function(bracket_year,
     list(
         dashboard = dashboard_path,
         technical_dashboard = technical_dashboard_path,
-        model_comparison_dashboard = comparison_dashboard_path,
+        model_comparison_dashboard = NULL,
         model_quality_source_label = model_quality_context$source_label %||% NULL,
         model_quality_source_path = model_quality_context$source_path %||% NULL,
         model_quality_used_cached_quality = isTRUE(model_quality_context$used_cached_quality %||% model_quality_context$used_fallback %||% FALSE),
@@ -3041,7 +3125,17 @@ save_results <- function(results, output_config) {
     saveRDS(results, rds_path)
 
     sink(model_summary_path)
-    print(summary(results$model$model))
+    if (identical(results$model$engine %||% NULL, "ensemble")) {
+        cat("Primary model: Stan GLM + BART ensemble\n\n")
+        cat("Combiner:\n")
+        print(results$model$combiner)
+        cat("\nStan GLM component:\n")
+        print(summary(results$model$components$stan_glm$model))
+        cat("\nBART component:\n")
+        print(results$model$components$bart$bart_config %||% results$model$components$bart)
+    } else {
+        print(summary(results$model$model))
+    }
     sink()
 
     if (!is.null(results$backtest)) {

@@ -84,9 +84,6 @@ for (path in rendered_dashboards$repo_output_files) {
 if (!is.null(rendered_dashboards$technical_dashboard)) {
     cat(sprintf("- Technical dashboard: %s\n", rendered_dashboards$technical_dashboard))
 }
-if (!is.null(rendered_dashboards$model_comparison_dashboard)) {
-    cat(sprintf("- Model comparison dashboard: %s\n", rendered_dashboards$model_comparison_dashboard))
-}
 if (!is.null(results$output$model_quality_latest)) {
     cat(sprintf("- Model quality latest: %s\n", results$output$model_quality_latest))
 }

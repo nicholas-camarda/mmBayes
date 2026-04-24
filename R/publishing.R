@@ -12,7 +12,6 @@ release_deliverable_manifest <- function(output_dir = NULL) {
     manifest <- c(
         "bracket_dashboard.html",
         "technical_dashboard.html",
-        "model_comparison_dashboard.html",
         "bracket_decision_sheet.csv",
         "bracket_matchup_context.csv",
         "candidate_matchup_total_points.csv",

@@ -396,12 +396,8 @@ test_that("build_model_comparison_bundle sanitizes BART options and renders the 
     expect_true(any(grepl("same base predictors", comparison$notes, fixed = TRUE)))
     expect_true(any(grepl("learns interactions implicitly through tree splits", comparison$notes, fixed = TRUE)))
 
-    comparison_html <- create_model_comparison_dashboard_html(
-        bracket_year = 2026L,
-        model_comparison = comparison
-    )
-    expect_match(comparison_html, "same base predictors")
-    expect_match(comparison_html, "learns interactions implicitly through tree splits")
+    expect_true(any(grepl("same base predictors", comparison$notes, fixed = TRUE)))
+    expect_true(any(grepl("learns interactions implicitly through tree splits", comparison$notes, fixed = TRUE)))
 })
 
 test_that("model comparison failures require explicit unavailable-comparison opt-in", {

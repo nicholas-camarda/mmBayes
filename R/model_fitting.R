@@ -1082,6 +1082,10 @@ predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
         engine <- "stan_glm"
     }
 
+    if (identical(engine, "ensemble")) {
+        return(predict_ensemble_matchup_rows(matchup_rows, model_results, draws = draws))
+    }
+
     if (identical(engine, "bart")) {
         prepared <- prepare_model_data(
             matchup_rows,

@@ -192,6 +192,7 @@ default_project_config <- function() {
             engine = "stan_glm",
             compare_engines = TRUE,
             allow_unavailable_comparison = FALSE,
+            ensemble = default_ensemble_config(),
             bart = list(
                 n_trees = 200L,
                 n_burn = 500L,
@@ -301,7 +302,9 @@ load_project_config <- function(path = "config.yml") {
         parsed
     }
 
-    normalize_project_paths(merge_config_lists(config, parsed_default))
+    loaded_config <- normalize_project_paths(merge_config_lists(config, parsed_default))
+    validate_ensemble_config(loaded_config)
+    loaded_config
 }
 
 #' Initialize logging for the current run
