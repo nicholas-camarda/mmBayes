@@ -1960,6 +1960,8 @@ build_bracket_tree_data <- function(
         dplyr::bind_rows(edge_list)
     }
 
+    baseline_nodes <- NULL
+
     trees <- Filter(Negate(is.null), lapply(seq_along(candidates), function(index) {
         candidate <- candidates[[index]]
         matchups <- candidate$matchups %||% tibble::tibble()
@@ -2002,12 +2004,39 @@ build_bracket_tree_data <- function(
         nodes$candidate_id <- candidate_id
         nodes$candidate_label <- candidate_label
         nodes$candidate_pick <- nodes$winner
+        nodes$route_diff <- FALSE
+
+        if (index == 1L) {
+            baseline_nodes <<- nodes %>%
+                dplyr::transmute(
+                    slot_key = as.character(slot_key),
+                    baseline_matchup = paste(as.character(teamA), as.character(teamB), sep = " vs "),
+                    baseline_winner = as.character(winner)
+                )
+        } else if (!is.null(baseline_nodes) && nrow(baseline_nodes) > 0) {
+            nodes <- nodes %>%
+                dplyr::left_join(baseline_nodes, by = "slot_key") %>%
+                dplyr::mutate(
+                    current_matchup = paste(as.character(teamA), as.character(teamB), sep = " vs "),
+                    route_diff = is.na(baseline_matchup) |
+                        current_matchup != baseline_matchup |
+                        as.character(winner) != baseline_winner
+                ) %>%
+                dplyr::select(-baseline_matchup, -baseline_winner, -current_matchup)
+        }
+
+        edges <- build_edges(nodes)
+        if (nrow(edges) > 0 && "route_diff" %in% names(nodes)) {
+            route_diff_slots <- as.character(nodes$slot_key[isTRUE(nodes$candidate_id[[1]] != 1L) & nodes$route_diff])
+            edges$route_diff <- as.character(edges$from_slot) %in% route_diff_slots |
+                as.character(edges$to_slot) %in% route_diff_slots
+        }
 
         list(
             candidate_id = candidate_id,
             candidate_label = candidate_label,
             nodes = nodes,
-            edges = build_edges(nodes)
+            edges = edges
         )
     }))
 
@@ -2350,10 +2379,12 @@ predict_candidate_total_points <- function(candidates, current_teams, total_poin
 #' @param n_candidates Number of bracket candidates to retain.
 #' @param n_simulations Number of stochastic brackets to explore.
 #' @param random_seed Random seed for stochastic exploration.
+#' @param parallel_workers Number of worker processes used for stochastic
+#'   candidate simulation. `NULL` chooses a conservative local default.
 #'
 #' @return A list with candidate metadata and flattened matchup tables.
 #' @export
-generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, n_candidates = 2L, n_simulations = 250L, random_seed = 123, simulation_method = c("coherent_draw", "posterior_mean")) {
+generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, n_candidates = 2L, n_simulations = 250L, random_seed = 123, simulation_method = c("coherent_draw", "posterior_mean"), parallel_workers = NULL) {
     simulation_method <- match.arg(simulation_method)
     logger::log_info("Building deterministic reference bracket")
     deterministic_bracket <- simulate_full_bracket(
@@ -2392,40 +2423,55 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
         return(candidates)
     }
 
-    set.seed(random_seed)
-    logger::log_info("Exploring {n_simulations} stochastic bracket simulations with {simulation_method} path sampling")
+    workers <- resolve_candidate_simulation_workers(n_simulations, parallel_workers)
+    simulation_tasks <- build_candidate_simulation_tasks(
+        n_simulations = n_simulations,
+        draws = draws,
+        random_seed = random_seed,
+        simulation_method = simulation_method
+    )
+    logger::log_info("Exploring {n_simulations} stochastic bracket simulations with {simulation_method} path sampling on {workers} worker(s)")
     simulated_rows <- vector("list", n_simulations)
     progress_points <- sort(unique(pmax(1L, as.integer(round(seq(0.2, 1, by = 0.2) * n_simulations)))))
-    for (index in seq_len(n_simulations)) {
-        posterior_draw_index <- if (identical(simulation_method, "coherent_draw")) {
-            sample.int(max(1L, as.integer(draws)), 1L)
+    task_chunks <- split(
+        seq_len(n_simulations),
+        ceiling(seq_len(n_simulations) / max(1L, ceiling(n_simulations / 5L)))
+    )
+
+    for (task_indices in task_chunks) {
+        task_list <- lapply(task_indices, function(index) simulation_tasks[index, , drop = FALSE])
+        chunk_rows <- if (workers > 1L) {
+            parallel::mclapply(
+                task_list,
+                simulate_bracket_candidate_task,
+                all_teams = all_teams,
+                model_results = model_results,
+                draws = draws,
+                actual_play_in_results = actual_play_in_results,
+                mc.cores = workers,
+                mc.preschedule = FALSE
+            )
         } else {
-            NULL
+            lapply(
+                task_list,
+                simulate_bracket_candidate_task,
+                all_teams = all_teams,
+                model_results = model_results,
+                draws = draws,
+                actual_play_in_results = actual_play_in_results
+            )
         }
-        bracket <- simulate_full_bracket(
-            all_teams = all_teams,
-            model_results = model_results,
-            draws = draws,
-            actual_play_in_results = actual_play_in_results,
-            deterministic = FALSE,
-            log_matchups = FALSE,
-            log_stage_progress = FALSE,
-            posterior_draw_index = posterior_draw_index
-        )
-        flattened <- flatten_matchup_results(bracket)
-        summary_row <- summarize_bracket_probability(flattened)
-        simulated_rows[[index]] <- tibble::tibble(
-            bracket_key = build_bracket_key(flattened),
-            champion = bracket$final_four$champion$Team[[1]],
-            final_four = paste(vapply(bracket$final_four$semifinalists, function(team) team$Team[[1]], character(1)), collapse = ", "),
-            bracket_log_prob = summary_row$bracket_log_prob[[1]],
-            mean_game_prob = summary_row$mean_game_prob[[1]],
-            posterior_draw_index = posterior_draw_index %||% NA_integer_,
-            simulation = list(bracket),
-            matchups = list(augment_matchup_decisions(flattened))
-        )
-        if (index %in% progress_points) {
-            logger::log_info("Candidate simulations complete: {index}/{n_simulations}")
+        failed_rows <- vapply(chunk_rows, inherits, logical(1), "try-error")
+        if (any(failed_rows)) {
+            stop_with_message(sprintf(
+                "Candidate simulation worker failed: %s",
+                as.character(chunk_rows[[which(failed_rows)[[1]]]])[[1]]
+            ))
+        }
+        simulated_rows[task_indices] <- chunk_rows
+        completed <- max(task_indices)
+        if (completed %in% progress_points || completed == n_simulations) {
+            logger::log_info("Candidate simulations complete: {completed}/{n_simulations}")
         }
     }
 
@@ -2503,6 +2549,127 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
     }
 
     candidates
+}
+
+#' Choose the candidate-simulation worker count
+#'
+#' @keywords internal
+resolve_candidate_simulation_workers <- function(n_simulations, requested_workers = NULL) {
+    option_workers <- getOption("mmBayes.candidate_workers", NULL)
+    env_workers <- Sys.getenv("MMBAYES_CANDIDATE_WORKERS", unset = "")
+    requested_workers <- requested_workers %||% option_workers
+    if (is.null(requested_workers) && nzchar(env_workers)) {
+        requested_workers <- env_workers
+    }
+
+    if (is.null(requested_workers)) {
+        if (n_simulations < 16L || !supports_candidate_fork_workers()) {
+            return(1L)
+        }
+        detected_cores <- parallel::detectCores(logical = FALSE)
+        if (is.na(detected_cores) || detected_cores < 2L) {
+            detected_cores <- parallel::detectCores(logical = TRUE)
+        }
+        if (is.na(detected_cores) || detected_cores < 2L) {
+            detected_cores <- 1L
+        }
+        return(max(1L, min(as.integer(n_simulations), 4L, as.integer(detected_cores) - 1L)))
+    }
+
+    workers <- suppressWarnings(as.integer(requested_workers[[1]]))
+    if (is.na(workers) || workers < 1L) {
+        stop_with_message("Candidate simulation workers must be a positive integer")
+    }
+    if (workers > 1L && !supports_candidate_fork_workers()) {
+        stop_with_message("Parallel candidate simulation requires forked worker support on this R runtime")
+    }
+
+    min(workers, as.integer(n_simulations))
+}
+
+#' Detect whether forked candidate workers are supported
+#'
+#' @keywords internal
+supports_candidate_fork_workers <- function() {
+    .Platform$OS.type == "unix"
+}
+
+#' Build deterministic task records for stochastic candidate simulation
+#'
+#' @keywords internal
+build_candidate_simulation_tasks <- function(n_simulations, draws, random_seed, simulation_method) {
+    if (is.null(random_seed) || length(random_seed) == 0L || is.na(random_seed[[1]])) {
+        stop_with_message("Candidate simulation random_seed must be supplied")
+    }
+
+    with_preserved_rng(random_seed, {
+        tibble::tibble(
+            simulation_index = seq_len(n_simulations),
+            simulation_seed = sample.int(.Machine$integer.max, n_simulations),
+            posterior_draw_index = if (identical(simulation_method, "coherent_draw")) {
+                sample.int(max(1L, as.integer(draws)), n_simulations, replace = TRUE)
+            } else {
+                rep(NA_integer_, n_simulations)
+            }
+        )
+    })
+}
+
+#' Run one stochastic candidate simulation task
+#'
+#' @keywords internal
+simulate_bracket_candidate_task <- function(task, all_teams, model_results, draws, actual_play_in_results = NULL) {
+    set.seed(task$simulation_seed[[1]])
+    posterior_draw_index <- task$posterior_draw_index[[1]]
+    if (is.na(posterior_draw_index)) {
+        posterior_draw_index <- NULL
+    }
+
+    bracket <- simulate_full_bracket(
+        all_teams = all_teams,
+        model_results = model_results,
+        draws = draws,
+        actual_play_in_results = actual_play_in_results,
+        deterministic = FALSE,
+        log_matchups = FALSE,
+        log_stage_progress = FALSE,
+        posterior_draw_index = posterior_draw_index
+    )
+    flattened <- flatten_matchup_results(bracket)
+    summary_row <- summarize_bracket_probability(flattened)
+
+    tibble::tibble(
+        bracket_key = build_bracket_key(flattened),
+        champion = bracket$final_four$champion$Team[[1]],
+        final_four = paste(vapply(bracket$final_four$semifinalists, function(team) team$Team[[1]], character(1)), collapse = ", "),
+        bracket_log_prob = summary_row$bracket_log_prob[[1]],
+        mean_game_prob = summary_row$mean_game_prob[[1]],
+        posterior_draw_index = posterior_draw_index %||% NA_integer_,
+        simulation = list(bracket),
+        matchups = list(augment_matchup_decisions(flattened))
+    )
+}
+
+#' Evaluate an expression with a temporary RNG seed
+#'
+#' @keywords internal
+with_preserved_rng <- function(seed, expr) {
+    had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    old_seed <- if (had_seed) {
+        get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    } else {
+        NULL
+    }
+    on.exit({
+        if (had_seed) {
+            assign(".Random.seed", old_seed, envir = .GlobalEnv)
+        } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+            rm(".Random.seed", envir = .GlobalEnv)
+        }
+    }, add = TRUE)
+
+    set.seed(seed)
+    force(expr)
 }
 
 #' Write candidate summaries, decision sheets, and dashboard artifacts

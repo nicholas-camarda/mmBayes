@@ -2486,7 +2486,7 @@ render_bracket_tree_svg <- function(tree_data) {
     col_labels_html <- paste(
         vapply(names(round_x), function(rnd) {
             sprintf(
-                "<text x='%d' y='22' text-anchor='middle' font-size='10' font-weight='700' fill='#64748b' font-family='system-ui,sans-serif'>%s</text>",
+                "<text x='%d' y='22' text-anchor='middle' font-size='10' font-weight='700' fill='#94a3b8' font-family='system-ui,sans-serif'>%s</text>",
                 round_x[[rnd]], round_labels_short[[rnd]]
             )
         }, character(1L)),
@@ -2495,7 +2495,7 @@ render_bracket_tree_svg <- function(tree_data) {
 
     # --- Region band backgrounds and labels ---
     region_names <- c("East", "South", "Midwest", "West")
-    band_colors  <- c("rgba(248,250,252,0.6)", "rgba(241,245,249,0.6)", "rgba(248,250,252,0.6)", "rgba(241,245,249,0.6)")
+    band_colors  <- c("rgba(15,23,42,0.72)", "rgba(30,41,59,0.52)", "rgba(15,23,42,0.72)", "rgba(30,41,59,0.52)")
 
     region_bands_html <- paste(
         vapply(region_names, function(r) {
@@ -2504,13 +2504,13 @@ render_bracket_tree_svg <- function(tree_data) {
             y_mid    <- y_top + REGION_HEIGHT / 2L
             bg_color <- band_colors[[row_idx + 1L]]
             sep_line <- if (row_idx < 3L) {
-                sprintf("<line x1='60' y1='%d' x2='%d' y2='%d' stroke='#e2e8f0' stroke-width='1'/>",
+                sprintf("<line x1='60' y1='%d' x2='%d' y2='%d' stroke='#334155' stroke-width='1'/>",
                     y_top + REGION_HEIGHT, SVG_WIDTH, y_top + REGION_HEIGHT)
             } else ""
             paste0(
                 sprintf("<rect x='0' y='%d' width='%d' height='%d' fill='%s'/>",
                     y_top, SVG_WIDTH, REGION_HEIGHT, bg_color),
-                sprintf("<text x='56' y='%d' text-anchor='end' font-size='13' font-weight='700' fill='#334155' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
+                sprintf("<text x='56' y='%d' text-anchor='end' font-size='13' font-weight='700' fill='#cbd5e1' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
                     y_mid, r),
                 sep_line
             )
@@ -2557,9 +2557,13 @@ render_bracket_tree_svg <- function(tree_data) {
                     tx <- x2 - NODE_W %/% 2L
                     mid <- (sx + tx) %/% 2L
 
+                    route_diff <- isTRUE(edge_row$route_diff[[1L]] %||% FALSE)
                     sprintf(
-                        "<path d='M%d,%d L%d,%d L%d,%d L%d,%d' fill='none' stroke='#94a3b8' stroke-width='1.5' class='btree-edge'/>",
-                        sx, y1, mid, y1, mid, y2, tx, y2
+                        "<path d='M%d,%d L%d,%d L%d,%d L%d,%d' fill='none' stroke='%s' stroke-width='%s' class='btree-edge%s'/>",
+                        sx, y1, mid, y1, mid, y2, tx, y2,
+                        if (route_diff) "#f59e0b" else "#64748b",
+                        if (route_diff) "2.6" else "1.4",
+                        if (route_diff) " btree-edge--route-diff" else ""
                     )
                 }, character(1L)),
                 collapse = "\n"
@@ -2581,6 +2585,7 @@ render_bracket_tree_svg <- function(tree_data) {
                 y <- as.integer(round(y))
                 tier <- as.character(node_row$confidence_tier[[1L]] %||% "")
                 text_color <- if (tier %in% c("Toss-up", "Volatile")) "#0f172a" else "#ffffff"
+                route_diff <- isTRUE(node_row$route_diff[[1L]] %||% FALSE)
                 rx <- x - NODE_W %/% 2L
                 ry <- y - NODE_H %/% 2L
                 pick_value <- as.character(node_row$candidate_pick[[1L]] %||% node_row$winner[[1L]] %||% "")
@@ -2593,7 +2598,7 @@ render_bracket_tree_svg <- function(tree_data) {
 
                 paste0(
                     sprintf(paste0(
-                        "<g class=\"btree-node\"",
+                        "<g class=\"btree-node%s\"",
                         " data-slot=\"%s\"",
                         " data-open-evidence=\"%s\"",
                         " data-tip-candidate=\"%s\"",
@@ -2607,6 +2612,7 @@ render_bracket_tree_svg <- function(tree_data) {
                         " data-tip-rationale=\"%s\"",
                         ">"
                     ),
+                    if (route_diff) " btree-node--route-diff" else "",
                     clean_attr(as.character(node_row$slot_key[[1L]])),
                     clean_attr(as.character(node_row$evidence_id[[1L]])),
                     clean_attr(as.character(tree$candidate_label %||% paste("Candidate", tree$candidate_id %||% 1L))),
@@ -2620,8 +2626,9 @@ render_bracket_tree_svg <- function(tree_data) {
                     clean_attr(as.character(node_row$rationale_short[[1L]] %||% ""))
                     ),
                     sprintf(
-                        "<rect x='%d' y='%d' width='%d' height='%d' rx='4' fill='%s'/>",
+                        "<rect x='%d' y='%d' width='%d' height='%d' rx='4' fill='%s' stroke='%s' stroke-width='%s'/>",
                         rx, ry, NODE_W, NODE_H, as.character(node_row$tier_color[[1L]])
+                        , if (route_diff) "#f59e0b" else "rgba(255,255,255,0.18)", if (route_diff) "3" else "1"
                     ),
                     sprintf(
                         "<text x='%d' y='%d' text-anchor='middle' font-size='9' fill='%s' dominant-baseline='middle' font-family='system-ui,sans-serif'>%s</text>",
@@ -2693,6 +2700,7 @@ render_bracket_tree_svg <- function(tree_data) {
         "<div class='btree-legend'>",
         legend_items,
         "<span class='btree-legend-item'><span style='font-weight:800;color:#e76f51;font-size:11px;'>U</span> Upset pick</span>",
+        "<span class='btree-legend-item'><span class='btree-legend-line'></span> Candidate 2 route change</span>",
         "</div>"
     )
 
@@ -3982,6 +3990,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     matchup_context_rows <- dashboard_context$matchup_context_rows %||% tibble::tibble()
     bracket_tree_data <- dashboard_context$bracket_tree_data
     build_metadata <- dashboard_context$build_metadata %||% list()
+    championship_distribution <- total_points_predictions$championship_distribution %||% tibble::tibble()
 
     primary_candidate <- if (length(candidates) >= 1L) candidates[[1]] else list(candidate_id = 1L, type = "safe", champion = NA_character_, final_four = NA_character_, bracket_log_prob = NA_real_, mean_game_prob = NA_real_, diff_summary = "Primary bracket.")
     alternate_candidate <- if (length(candidates) >= 2L) candidates[[2]] else primary_candidate
@@ -4134,6 +4143,17 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             ),
             "</div>"
         )
+    }
+
+    lookup_candidate_distribution <- function(candidate_id_value) {
+        if (is.null(championship_distribution) ||
+            nrow(championship_distribution) == 0 ||
+            !"candidate_id" %in% names(championship_distribution)) {
+            return(tibble::tibble())
+        }
+
+        championship_distribution %>%
+            dplyr::filter(candidate_id == candidate_id_value)
     }
 
     # Render one team evidence card from the matchup context row.
@@ -4339,6 +4359,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     # Build the overview card for one bracket candidate.
     render_candidate_card <- function(summary_row) {
         candidate_id <- row_value(summary_row, "candidate_id", 1L)
+        candidate_id_int <- suppressWarnings(as.integer(candidate_id))
+        candidate_role <- if (identical(candidate_id_int, 1L)) "Baseline entry" else "Alternate entry"
         tiebreaker_points <- row_value(summary_row, "recommended_tiebreaker_points", NA_integer_)
         tiebreaker_matchup <- row_value(summary_row, "championship_matchup", NA_character_)
         tiebreaker_interval <- format_total_interval(
@@ -4361,17 +4383,27 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         comparison_summary_value <- row_value(
             summary_row,
             "comparison_summary_value",
-            if (identical(as.integer(candidate_id), 1L)) "Baseline reference" else alternate_change_summary
+            if (identical(candidate_id_int, 1L)) "Baseline reference" else alternate_change_summary
         )
+        candidate_distribution <- lookup_candidate_distribution(candidate_id)
+        tiebreaker_chart <- if (nrow(candidate_distribution) > 0 && !is.na(tiebreaker_points)) {
+            paste0(
+                "<div class='candidate-card__distribution'>",
+                render_championship_distribution_svg(summary_row, candidate_distribution, build_championship_distribution_scale(championship_distribution)),
+                "</div>"
+            )
+        } else {
+            ""
+        }
 
         paste0(
-            "<article class='candidate-card' id='candidate-summary-", candidate_id, "'>",
+            "<article class='candidate-card candidate-card--", if (identical(candidate_id_int, 1L)) "baseline" else "alternate", "' id='candidate-summary-", candidate_id, "'>",
             "<div class='candidate-card__head'>",
             "<div>",
             "<div class='candidate-card__eyebrow'>Candidate ", candidate_id, " ", html_escape(row_value(summary_row, "candidate_type", "unknown")), "</div>",
             "<h3>", html_escape(row_value(summary_row, "champion", "n/a")), "</h3>",
             "</div>",
-            "<div class='candidate-card__mini'>", html_escape(display_value(row_value(summary_row, "bracket_log_probability", NA_real_), digits = 3L)), "</div>",
+            "<div class='candidate-card__side'><span class='candidate-role-pill'>", html_escape(candidate_role), "</span><div class='candidate-card__mini'>", html_escape(display_value(row_value(summary_row, "bracket_log_probability", NA_real_), digits = 3L)), "</div></div>",
             "</div>",
             "<p class='candidate-card__subline'><strong>Final Four:</strong> ", html_escape(row_value(summary_row, "final_four", "n/a")), "</p>",
             "<p class='candidate-card__subline'><strong>Identity:</strong> ", html_escape(summary_note), "</p>",
@@ -4392,6 +4424,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                 paste0(
                     "<div class='candidate-card__tiebreaker'>",
                     "<p><strong>Projected title game:</strong> ", html_escape(tiebreaker_matchup), "</p>",
+                    tiebreaker_chart,
                     "</div>"
                 )
             } else {
@@ -4403,6 +4436,215 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             "<a href='#review-queue'>Review queue</a>",
             "</div>",
             "</article>"
+        )
+    }
+
+    render_candidate_comparison_panel <- function(summary_rows) {
+        if (nrow(summary_rows) == 0) {
+            return("<p class='empty-state'>Candidate comparison is not available for this run.</p>")
+        }
+
+        row_html <- paste(
+            purrr::map_chr(seq_len(nrow(summary_rows)), function(index) {
+                row <- summary_rows[index, , drop = FALSE]
+                candidate_id <- row_value(row, "candidate_id", index)
+                role <- if (identical(as.integer(candidate_id), 1L)) "Baseline entry" else "Alternate entry"
+                paste0(
+                    "<tr>",
+                    "<td><strong>Candidate ", html_escape(candidate_id), "</strong><span class='comparison-role'>", html_escape(role), "</span></td>",
+                    "<td>", html_escape(row_value(row, "champion", "n/a")), "</td>",
+                    "<td>", html_escape(row_value(row, "final_four", "n/a")), "</td>",
+                    "<td>", html_escape(display_value(row_value(row, "bracket_log_probability", NA_real_), digits = 3L)), "</td>",
+                    "<td>", html_escape(display_value(row_value(row, "mean_picked_game_probability", NA_real_), digits = 3L)), "</td>",
+                    "<td>", html_escape(display_value(row_value(row, "diff_count", NA_real_), digits = 0L)), " total / ",
+                    html_escape(display_value(row_value(row, "late_round_diff_count", NA_real_), digits = 0L)), " late</td>",
+                    "<td>", html_escape(display_value(row_value(row, "recommended_tiebreaker_points", NA_real_), digits = 0L)), "</td>",
+                    "</tr>"
+                )
+            }),
+            collapse = "\n"
+        )
+
+        paste0(
+            "<div class='candidate-comparison-panel'>",
+            "<div class='section-label'>Choose the bracket to enter</div>",
+            "<div class='table-shell'>",
+            "<table class='dashboard-table candidate-comparison-table'>",
+            "<thead><tr><th>Entry</th><th>Champion</th><th>Final Four</th><th>Log prob</th><th>Mean pick prob</th><th>Changes</th><th>Tiebreaker</th></tr></thead>",
+            "<tbody>", row_html, "</tbody>",
+            "</table>",
+            "</div>",
+            "</div>"
+        )
+    }
+
+    render_candidate_entry_surface <- function(candidate_id_value) {
+        candidate_id_int <- suppressWarnings(as.integer(candidate_id_value))
+        if (!is.finite(candidate_id_int)) {
+            candidate_id_int <- 1L
+        }
+        matchup_column <- if (identical(candidate_id_int, 1L)) "matchup_label" else "candidate_2_matchup"
+        winner_column <- if (identical(candidate_id_int, 1L)) "candidate_1_pick" else "candidate_2_pick"
+        if (nrow(decision_sheet) == 0 ||
+            !all(c(matchup_column, winner_column, "round", "region", "matchup_number") %in% names(decision_sheet))) {
+            return("<p class='empty-state'>Candidate entry rows are not available for this run.</p>")
+        }
+
+        summary_row <- candidate_summary_rows %>% dplyr::filter(candidate_id == candidate_id_int)
+        if (nrow(summary_row) == 0) {
+            summary_row <- tibble::tibble(
+                champion = NA_character_,
+                final_four = NA_character_,
+                championship_matchup = NA_character_,
+                recommended_tiebreaker_points = NA_integer_
+            )
+        }
+
+        entry_rows <- decision_sheet %>%
+            dplyr::mutate(
+                fill_round = factor(as.character(round), levels = round_order),
+                fill_region = factor(as.character(region), levels = c(region_order, "National")),
+                entry_matchup = .data[[matchup_column]],
+                entry_winner = .data[[winner_column]],
+                evidence_id = paste0("evidence-", as.character(slot_key)),
+                review_needed = inspection_level %in% c("primary", "secondary") | candidate_diff_flag,
+                seed_label = sprintf(
+                    "%s vs %s",
+                    display_value(teamA_seed, digits = 0L),
+                    display_value(teamB_seed, digits = 0L)
+                ),
+                review_label = dplyr::case_when(
+                    candidate_diff_flag ~ "Review split",
+                    inspection_level == "primary" ~ "Inspect",
+                    inspection_level == "secondary" ~ "Watch",
+                    TRUE ~ "Enter"
+                )
+            ) %>%
+            dplyr::arrange(fill_region, fill_round, matchup_number)
+
+        render_region_block <- function(region_name, rows) {
+            row_html <- paste(
+                purrr::map_chr(seq_len(nrow(rows)), function(index) {
+                    row <- rows[index, , drop = FALSE]
+                    review_needed <- isTRUE(row$review_needed[[1]])
+                    paste0(
+                        "<article class='entry-pick", if (review_needed) " entry-pick--review" else "", if (isTRUE(row$candidate_diff_flag[[1]])) " entry-pick--diff" else "", "'>",
+                        "<div class='entry-pick__round'>", html_escape(as.character(row$round[[1]])), "</div>",
+                        "<div class='entry-pick__main'>",
+                        "<strong>", html_escape(row$entry_winner[[1]]), "</strong>",
+                        "<span>", html_escape(row$entry_matchup[[1]]), "</span>",
+                        "</div>",
+                        "<div class='entry-pick__meta'>",
+                        "<span>Seeds ", html_escape(row$seed_label[[1]]), "</span>",
+                        "<span>", html_escape(row$confidence_tier[[1]]), "</span>",
+                        "</div>",
+                        if (review_needed) {
+                            paste0("<button type='button' class='entry-review-button' data-open-evidence='", html_escape(row$evidence_id[[1]]), "'>", html_escape(row$review_label[[1]]), "</button>")
+                        } else {
+                            "<span class='entry-check'>Enter</span>"
+                        },
+                        "</article>"
+                    )
+                }),
+                collapse = ""
+            )
+
+            paste0(
+                "<section class='entry-region'>",
+                "<h4>", html_escape(region_name), "</h4>",
+                "<div class='entry-pick-list'>", row_html, "</div>",
+                "</section>"
+            )
+        }
+
+        region_blocks <- entry_rows %>%
+            dplyr::group_split(fill_region, .keep = TRUE)
+        region_html <- paste(
+            purrr::map_chr(region_blocks, function(rows) {
+                region_name <- as.character(rows$region[[1]])
+                render_region_block(region_name, rows)
+            }),
+            collapse = ""
+        )
+
+        paste0(
+            "<div class='entry-panel", if (identical(candidate_id_int, 1L)) " is-active" else "", "' data-entry-panel='candidate-", candidate_id_int, "'",
+            if (!identical(candidate_id_int, 1L)) " hidden" else "", ">",
+            "<div class='entry-summary-strip'>",
+            "<div><span>Champion</span><strong>", html_escape(row_value(summary_row, "champion", "n/a")), "</strong></div>",
+            "<div><span>Final Four</span><strong>", html_escape(row_value(summary_row, "final_four", "n/a")), "</strong></div>",
+            "<div><span>Title game</span><strong>", html_escape(row_value(summary_row, "championship_matchup", "n/a")), "</strong></div>",
+            "<div><span>Tiebreaker</span><strong>", html_escape(display_value(row_value(summary_row, "recommended_tiebreaker_points", NA_real_), digits = 0L)), "</strong></div>",
+            "</div>",
+            "<div class='entry-grid'>", region_html, "</div>",
+            "</div>"
+        )
+    }
+
+    render_candidate_entry_workspace <- function() {
+        if (length(candidates) == 0) {
+            return("<p class='empty-state'>Candidate brackets are not available for entry.</p>")
+        }
+
+        controls <- paste0(
+            "<div class='entry-controls' role='group' aria-label='Candidate entry selector'>",
+            paste(
+                purrr::map_chr(seq_along(candidates), function(index) {
+                    candidate_id <- candidates[[index]]$candidate_id %||% index
+                    sprintf(
+                        "<button type='button' class='entry-toggle%s' data-entry-target='candidate-%s'>Candidate %s</button>",
+                        if (index == 1L) " is-active" else "",
+                        html_escape(candidate_id),
+                        html_escape(candidate_id)
+                    )
+                }),
+                collapse = ""
+            ),
+            "</div>"
+        )
+
+        paste0(
+            "<div class='entry-workspace'>",
+            controls,
+            paste(
+                purrr::map_chr(seq_along(candidates), function(index) {
+                    candidate_id <- candidates[[index]]$candidate_id %||% index
+                    render_candidate_entry_surface(candidate_id)
+                }),
+                collapse = ""
+            ),
+            "</div>"
+        )
+    }
+
+    render_next_action_summary <- function() {
+        primary_row <- if (nrow(candidate_summary_rows) > 0) {
+            candidate_summary_rows %>% dplyr::filter(candidate_id == 1L) %>% dplyr::slice_head(n = 1)
+        } else {
+            tibble::tibble()
+        }
+        alternate_row <- if (nrow(candidate_summary_rows) > 0) {
+            candidate_summary_rows %>% dplyr::filter(candidate_id == 2L) %>% dplyr::slice_head(n = 1)
+        } else {
+            tibble::tibble()
+        }
+        review_count <- nrow(watchlist_rows)
+        bracket_change_count <- get_watchlist_count("Bracket-changing toss-ups")
+
+        paste0(
+            "<section class='next-action-panel' aria-label='Next bracket entry action'>",
+            "<div>",
+            "<div class='section-label'>Next action</div>",
+            "<h3>Enter Candidate 1, then pause at the marked review picks.</h3>",
+            "<p>Candidate 1 is the baseline bracket. Candidate 2 is the alternate if you want the changed route shown below.</p>",
+            "</div>",
+            "<div class='next-action-grid'>",
+            "<div><span>Baseline champion</span><strong>", html_escape(row_value(primary_row, "champion", "n/a")), "</strong></div>",
+            "<div><span>Alternate champion</span><strong>", html_escape(row_value(alternate_row, "champion", "n/a")), "</strong></div>",
+            "<div><span>Review picks</span><strong>", html_escape(display_value(review_count, digits = 0L)), "</strong><small>", html_escape(display_value(bracket_change_count, digits = 0L)), " bracket-changing</small></div>",
+            "<div><span>Baseline tiebreaker</span><strong>", html_escape(display_value(row_value(primary_row, "recommended_tiebreaker_points", NA_real_), digits = 0L)), "</strong></div>",
+            "</div>",
+            "</section>"
         )
     }
 
@@ -4560,10 +4802,10 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             "<div>",
             "<div class='role-kicker role-kicker--evidence'>Understand the split</div>",
             "<h3>Divergence Map</h3>",
-            "<p class='section-note'>Scan where Candidate 2 actually departs from the baseline. Late-round route changes are highlighted first, and each active bucket jumps into evidence or the exact diff reference.</p>",
+            "<p class='section-note'>Use this route map to see where Candidate 2 departs from the baseline by round and region. Active cells jump into evidence or the exact diff reference.</p>",
             "</div>",
             "</div>",
-            "<div class='divergence-map'>", paste(round_html, collapse = ""), "</div>",
+            "<div class='divergence-map divergence-map--route'>", paste(round_html, collapse = ""), "</div>",
             "</div>"
         )
     }
@@ -4579,6 +4821,24 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         why <- row_value(row, "why_this_matters", "No summary available.")
         usage <- row_value(row, "candidate_usage", "n/a")
         late_round <- isTRUE(row_value(row, "late_round_only", FALSE))
+        probability_track <- if (all(c("win_prob_favorite", "ci_lower", "ci_upper") %in% names(row))) {
+            paste0(
+                "<div class='watchlist-card__probability'>",
+                render_probability_track_html(
+                    mean_probability = row_value(row, "win_prob_favorite", NA_real_),
+                    lower_probability = row_value(row, "ci_lower", NA_real_),
+                    upper_probability = row_value(row, "ci_upper", NA_real_),
+                    axis_min = 0.5,
+                    axis_max = 1,
+                    color = dashboard_tier_color(row_value(row, "confidence_tier", "Lean")),
+                    value_label = "Favorite probability",
+                    interval_label = "Credible interval"
+                ),
+                "</div>"
+            )
+        } else {
+            ""
+        }
 
         paste0(
             "<article class='watchlist-card", hidden_class, "' data-surface='", surface_attr,
@@ -4598,6 +4858,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             "</div>",
             "<p><strong>Why this matters:</strong> ", html_escape(why), "</p>",
             "<p><strong>Candidate usage:</strong> ", html_escape(usage), "</p>",
+            probability_track,
             if (late_round) "<p class='watchlist-card__note'>Late-round only row.</p>" else "",
             "</article>"
         )
@@ -4888,6 +5149,9 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             collapse = "\n"
         )
     }
+    candidate_entry_html <- render_candidate_entry_workspace()
+    candidate_comparison_html <- render_candidate_comparison_panel(candidate_summary_rows)
+    next_action_html <- render_next_action_summary()
 
     watchlist_filter_toolbar <- paste0(
         "<div class='filter-toolbar' role='group' aria-label='Watchlist filters'>",
@@ -4922,8 +5186,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
 
     top_links <- paste0(
         "<nav class='jump-nav' aria-label='Dashboard sections'>",
-        "<a href='#review-queue'>Review queue</a>",
-        "<a href='#build'>Entries</a>",
+        "<a href='#build'>Enter bracket</a>",
+        "<a href='#review-queue'>Review picks</a>",
         "<a href='#bracket-tree'>Tree</a>",
         "<a href='#evidence'>Evidence</a>",
         "<a href='#technical-appendix'>Reference</a>",
@@ -5086,9 +5350,26 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".btree-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#334155;}",
         ".btree-legend-swatch{display:inline-block;width:14px;height:14px;border-radius:3px;flex-shrink:0;}",
         dashboard_disclosure_css(),
+        ":root{--bg:#080b12;--bg-soft:#0f172a;--panel:#111827;--panel-2:#172033;--panel-3:#1e293b;--border:#334155;--border-soft:#243244;--text:#e5edf7;--muted:#9aa8bd;--faint:#64748b;--action:#38bdf8;--action-2:#f59e0b;--candidate-1:#22c55e;--candidate-2:#a78bfa;--reference:#94a3b8;--danger:#fb7185;--shadow:0 18px 44px rgba(0,0,0,0.32);}",
+        "body{background:radial-gradient(circle at 12% 0%,rgba(56,189,248,0.12),transparent 30%),linear-gradient(180deg,#080b12 0%,#0f172a 52%,#111827 100%);color:var(--text);}",
+        "a{color:#7dd3fc;} a:hover{color:#bae6fd;}",
+        ".hero,.section,.dashboard-disclosure,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout,.divergence-map-panel,.candidate-comparison-panel,.next-action-panel{background:linear-gradient(180deg,rgba(17,24,39,0.96),rgba(15,23,42,0.96));border-color:var(--border);box-shadow:var(--shadow);}",
+        ".hero{border-radius:20px;}.section{border-radius:18px;}.section--entry{border-color:rgba(56,189,248,0.34);}",
+        ".eyebrow,.candidate-card__eyebrow,.team-card__eyebrow,.surface-pill,.summary-chip span,.metric-pill span,.hero-meta__chip span,.section-label,.entry-pick__round,.divergence-cell__region,.mini-table-title,.advantage-chart__header,.role-kicker{color:var(--muted);letter-spacing:0.08em;}",
+        "h1,h2,h3,h4,.candidate-card__mini,.dashboard-disclosure__title,.candidate-card__facts strong,.summary-chip strong,.metric-pill strong,.hero-meta__chip strong,.entry-pick__main strong{color:var(--text);}",
+        ".lede,.section-note,.candidate-card__subline,.watchlist-card__meta,.entry-pick__main span,.entry-pick__meta,.divergence-cell__note,.dashboard-disclosure__note,.path-panel__lede,.muted,.empty-state{color:var(--muted);}",
+        ".hero-meta__chip,.candidate-card__facts div,.summary-chip,.metric-pill,.team-card,.advantage-row,.comparison-details,.surface-pill,.prob-track-block,.entry-summary-strip div,.next-action-grid div{background:var(--panel-2);border-color:var(--border-soft);color:var(--text);}",
+        ".jump-nav{position:sticky;top:0;z-index:20;padding:8px 0;background:linear-gradient(180deg,rgba(8,11,18,0.96),rgba(8,11,18,0.72));backdrop-filter:blur(10px);overflow-x:auto;flex-wrap:nowrap;}",
+        ".jump-nav a,.filter-chip,.show-more-button,.jump-button,.btree-toggle,.entry-toggle,.entry-review-button{background:var(--panel-3);border-color:var(--border);color:var(--text);border-radius:999px;}",
+        ".jump-nav a,.filter-chip.is-active,.btree-toggle.is-active,.entry-toggle.is-active,.jump-button,.entry-review-button{background:var(--action);border-color:var(--action);color:#03131f;}",
+        ".role-kicker--act,.section-label{color:#fbbf24;}.role-kicker--evidence{color:#7dd3fc;}.role-kicker--reference{color:var(--reference);}",
+        ".status-final{background:rgba(20,83,45,0.42);border-color:#22c55e;color:#bbf7d0;}.status-simulated{background:rgba(120,53,15,0.48);border-color:#f59e0b;color:#fde68a;}.status-unknown{background:rgba(49,46,129,0.45);border-color:#818cf8;color:#c7d2fe;}",
+        ".entry-workspace{display:grid;gap:16px;margin-top:16px;}.entry-controls,.bracket-tree-controls{display:flex;gap:10px;flex-wrap:wrap;}.entry-panel[hidden]{display:none !important;}.entry-summary-strip,.next-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0;}.entry-summary-strip span,.next-action-grid span{display:block;font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}.entry-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;align-items:start;}.entry-region{background:rgba(15,23,42,0.66);border:1px solid var(--border-soft);border-radius:14px;padding:12px;}.entry-pick-list{display:grid;gap:8px;}.entry-pick{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'round action' 'main action' 'meta action';gap:6px 10px;align-items:center;padding:10px;border:1px solid var(--border-soft);border-radius:12px;background:#0f172a;}.entry-pick--review{border-color:#f59e0b;background:rgba(245,158,11,0.1);}.entry-pick--diff{box-shadow:inset 3px 0 0 var(--candidate-2);}.entry-pick__round{grid-area:round;}.entry-pick__main{grid-area:main;display:flex;flex-direction:column;gap:2px;min-width:0;}.entry-pick__main strong,.entry-pick__main span{overflow-wrap:anywhere;}.entry-pick__meta{grid-area:meta;display:flex;flex-wrap:wrap;gap:6px 10px;font-size:12px;}.entry-review-button,.entry-check{grid-area:action;align-self:center;}.entry-check{color:#86efac;font-weight:700;font-size:12px;}.candidate-comparison-panel{padding:14px;margin:16px 0;border-radius:14px;}.comparison-role{display:block;color:var(--muted);font-size:12px;margin-top:3px;}.candidate-card--baseline{border-color:rgba(34,197,94,0.5);}.candidate-card--alternate{border-color:rgba(167,139,250,0.55);}.candidate-card__side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}.candidate-role-pill{display:inline-flex;border:1px solid var(--border);border-radius:999px;padding:5px 9px;color:var(--text);background:var(--panel-3);font-size:12px;font-weight:700;}.candidate-card__distribution .tiebreaker-svg{max-width:100%;height:auto;background:rgba(8,11,18,0.5);border-radius:10px;}",
+        ".divergence-map--route{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}.divergence-round{background:rgba(15,23,42,0.78);border-color:var(--border-soft);}.divergence-round--late{background:rgba(120,53,15,0.22);border-color:rgba(245,158,11,0.55);}.divergence-cell{background:#0f172a;border-color:var(--border-soft);color:var(--text);}.divergence-cell.is-active{background:rgba(56,189,248,0.09);border-color:#38bdf8;}.divergence-cell--late.is-active{border-color:#f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,0.32);}.divergence-cell--empty{background:rgba(15,23,42,0.56);border-color:#263244;}.divergence-pill--winner{background:rgba(56,189,248,0.18);color:#bae6fd;}.divergence-pill--path{background:rgba(245,158,11,0.18);color:#fde68a;}.divergence-pill--reference{background:rgba(167,139,250,0.18);color:#ddd6fe;}.divergence-pill--quiet{background:rgba(100,116,139,0.24);color:#cbd5e1;}",
+        ".dashboard-table th{background:#172033;color:var(--text);}.dashboard-table th,.dashboard-table td{border-color:var(--border-soft);}.table-shell{background:var(--panel);border-color:var(--border);}.prob-track__lane{background:#0b1220;border-color:#334155;}.prob-track__point{border-color:#0f172a;}.prob-track__scale,.prob-track__caption{color:var(--muted);}.prob-track__caption strong{color:var(--text);}.team-card__role--favorite{background:rgba(56,189,248,0.18);color:#bae6fd;}.team-card__role--underdog{background:rgba(245,158,11,0.18);color:#fde68a;}.team-card__seed{background:#0f172a;border-color:var(--border);color:var(--text);}.team-card__meta,.advantage-row__value,.advantage-row__favor,.btree-legend-item{color:var(--muted);}.advantage-track{background:#0b1220;}.advantage-track__center{background:#475569;}.comparison-details > summary{color:var(--text);}.btree-svg{background:#0b1220;border-radius:12px;}.btree-edge--route-diff{filter:drop-shadow(0 0 4px rgba(245,158,11,0.45));}.btree-node--route-diff rect{filter:drop-shadow(0 0 5px rgba(245,158,11,0.45));}.btree-legend-line{display:inline-block;width:22px;height:3px;border-radius:999px;background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.5);}#btree-tooltip{background:#020617;color:var(--text);border:1px solid var(--border);}",
         "@media (max-width: 1024px){.page{padding:20px 18px 40px;}.hero,.section{padding:18px;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary,.divergence-map-panel__head{flex-wrap:wrap;}.candidate-card__facts,.summary-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.candidate-card__links,.appendix-links,.jump-nav,.watchlist-toolbar,.filter-toolbar,.bracket-tree-controls{gap:8px;}.table-shell .dashboard-table{min-width:680px;}}",
         "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.section-grid,.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid,.divergence-map{grid-template-columns:1fr;}.candidate-card__facts,.summary-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.table-shell .dashboard-table{min-width:620px;}.btree-svg{min-width:900px;}.advantage-chart__header{display:none;}.advantage-row{grid-template-columns:repeat(2,minmax(0,1fr));}.advantage-row__metric,.advantage-track,.advantage-row__favor{grid-column:1 / -1;}.advantage-row__value--left{text-align:left;}.advantage-row__value--right{text-align:right;}}",
-        "@media (max-width: 640px){.page{padding:14px 12px 28px;}h1{font-size:29px;}h2{font-size:21px;}h3{font-size:17px;}.hero,.section,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout{padding:14px;}.jump-nav,.watchlist-toolbar,.filter-toolbar,.candidate-card__links,.appendix-links,.bracket-tree-controls{flex-direction:column;align-items:stretch;}.jump-nav a,.filter-chip,.show-more-button,.jump-button,.btree-toggle{justify-content:center;width:100%;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary{flex-direction:column;align-items:flex-start;}.candidate-card__facts,.summary-strip{grid-template-columns:1fr;}.table-shell .dashboard-table{min-width:560px;}.btree-svg{min-width:760px;}.candidate-card__mini{font-size:18px;}}"
+        "@media (max-width: 640px){.page{padding:14px 12px 28px;}h1{font-size:29px;}h2{font-size:21px;}h3{font-size:17px;}.hero,.section,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout{padding:14px;}.hero-meta{display:none;}.jump-nav{margin-left:-4px;margin-right:-4px;padding:8px 4px;}.jump-nav a{white-space:nowrap;flex:0 0 auto;}.next-action-panel p,.next-action-grid{display:none;}.watchlist-toolbar,.filter-toolbar,.candidate-card__links,.appendix-links,.bracket-tree-controls,.entry-controls{overflow-x:auto;flex-wrap:nowrap;align-items:center;}.filter-chip,.show-more-button,.jump-button,.btree-toggle,.entry-toggle{justify-content:center;white-space:nowrap;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary{flex-direction:column;align-items:flex-start;}.candidate-card__facts,.summary-strip,.entry-summary-strip{grid-template-columns:1fr;}.entry-grid{grid-template-columns:1fr;}.entry-pick{grid-template-columns:minmax(0,1fr) auto;align-items:center;}.table-shell .dashboard-table{min-width:560px;}.btree-svg{min-width:760px;}.candidate-card__mini{font-size:18px;}}"
     )
 
     script <- paste0(
@@ -5099,6 +5380,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "var divergenceButtons=Array.from(document.querySelectorAll('[data-divergence-target]'));",
         "var watchlistCards=Array.from(document.querySelectorAll('.watchlist-card'));",
         "var shells=Array.from(document.querySelectorAll('[data-shell-toggle]'));",
+        "var entryButtons=Array.from(document.querySelectorAll('.entry-toggle[data-entry-target]'));",
+        "var entryPanels=Array.from(document.querySelectorAll('[data-entry-panel]'));",
         "function setFilter(value){",
         "filterButtons.forEach(function(button){var active=button.getAttribute('data-surface-filter')===value;button.classList.toggle('is-active', active);});",
         "filterTargets.forEach(function(node){",
@@ -5120,6 +5403,9 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "}",
         "filterButtons.forEach(function(button){button.addEventListener('click', function(){clearBucketFilter();setFilter(button.getAttribute('data-surface-filter'));});});",
         "shells.forEach(function(button){button.addEventListener('click', function(){var shell=document.querySelector('[data-shell=\"'+button.getAttribute('data-shell-toggle')+'\"]');if(shell){shell.classList.toggle('is-expanded');button.textContent=shell.classList.contains('is-expanded') ? 'Show less' : 'Show more';}});});",
+        "function setEntry(target){entryButtons.forEach(function(button){button.classList.toggle('is-active', button.getAttribute('data-entry-target')===target);});entryPanels.forEach(function(panel){var active=panel.getAttribute('data-entry-panel')===target;panel.hidden=!active;panel.classList.toggle('is-active', active);});}",
+        "entryButtons.forEach(function(button){button.addEventListener('click', function(){setEntry(button.getAttribute('data-entry-target'));});});",
+        "if(entryButtons.length>0){setEntry(entryButtons[0].getAttribute('data-entry-target'));}",
         "document.addEventListener('click', function(event){",
         "var divergenceTarget=event.target.closest('[data-divergence-target]');",
         "if(divergenceTarget){",
@@ -5226,10 +5512,23 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<div class='page'>",
         "<header class='hero'>",
         "<div class='eyebrow'>mmBayes Bracket Workspace</div>",
-        "<h1>Bracket-building decision workspace</h1>",
-        "<p class='lede'>Bracket year ", html_escape(bracket_year), ". Start with the review queue to decide what actually deserves manual attention, then lock your entries and use the evidence drawers only for the calls that still matter.</p>",
+        "<h1>Bracket entry workspace</h1>",
+        "<p class='lede'>Bracket year ", html_escape(bracket_year), ". Start by copying a complete candidate bracket, then pause only at the marked review picks before opening deeper evidence.</p>",
         build_metadata_html,
         top_links,
+        "</header>",
+        status_panel,
+        "<section class='section section--entry' id='build'>",
+        "<div class='role-kicker role-kicker--act'>Enter bracket</div>",
+        "<h2>Candidate Recommendations</h2>",
+        "<p class='section-note'>Use this section like a bracket sheet: choose Candidate 1 or Candidate 2, copy winners by region and round, then enter the champion and tiebreaker. Review markers show the picks worth pausing on.</p>",
+        next_action_html,
+        candidate_entry_html,
+        candidate_comparison_html,
+        "<div class='candidate-grid candidate-grid--detail'>",
+        candidate_cards_html,
+        "</div>",
+        "</section>",
         render_dashboard_disclosure_html(
             title = "How to read this workspace",
             role = "evidence",
@@ -5240,12 +5539,10 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                 render_dashboard_term_legend_html()
             )
         ),
-        "</header>",
-        status_panel,
         "<section class='section' id='review-queue'>",
-        "<div class='role-kicker role-kicker--act'>Act now</div>",
+        "<div class='role-kicker role-kicker--act'>Decide now</div>",
         "<h2>Review Queue</h2>",
-        "<p class='section-note'>Start here. Read the divergence map first to see where the alternate path actually splits, then work the queue for the bracket-changing disagreements, upset pivots, and fragile favorites that still deserve manual attention.</p>",
+        "<p class='section-note'>Use this after the fill-in view. Read the divergence route map to see where Candidate 2 actually splits, then work the queue for bracket-changing disagreements, upset pivots, and fragile favorites that deserve manual attention.</p>",
         divergence_map_html,
         "<div class='summary-strip'>",
         "<div class='summary-chip'><span>Candidate 2 changes</span><strong>", html_escape(display_value(nrow(candidate_delta_rows), digits = 0L)), "</strong></div>",
@@ -5265,14 +5562,6 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             body = candidate_delta_html
         ),
         appendix_callout,
-        "</section>",
-        "<section class='section' id='build'>",
-        "<div class='role-kicker role-kicker--act'>Act now</div>",
-        "<h2>Candidate Recommendations</h2>",
-        "<p class='section-note'>Candidate 1 is the baseline entry. Candidate 2 is the alternate bracket. Use the jump links on each card to move straight to the path reference or matchup evidence after you have worked the review queue.</p>",
-        "<div class='candidate-grid'>",
-        candidate_cards_html,
-        "</div>",
         "</section>",
         "<section class='section' id='bracket-tree'>",
         "<div class='role-kicker role-kicker--evidence'>Understand why</div>",

@@ -248,9 +248,13 @@ test_that("bracket tree renders candidate-specific trees and maps evidence drawe
     expect_no_match(dashboard_html, "style='min-width:[0-9]+px;display:block;'")
     expect_match(dashboard_html, "St\\. John&#39;s")
     expect_match(dashboard_html, "Texas A&amp;M")
+    expect_match(dashboard_html, "Candidate 2 route change")
 
     tree_data <- build_bracket_tree_data(context$candidates)
     expect_length(tree_data$trees, 2L)
+    expect_false(any(tree_data$trees[[1]]$nodes$route_diff))
+    expect_true(any(tree_data$trees[[2]]$nodes$route_diff))
+    expect_true(any(tree_data$trees[[2]]$edges$route_diff))
 
     ff_nodes <- tree_data$trees[[1]]$nodes %>%
         dplyr::filter(round == "Final Four")
@@ -280,6 +284,8 @@ test_that("bracket tree renders candidate-specific trees and maps evidence drawe
     expect_equal(length(rvest::html_elements(doc, ".btree-toggle[data-btree-target='candidate-1']")), 1L)
     expect_equal(length(rvest::html_elements(doc, ".btree-toggle[data-btree-target='candidate-2']")), 1L)
     expect_equal(length(rvest::html_elements(doc, ".btree-toggle[data-btree-target='both']")), 0L)
+    expect_true(length(rvest::html_elements(doc, ".btree-node--route-diff")) > 0)
+    expect_true(length(rvest::html_elements(doc, ".btree-edge--route-diff")) > 0)
 
     evidence_panels <- rvest::html_elements(doc, "details.evidence-panel")
     evidence_ids <- rvest::html_attr(evidence_panels, "id")
