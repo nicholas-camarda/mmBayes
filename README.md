@@ -10,7 +10,6 @@ An R-based NCAA tournament bracket lab. Turns pre-tournament team data and histo
 - [Commands](#commands)
 - [How It Works](#how-it-works)
 - [Model Details](#model-details)
-- [Branch Notes](#branch-notes)
 - [Repository Layout](#repository-layout)
 - [Documentation](#documentation)
 
@@ -159,7 +158,7 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 Notes:
 
 - `scripts/run_simulation.R` and `scripts/run_bracket_candidates.R` load `.env` when present via `load_dotenv_file()`.
-- Logs are written under `output/logs/`; full simulation logs are uniquely timestamped per run.
+- Logs are written under the configured runtime output directory's `logs/` subdirectory; full simulation logs are uniquely timestamped per run.
 - `scripts/run_simulation.R` syncs the tracked repo dashboard HTML snapshot after a successful full run so the committed `output/` files stay aligned with the latest runtime dashboard bundle.
 - `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_and_sync_dashboards.R` when the saved full results bundle already exists.
 - `scripts/publish_github_pages.R` is internal plumbing. It does not regenerate dashboards and should only copy a bundle you already know is the right one.
@@ -173,7 +172,7 @@ Notes:
 
 The pipeline runs in six steps:
 
-1. Load `config.yml` and read team features plus historical results from `data/`
+1. Load `config.yml` and read team features plus historical results from the configured data workbook paths
 2. Build one training row per historical tournament game at the matchup level
 3. Fit a Bayesian logistic regression for game-winner probability
 4. Run a rolling held-out-tournament backtest to validate calibration

@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Define the supported `master` branch contract for tests, canonical validation, bracket scoring, and release publishing.
+
+## Requirements
 
 ### Requirement: The supported master branch SHALL have a passing top-level test surface
 The `master` branch SHALL keep `Rscript tests/testthat.R` aligned with the supported betting-free workflow, and SHALL not retain tests that require removed betting-only helpers or retired odds paths.

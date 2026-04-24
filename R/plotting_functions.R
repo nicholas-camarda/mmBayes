@@ -378,21 +378,17 @@ render_probability_track_html <- function(mean_probability, lower_probability, u
     mean_position <- to_percent(mean_probability)
     lower_position <- to_percent(lower_probability)
     upper_position <- to_percent(upper_probability)
-    mid_probability <- axis_min + ((axis_max - axis_min) / 2)
 
     paste0(
         "<div class='prob-track'>",
+        "<div class='prob-track__summary'>",
+        "<div class='prob-track__stat'><span>", html_escape(value_label), "</span><strong>", html_escape(format_probability(mean_probability)), "</strong></div>",
+        "<div class='prob-track__stat'><span>", html_escape(interval_label), "</span><strong>", html_escape(format_probability_interval(lower_probability, upper_probability)), "</strong></div>",
+        "</div>",
         "<div class='prob-track__lane'>",
         "<div class='prob-track__range' style='left:", sprintf("%.2f", lower_position), "%;width:", sprintf("%.2f", max(upper_position - lower_position, 1)), "%;background:", html_escape(color), ";'></div>",
         "<div class='prob-track__point' style='left:", sprintf("%.2f", mean_position), "%;background:", html_escape(color), ";'></div>",
         "</div>",
-        "<div class='prob-track__scale'>",
-        "<span>", html_escape(format_probability(axis_min)), "</span>",
-        "<span>", html_escape(format_probability(mid_probability)), "</span>",
-        "<span>", html_escape(format_probability(axis_max)), "</span>",
-        "</div>",
-        "<div class='prob-track__caption'><strong>", html_escape(value_label), ":</strong> ", html_escape(format_probability(mean_probability)),
-        " <span class='muted'>| ", html_escape(interval_label), ": ", html_escape(format_probability_interval(lower_probability, upper_probability)), "</span></div>",
         "</div>"
     )
 }
@@ -429,6 +425,22 @@ render_labeled_probability_track_html <- function(title, mean_probability, lower
     )
 }
 
+#' Render a missing uncertainty block without duplicating another track
+#'
+#' @param title The block title.
+#' @param note Plain-language explanation for the missing uncertainty.
+#'
+#' @return A scalar character string containing HTML markup.
+#' @keywords internal
+render_unavailable_probability_block_html <- function(title, note) {
+    paste0(
+        "<div class='prob-track-block prob-track-block--unavailable'>",
+        "<div class='prob-track-block__title'>", html_escape(title), "</div>",
+        "<p class='prob-track-block__note'>", html_escape(note), "</p>",
+        "</div>"
+    )
+}
+
 #' Build a matchup lookup table for comparison boards
 #'
 #' @param candidate_matchups A candidate matchup table.
@@ -447,7 +459,9 @@ build_candidate_matchup_lookup <- function(candidate_matchups) {
                 as.character(matchup_label)
             } else {
                 sprintf("%s vs %s", teamA, teamB)
-            }
+            },
+            lookup_ci_lower = if ("favorite_ci_lower" %in% names(candidate_matchups)) favorite_ci_lower else ci_lower,
+            lookup_ci_upper = if ("favorite_ci_upper" %in% names(candidate_matchups)) favorite_ci_upper else ci_upper
         ) %>%
         dplyr::transmute(
             slot_lookup_key,
@@ -455,8 +469,8 @@ build_candidate_matchup_lookup <- function(candidate_matchups) {
             chosen_pick = winner,
             posterior_favorite = posterior_favorite,
             win_prob_favorite = win_prob_favorite,
-            ci_lower = ci_lower,
-            ci_upper = ci_upper,
+            ci_lower = lookup_ci_lower,
+            ci_upper = lookup_ci_upper,
             confidence_tier = confidence_tier
         )
 }
@@ -722,7 +736,7 @@ render_championship_distribution_panel <- function(summary_row, distribution, sc
 #'
 #' @return A scalar character string containing HTML markup for the legend.
 #' @keywords internal
-render_confidence_legend_html <- function() {
+render_confidence_legend_html <- function(title = NULL, show_descriptions = TRUE) {
     palette <- dashboard_tier_palette()
     descriptions <- c(
         "Lock" = "Stable favorite",
@@ -734,16 +748,30 @@ render_confidence_legend_html <- function() {
     chips <- paste(
         vapply(names(palette), function(tier) {
             sprintf(
-                "<div class='legend-chip'><span class='legend-swatch' style='background:%s'></span><div><strong>%s</strong><div class='legend-copy'>%s</div></div></div>",
+                "<div class='legend-chip'><span class='legend-swatch' style='background:%s'></span><div><strong>%s</strong>%s</div></div>",
                 palette[[tier]],
                 html_escape(tier),
-                html_escape(descriptions[[tier]])
+                if (isTRUE(show_descriptions)) {
+                    paste0("<div class='legend-copy'>", html_escape(descriptions[[tier]]), "</div>")
+                } else {
+                    ""
+                }
             )
         }, character(1)),
         collapse = "\n"
     )
 
-    paste0("<div class='legend-row'>", chips, "</div>")
+    legend_body <- paste0("<div class='legend-row'>", chips, "</div>")
+    if (!is.null(title) && nzchar(title)) {
+        return(paste0(
+            "<div class='confidence-legend' aria-label='", html_escape(title), "'>",
+            "<div class='section-label'>", html_escape(title), "</div>",
+            legend_body,
+            "</div>"
+        ))
+    }
+
+    legend_body
 }
 
 #' Render a compact glossary for the dashboard variables
@@ -842,7 +870,7 @@ render_dashboard_reading_guide_html <- function() {
         "</div>",
         "<div class='reading-guide__section reading-guide__section--legend'>",
         "<div class='guide-label'>Confidence tiers</div>",
-        render_confidence_legend_html(),
+        render_confidence_legend_html(show_descriptions = FALSE),
         "</div>",
         "</section>"
     )
@@ -855,6 +883,7 @@ render_dashboard_reading_guide_html <- function() {
 dashboard_disclosure_css <- function() {
     paste0(
         ".role-kicker{text-transform:uppercase;letter-spacing:0.12em;font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px;}",
+        ".role-kicker--orientation{color:#0e7490;}",
         ".role-kicker--act{color:#9a3412;}",
         ".role-kicker--evidence{color:#1d4ed8;}",
         ".role-kicker--reference{color:#475569;}",
@@ -874,6 +903,37 @@ dashboard_disclosure_css <- function() {
     )
 }
 
+#' Shared dark visual theme for technical dashboard pages
+#'
+#' @return A scalar character string containing CSS rules.
+#' @keywords internal
+dashboard_dark_surface_css <- function() {
+    paste0(
+        ":root{--bg:#080b12;--bg-soft:#0f172a;--panel:#111827;--panel-2:#172033;--panel-3:#1e293b;--border:#334155;--border-soft:#243244;--text:#e5edf7;--muted:#9aa8bd;--faint:#64748b;--action:#38bdf8;--action-2:#f59e0b;--candidate-1:#22c55e;--candidate-2:#a78bfa;--danger:#fb7185;--shadow:0 18px 44px rgba(0,0,0,0.32);}",
+        "body{background:radial-gradient(circle at 12% 0%,rgba(56,189,248,0.12),transparent 30%),linear-gradient(180deg,#080b12 0%,#0f172a 52%,#111827 100%);color:var(--text);}",
+        "a{color:#7dd3fc;}a:hover{color:#bae6fd;}",
+        "h1,h2,h3,.summary-value,.dashboard-disclosure__title,.board-value,.quality-metric-list strong,.prob-track__stat strong{color:var(--text);}",
+        ".lede,.quality-intro,.panel-caption,.summary-note,.quality-note,.distribution-note,.muted,.empty-state,.dashboard-disclosure__note,.board-note,.prob-track__caption,.prob-track-block__note,.legend-copy,.quality-metric-list p,.note-list,.diagnostic-bullets,.distribution-meta,.comparison-link-copy{color:var(--muted);}",
+        ".guide-card p,.explain-card p{color:var(--text);}",
+        ".panel,.quality-card,.summary-card,.guide-card,.explain-card,.dashboard-disclosure,.diagnostic-callout,.comparison-board,.prob-track-block{background:linear-gradient(180deg,rgba(17,24,39,0.96),rgba(15,23,42,0.96));border-color:var(--border);box-shadow:var(--shadow);}",
+        ".summary-card,.quality-card,.guide-card,.explain-card,.diagnostic-callout,.prob-track-block{box-shadow:0 10px 26px rgba(0,0,0,0.18);}",
+        ".summary-label,.guide-label,.explain-label,.prob-track-block__title,.board-cell::before,.role-kicker{color:var(--muted);}",
+        ".role-kicker--orientation{color:#67e8f9;}.role-kicker--act{color:#fbbf24;}.role-kicker--evidence{color:#7dd3fc;}.role-kicker--reference{color:#cbd5e1;}",
+        ".action-callout{background:linear-gradient(135deg,rgba(56,189,248,0.14),rgba(15,23,42,0.96));border-left-color:var(--action);}",
+        ".warning-callout{background:linear-gradient(135deg,rgba(245,158,11,0.16),rgba(15,23,42,0.96));border-left-color:var(--action-2);}",
+        ".evidence-callout{background:linear-gradient(135deg,rgba(59,130,246,0.16),rgba(15,23,42,0.96));border-left-color:#60a5fa;}",
+        ".reference-callout{background:linear-gradient(135deg,rgba(100,116,139,0.16),rgba(15,23,42,0.96));border-left-color:#94a3b8;}",
+        ".comparison-link-panel{border-left-color:var(--action);}",
+        ".status-final{background:rgba(20,83,45,0.42);border-color:#22c55e;color:#bbf7d0;}.status-simulated{background:rgba(120,53,15,0.48);border-color:#f59e0b;color:#fde68a;}.status-unknown{background:rgba(49,46,129,0.45);border-color:#818cf8;color:#c7d2fe;}",
+        ".toggle-button{background:var(--panel-3);border-color:var(--border);color:var(--text);}.toggle-button.is-active{background:var(--action);border-color:var(--action);color:#03131f;}",
+        ".dashboard-table{background:var(--panel);color:var(--text);}.dashboard-table th{background:var(--panel-2);color:var(--text);}.dashboard-table th,.dashboard-table td{border-color:var(--border-soft);}.dashboard-table tr.inspection-primary td{background:rgba(245,158,11,0.12);}.dashboard-table tr.inspection-primary td:first-child{border-left-color:#f59e0b;}.dashboard-table tr.inspection-secondary td{background:rgba(251,113,133,0.1);}.dashboard-table tr.inspection-secondary td:first-child{border-left-color:#fb7185;}",
+        ".comparison-board{gap:12px;padding:12px;overflow:visible;}.comparison-board__header{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;color:#cbd5e1;}.board-row{border:1px solid #40536a;border-radius:14px;background:linear-gradient(180deg,rgba(30,41,59,0.76),rgba(17,24,39,0.94));box-shadow:0 10px 24px rgba(0,0,0,0.16);}.board-row:first-of-type{border-top:1px solid #40536a;}",
+        ".prob-track__stat{background:rgba(30,41,59,0.82);border-color:var(--border-soft);}.prob-track__stat span{color:#cbd5e1;}.prob-track__lane{background:#0b1220;border-color:#334155;}.prob-track__point{border-color:#0f172a;}.prob-track__caption strong{color:var(--text);}",
+        ".tech-svg{background:#0b1220;border-color:var(--border);}.tech-svg text[fill='#111827'],.tech-svg text[fill='#1f2937'],.tech-svg text[fill='#57534e'],.tech-svg text[fill='#6b7280']{fill:#cbd5e1 !important;}.tech-svg line,.tech-svg path{stroke-opacity:0.92;}.tech-svg rect[fill='#f8fafc'],.tech-svg rect[fill='#fcfbf7'],.tech-svg rect[fill='#ffffff']{fill:#172033 !important;}",
+        ".legend-chip{background:var(--panel-2);border-color:var(--border-soft);color:var(--text);}.dashboard-disclosure__chevron{color:var(--muted);}"
+    )
+}
+
 #' Render a collapsible dashboard disclosure section
 #'
 #' @param title The section title.
@@ -888,7 +948,7 @@ dashboard_disclosure_css <- function() {
 #' @keywords internal
 render_dashboard_disclosure_html <- function(title,
                                              body,
-                                             role = c("evidence", "reference", "act"),
+                                             role = c("evidence", "reference", "act", "orientation"),
                                              note = NULL,
                                              open = FALSE,
                                              id = NULL,
@@ -896,6 +956,7 @@ render_dashboard_disclosure_html <- function(title,
     role <- match.arg(role)
     role_label <- switch(
         role,
+        orientation = "Start here",
         act = "Act now",
         evidence = "Understand why",
         reference = "Reference"
@@ -1411,8 +1472,13 @@ render_model_comparison_link_html <- function(model_comparison) {
         return(
             paste0(
                 "<div class='panel comparison-link-panel'>",
+                "<div class='comparison-link-panel__head'>",
+                "<div>",
+                "<div class='role-kicker role-kicker--reference'>Reference</div>",
                 "<h2>Model Comparison</h2>",
                 "<p class='panel-caption'>", html_escape(note), "</p>",
+                "</div>",
+                "</div>",
                 "</div>"
             )
         )
@@ -1424,14 +1490,19 @@ render_model_comparison_link_html <- function(model_comparison) {
 
     paste0(
         "<div class='panel comparison-link-panel'>",
+        "<div class='comparison-link-panel__head'>",
+        "<div>",
+        "<div class='role-kicker role-kicker--reference'>Reference</div>",
         "<h2>Model Comparison</h2>",
         "<p class='panel-caption'>Compare ", html_escape(current_label), " against ", html_escape(alternate_label), " on the same data. The dedicated comparison page keeps the scorecards together so the main dashboard stays readable.</p>",
-        "<div class='overview-grid'>",
-        "<div class='summary-card'><div class='summary-label'>Current engine</div><div class='summary-value'>", html_escape(current_label), "</div><p class='summary-note'>Primary run used for the bracket and live dashboard.</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Alternate engine</div><div class='summary-value'>", html_escape(alternate_label), "</div><p class='summary-note'>The compare page shows the alternate fit alongside the current run.</p></div>",
-        "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(if (is.character(summary_text)) summary_text else "See comparison"), "</div><p class='summary-note'>Backtest winner summary from the comparison bundle.</p></div>",
         "</div>",
-        "<p class='comparison-link-copy'><a href='", dashboard_preview_url("model_comparison_dashboard.html"), "'>Open the full model comparison dashboard</a></p>",
+        "<a class='comparison-link-button' href='", dashboard_preview_url("model_comparison_dashboard.html"), "'>Open comparison dashboard</a>",
+        "</div>",
+        "<div class='comparison-link-facts'>",
+        "<div class='comparison-link-fact'><span>Current engine</span><strong>", html_escape(current_label), "</strong><p>Primary run used for the bracket and live dashboard.</p></div>",
+        "<div class='comparison-link-fact'><span>Alternate engine</span><strong>", html_escape(alternate_label), "</strong><p>Shown beside the current run on the comparison page.</p></div>",
+        "<div class='comparison-link-fact comparison-link-fact--wide'><span>Backtest takeaway</span><strong>", html_escape(if (is.character(summary_text)) summary_text else "See comparison"), "</strong><p>Winner summary from the comparison bundle.</p></div>",
+        "</div>",
         "</div>"
     )
 }
@@ -1518,18 +1589,6 @@ render_model_comparison_summary_html <- function(model_comparison) {
     backtest_table <- model_comparison$backtest_comparison %||% tibble::tibble()
     live_table <- model_comparison$live_comparison %||% tibble::tibble()
     modeling_notes <- model_comparison$notes %||% character()
-    current_overview <- as_model_overview_bundle(
-        model_overview = model_comparison$current$model_overview %||% list(),
-        totals_overview = model_comparison$current$totals_overview %||% NULL
-    )
-    alternate_overview <- as_model_overview_bundle(
-        model_overview = model_comparison$alternate$model_overview %||% list(),
-        totals_overview = model_comparison$alternate$totals_overview %||% NULL
-    )
-    current_live_model <- normalize_model_overview(current_overview)
-    alternate_live_model <- normalize_model_overview(alternate_overview)
-    current_live_model_label <- current_live_model$engine_label %||% current_live_model$engine %||% current_label
-    alternate_live_model_label <- alternate_live_model$engine_label %||% alternate_live_model$engine %||% alternate_label
     verdict <- summarize_model_comparison_verdict(model_comparison)
     backtest_summary <- verdict$backtest_summary
     live_summary <- verdict$live_summary
@@ -1543,10 +1602,10 @@ render_model_comparison_summary_html <- function(model_comparison) {
     }
     compare_details_html <- paste0(
         render_dashboard_disclosure_html(
-            title = "Deeper evidence and metric tables",
+            title = "Comparison scorecards",
             role = "reference",
-            note = "Open this when you want the full comparison tables and modeling notes behind the verdict.",
-            open = FALSE,
+            note = "Engine-to-engine tables only. Calibration curves, live-by-round diagnostics, and recent games live on the technical dashboard.",
+            open = TRUE,
             body = paste0(
                 if (nzchar(notes_html)) paste0(
                     "<div class='quality-card reference-callout comparison-note-card'>",
@@ -1562,68 +1621,19 @@ render_model_comparison_summary_html <- function(model_comparison) {
         )
     )
 
-    # Reuse the same evidence stack for whichever engine tab is active.
-    render_engine_panel <- function(engine_label, model_bundle, live_model_label) {
-        paste0(
-            "<div class='engine-stack'>",
-            "<div class='panel action-callout'><div class='role-kicker role-kicker--act'>Act now</div><h2>", html_escape(engine_label), " verdict recap</h2><p class='panel-caption'>", html_escape(if (identical(verdict$preferred_label, engine_label)) {
-                paste0(engine_label, " is the preferred engine for this run.")
-            } else {
-                paste0(engine_label, " is the alternate engine for this run.")
-            }), "</p><p>", html_escape(verdict$justification), "</p><p class='summary-note'>", html_escape(verdict$caveat), "</p></div>",
-            "<div class='panel evidence-callout'><div class='role-kicker role-kicker--evidence'>Understand why</div>",
-            render_model_diagnostics_html(model_bundle$backtest %||% NULL, quality_source_label = paste(engine_label, "backtest")),
-            "</div>",
-            "<div class='panel evidence-callout'><div class='role-kicker role-kicker--evidence'>Understand why</div>",
-            render_live_performance_html(model_bundle$live_performance %||% NULL, model_label = live_model_label),
-            "</div>",
-            "<div class='panel reference-callout'><div class='role-kicker role-kicker--reference'>Reference</div>",
-            render_model_overview_html(as_model_overview_bundle(
-                model_overview = model_bundle$model_overview %||% list(),
-                totals_overview = model_bundle$totals_overview %||% NULL
-            )),
-            "</div>",
-            "</div>"
-        )
-    }
-
     paste0(
         "<div class='panel'>",
         "<h2>Model Comparison</h2>",
-        "<p class='panel-caption'>This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " on the same tournament data. Start in Compare for the preferred-engine verdict, then move into an engine tab only if you want the full evidence behind it.</p>",
+        "<p class='panel-caption'>This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " on the same tournament data. It stays comparative-only so detailed diagnostics do not duplicate the technical dashboard.</p>",
         "<div class='overview-grid'>",
         "<div class='summary-card action-callout'><div class='summary-label'>Preferred engine</div><div class='summary-value'>", html_escape(verdict$preferred_label), "</div><p class='summary-note'>", html_escape(if (isTRUE(verdict$close_call)) "Preferred engine, but only by a narrow backtest margin." else "Preferred engine from held-out backtest evidence."), "</p></div>",
         "<div class='summary-card'><div class='summary-label'>Backtest takeaway</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(backtest_summary$text), "</div><p class='summary-note'>Cross-validation style metrics from completed historical games.</p></div>",
         "<div class='summary-card'><div class='summary-label'>Live takeaway</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(live_summary$text), "</div><p class='summary-note'>Current-year games already completed in the live dashboard. Monitoring only; does not change the engine verdict.</p></div>",
         "<div class='summary-card warning-callout'><div class='summary-label'>Key caveat</div><div class='summary-value summary-value--wrap summary-value--tight'>", html_escape(if (isTRUE(verdict$close_call)) "Close call" else "Read caveat"), "</div><p class='summary-note'>", html_escape(verdict$caveat), "</p></div>",
         "</div>",
-        "<div class='comparison-tab-bar' role='group' aria-label='Model comparison view'>",
-        "<button type='button' class='toggle-button is-active' data-model-view-target='compare' aria-pressed='true'>Compare</button>",
-        "<button type='button' class='toggle-button' data-model-view-target='current' aria-pressed='false'>", html_escape(current_label), "</button>",
-        "<button type='button' class='toggle-button' data-model-view-target='alternate' aria-pressed='false'>", html_escape(alternate_label), "</button>",
-        "</div>",
-        "<div class='toggle-panel is-active' data-model-view-panel='compare'>",
         "<div class='panel action-callout'><div class='role-kicker role-kicker--act'>Act now</div><h2>Preferred engine verdict</h2><p class='panel-caption'>", html_escape(verdict$preferred_label), " is the current recommendation for this run.</p><p>", html_escape(verdict$justification), "</p><p class='summary-note'>", html_escape(verdict$caveat), "</p></div>",
         compare_details_html,
-        "</div>",
-        "<div class='toggle-panel' data-model-view-panel='current'>",
-        render_engine_panel(current_label, model_comparison$current %||% list(), current_live_model_label),
-        "</div>",
-        "<div class='toggle-panel' data-model-view-panel='alternate'>",
-        render_engine_panel(alternate_label, model_comparison$alternate %||% list(), alternate_live_model_label),
-        "</div>",
-        "<script>",
-        "(function(){",
-        "var buttons=document.querySelectorAll('[data-model-view-target]');",
-        "var panels=document.querySelectorAll('[data-model-view-panel]');",
-        "function setView(view){",
-        "panels.forEach(function(panel){panel.classList.toggle('is-active', panel.getAttribute('data-model-view-panel')===view);});",
-        "buttons.forEach(function(button){var active=button.getAttribute('data-model-view-target')===view;button.classList.toggle('is-active', active);button.setAttribute('aria-pressed', active ? 'true' : 'false');});",
-        "}",
-        "buttons.forEach(function(button){button.addEventListener('click', function(){setView(button.getAttribute('data-model-view-target'));});});",
-        "setView('compare');",
-        "})();",
-        "</script>",
+        "<p class='comparison-link-copy'>Need calibration, live-by-round diagnostics, or recent-game rows? Use the technical dashboard; this page intentionally avoids repeating those modules.</p>",
         "</div>"
     )
 }
@@ -1689,9 +1699,10 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         ".tech-svg{width:100%;height:auto;background:#fcfbf7;border:1px solid #e7e5e4;border-radius:14px;padding:8px;display:block;}",
         ".tech-svg-compact{max-width:520px;}",
         ".tech-svg--calibration{max-width:none;}",
-        ".quality-card--calibration{overflow:hidden;}",
-        ".calibration-layout{display:grid;grid-template-columns:minmax(320px,1.2fr) minmax(220px,0.8fr);gap:14px;align-items:start;}",
+        ".quality-card--calibration{grid-column:1/-1;overflow:hidden;}",
+        ".calibration-layout{display:grid;grid-template-columns:minmax(520px,1.35fr) minmax(260px,0.65fr);gap:18px;align-items:start;}",
         ".calibration-layout__plot,.calibration-layout__meta{min-width:0;}",
+        ".calibration-help-grid{display:grid;grid-template-columns:1fr;gap:10px;}",
         ".empty-state{color:#6b7280;font-style:italic;}",
         ".panel-caption{color:#6b7280;margin:0 0 12px 0;}",
         ".legend-row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 14px 0;}",
@@ -1701,12 +1712,13 @@ create_model_comparison_dashboard_html <- function(bracket_year, model_compariso
         ".diagnostic-callout{margin:10px 0 0 0;padding:12px 14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;}",
         ".diagnostic-callout strong{display:block;margin-bottom:8px;}",
         dashboard_disclosure_css(),
+        dashboard_dark_surface_css(),
         "@media (max-width: 1024px){body{padding:18px;}.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.overview-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}.panel,.summary-card,.quality-card{padding:16px;}}",
         "@media (max-width: 900px){.quality-grid,.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.tech-svg-compact{max-width:none;}}",
         "@media (max-width: 640px){body{padding:14px;}.panel,.summary-card,.quality-card{padding:14px;}.comparison-tab-bar{gap:8px;}.toggle-button{width:100%;justify-content:center;}.summary-value{font-size:20px;}h1{font-size:28px;}}",
         "</style></head><body>",
         "<h1>mmBayes Model Comparison</h1>",
-        "<p class='lede'>Bracket year ", html_escape(bracket_year), ". This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " so you can judge calibration, accuracy, and live behavior without mixing the comparison into the main bracket workflow.</p>",
+        "<p class='lede'>Bracket year ", html_escape(bracket_year), ". This page compares ", html_escape(current_label), " and ", html_escape(alternate_label), " through compact side-by-side scorecards. Detailed diagnostics stay on the technical dashboard.</p>",
         "<div class='panel'><strong>Status:</strong> ", html_escape(comparison_status), "</div>",
         "<p class='comparison-link-copy'><a href='", dashboard_preview_url("technical_dashboard.html"), "'>Back to the technical dashboard</a></p>",
         render_model_comparison_summary_html(model_comparison),
@@ -2319,10 +2331,12 @@ render_round_risk_heatmap_svg <- function(decision_sheet) {
 #' Render the candidate divergence board as wrapped HTML rows
 #'
 #' @param decision_sheet The decision-sheet data frame.
+#' @param candidates Bracket candidate objects used to source per-candidate
+#'   matchup uncertainty.
 #'
 #' @return A scalar character string containing HTML markup.
 #' @keywords internal
-render_candidate_divergence_svg <- function(decision_sheet) {
+render_candidate_divergence_svg <- function(decision_sheet, candidates) {
     diff_rows <- decision_sheet %>%
         dplyr::filter(candidate_diff_flag) %>%
         dplyr::mutate(round = factor(round, levels = round_levels())) %>%
@@ -2332,32 +2346,10 @@ render_candidate_divergence_svg <- function(decision_sheet) {
         return("<p class='empty-state'>Candidate 1 and Candidate 2 match on every slot in this run.</p>")
     }
 
-    candidate_one_lookup <- build_candidate_matchup_lookup(diff_rows %>%
-        dplyr::transmute(
-            slot_key = slot_key,
-            matchup_label = matchup_label,
-            winner = candidate_1_pick,
-            posterior_favorite = posterior_favorite,
-            win_prob_favorite = win_prob_favorite,
-            ci_lower = ci_lower,
-            ci_upper = ci_upper,
-            confidence_tier = confidence_tier
-        ))
-    candidate_two_lookup <- if ("candidate_2_matchup" %in% names(diff_rows)) {
-        diff_rows %>%
-            dplyr::transmute(
-                slot_lookup_key = slot_key,
-                matchup_label = candidate_2_matchup,
-                chosen_pick = candidate_2_pick,
-                posterior_favorite = posterior_favorite,
-                win_prob_favorite = win_prob_favorite,
-                ci_lower = ci_lower,
-                ci_upper = ci_upper,
-                confidence_tier = confidence_tier
-            )
-    } else {
-        candidate_one_lookup
-    }
+    candidate_one_lookup <- build_candidate_matchup_lookup(candidates[[1]]$matchups)
+    candidate_two_lookup <- build_candidate_matchup_lookup(
+        if (length(candidates) >= 2L) candidates[[2]]$matchups else candidates[[1]]$matchups
+    )
 
     row_html <- paste(
         purrr::map_chr(seq_len(nrow(diff_rows)), function(index) {
@@ -2365,15 +2357,50 @@ render_candidate_divergence_svg <- function(decision_sheet) {
             slot_key <- as.character(row$slot_key[[1]])
             candidate_one_row <- candidate_one_lookup %>% dplyr::filter(slot_lookup_key == slot_key) %>% dplyr::slice_head(n = 1)
             candidate_two_row <- candidate_two_lookup %>% dplyr::filter(slot_lookup_key == slot_key) %>% dplyr::slice_head(n = 1)
-            tier_color <- dashboard_tier_color(row$confidence_tier[[1]])
             candidate_one_matchup <- if (nrow(candidate_one_row) == 1L) candidate_one_row$matchup_label[[1]] else row$matchup_label[[1]]
             candidate_two_matchup <- if (nrow(candidate_two_row) == 1L) candidate_two_row$matchup_label[[1]] else row$candidate_2_matchup[[1]]
             candidate_one_mean <- if (nrow(candidate_one_row) == 1L) candidate_one_row$win_prob_favorite[[1]] else row$win_prob_favorite[[1]]
             candidate_one_lower <- if (nrow(candidate_one_row) == 1L) candidate_one_row$ci_lower[[1]] else row$ci_lower[[1]]
             candidate_one_upper <- if (nrow(candidate_one_row) == 1L) candidate_one_row$ci_upper[[1]] else row$ci_upper[[1]]
-            candidate_two_mean <- if (nrow(candidate_two_row) == 1L) candidate_two_row$win_prob_favorite[[1]] else row$win_prob_favorite[[1]]
-            candidate_two_lower <- if (nrow(candidate_two_row) == 1L) candidate_two_row$ci_lower[[1]] else row$ci_lower[[1]]
-            candidate_two_upper <- if (nrow(candidate_two_row) == 1L) candidate_two_row$ci_upper[[1]] else row$ci_upper[[1]]
+            candidate_two_mean <- if (nrow(candidate_two_row) == 1L) candidate_two_row$win_prob_favorite[[1]] else NA_real_
+            candidate_two_lower <- if (nrow(candidate_two_row) == 1L) candidate_two_row$ci_lower[[1]] else NA_real_
+            candidate_two_upper <- if (nrow(candidate_two_row) == 1L) candidate_two_row$ci_upper[[1]] else NA_real_
+            candidate_one_tier <- if (nrow(candidate_one_row) == 1L) candidate_one_row$confidence_tier[[1]] else row$confidence_tier[[1]]
+            candidate_two_tier <- if (nrow(candidate_two_row) == 1L) candidate_two_row$confidence_tier[[1]] else NA_character_
+            candidate_one_color <- dashboard_tier_color(candidate_one_tier)
+            candidate_two_color <- dashboard_tier_color(candidate_two_tier %||% candidate_one_tier)
+            shared_matchup <- identical(as.character(candidate_one_matchup), as.character(candidate_two_matchup))
+            candidate_one_track <- render_labeled_probability_track_html(
+                title = if (isTRUE(shared_matchup)) "Shared matchup uncertainty" else "Candidate 1 matchup uncertainty",
+                mean_probability = candidate_one_mean,
+                lower_probability = candidate_one_lower,
+                upper_probability = candidate_one_upper,
+                axis_min = 0.5,
+                axis_max = 1,
+                color = candidate_one_color,
+                value_label = "Posterior mean",
+                interval_label = "Posterior credible interval"
+            )
+            candidate_two_track <- if (isTRUE(shared_matchup)) {
+                ""
+            } else if (nrow(candidate_two_row) == 1L && all(is.finite(c(candidate_two_mean, candidate_two_lower, candidate_two_upper)))) {
+                render_labeled_probability_track_html(
+                    title = "Candidate 2 matchup uncertainty",
+                    mean_probability = candidate_two_mean,
+                    lower_probability = candidate_two_lower,
+                    upper_probability = candidate_two_upper,
+                    axis_min = 0.5,
+                    axis_max = 1,
+                    color = candidate_two_color,
+                    value_label = "Posterior mean",
+                    interval_label = "Posterior credible interval"
+                )
+            } else {
+                render_unavailable_probability_block_html(
+                    title = "Candidate 2 matchup uncertainty",
+                    note = "No separate posterior uncertainty was found for this alternate-path matchup."
+                )
+            }
             change_text <- build_divergence_change_text(
                 candidate_one_pick = row$candidate_1_pick[[1]],
                 candidate_two_pick = row$candidate_2_pick[[1]],
@@ -2393,28 +2420,8 @@ render_candidate_divergence_svg <- function(decision_sheet) {
                 "<div class='board-cell' data-label='Candidate 1 choice'><div class='board-value'>", html_escape(row$candidate_1_pick[[1]]), "</div><div class='board-note'>Candidate 1 game: ", html_escape(candidate_one_matchup), "</div></div>",
                 "<div class='board-cell' data-label='Candidate 2 choice'><div class='board-value'>", html_escape(row$candidate_2_pick[[1]]), "</div><div class='board-note'>Candidate 2 game: ", html_escape(candidate_two_matchup), "</div></div>",
                 "<div class='board-cell board-cell--plot' data-label='Posterior uncertainty'><div class='prob-track-stack'>",
-                render_labeled_probability_track_html(
-                    title = "Candidate 1 matchup uncertainty",
-                    mean_probability = candidate_one_mean,
-                    lower_probability = candidate_one_lower,
-                    upper_probability = candidate_one_upper,
-                    axis_min = 0.5,
-                    axis_max = 1,
-                    color = tier_color,
-                    value_label = "Posterior mean",
-                    interval_label = "Posterior credible interval"
-                ),
-                render_labeled_probability_track_html(
-                    title = "Candidate 2 matchup uncertainty",
-                    mean_probability = candidate_two_mean,
-                    lower_probability = candidate_two_lower,
-                    upper_probability = candidate_two_upper,
-                    axis_min = 0.5,
-                    axis_max = 1,
-                    color = tier_color,
-                    value_label = "Posterior mean",
-                    interval_label = "Posterior credible interval"
-                ),
+                candidate_one_track,
+                candidate_two_track,
                 "</div></div>",
                 "<div class='board-cell' data-label='What changes'><div class='board-value'>What changes</div><div class='board-note'>", html_escape(change_text), "</div></div>",
                 "</div>"
@@ -2826,25 +2833,6 @@ render_live_performance_html <- function(live_performance, model_label = NULL) {
         "</div>"
     )
 
-    round_rows <- if (nrow(round_tbl) > 0) {
-        paste(
-            purrr::map_chr(seq_len(nrow(round_tbl)), function(index) {
-                row <- round_tbl[index, , drop = FALSE]
-                paste0(
-                    "<tr>",
-                    "<td>", html_escape(format_live_round_label(row$round[[1]])), "</td>",
-                    "<td>", html_escape(as.character(row$games[[1]])), "</td>",
-                    "<td>", html_escape(format_probability(row$accuracy[[1]])), "</td>",
-                    "<td>", html_escape(format_probability(row$mean_predicted_prob[[1]])), "</td>",
-                    "</tr>"
-                )
-            }),
-            collapse = "\n"
-        )
-    } else {
-        ""
-    }
-
     recent_rows <- if (nrow(recent_games) > 0) {
         paste(
             purrr::map_chr(seq_len(nrow(recent_games)), function(index) {
@@ -2879,10 +2867,105 @@ render_live_performance_html <- function(live_performance, model_label = NULL) {
         "<p class='quality-note'>", html_escape(monitoring_note), "</p>",
         overview_cards,
         "<div class='two-column'>",
-        "<div class='quality-card'><h3>Live By Round</h3><p class='panel-caption'>Current-year completed games grouped by tournament round.</p><p class='panel-caption'>Mean predicted is the model's average win probability for the side it picked in that round.</p><table class='dashboard-table'><thead><tr><th>Round</th><th>Games</th><th>Accuracy</th><th>Mean predicted</th></tr></thead><tbody>", round_rows, "</tbody></table></div>",
+        "<div class='quality-card'><h3>Live By Round</h3><p class='panel-caption'>Current-year completed games grouped by tournament round. Blue shows how often the model's picked team actually won. Orange shows the average pregame win probability the model assigned to those same picked teams.</p>", render_live_round_performance_svg(round_tbl), "</div>",
         "<div class='quality-card'><h3>", html_escape(recent_games_title), "</h3><p class='panel-caption'>", html_escape(recent_games_note), "</p><table class='dashboard-table'><thead><tr><th>Round</th><th>Matchup</th><th>Winner</th><th>Model pick</th><th>Model P(win)</th><th>Status</th></tr></thead><tbody>", recent_rows, "</tbody></table></div>",
         "</div>",
         "</div>"
+    )
+}
+
+#' Render live round performance as a compact comparison chart
+#'
+#' @param round_tbl Current-year round-level performance summary.
+#'
+#' @return A scalar character string containing inline SVG markup.
+#' @keywords internal
+render_live_round_performance_svg <- function(round_tbl) {
+    if (is.null(round_tbl) || !inherits(round_tbl, "data.frame") || nrow(round_tbl) == 0) {
+        return("<p class='empty-state'>Round-level live performance is not available yet.</p>")
+    }
+
+    plot_data <- round_tbl %>%
+        dplyr::mutate(
+            display_round = dplyr::if_else(
+                as.character(round) == "Championship",
+                "National Championship",
+                as.character(round)
+            ),
+            round_order = match(as.character(round), round_levels())
+        ) %>%
+        dplyr::arrange(round_order)
+
+    width <- 680
+    left <- 190
+    right <- 78
+    top <- 46
+    row_height <- 62
+    bar_width <- width - left - right
+    height <- top + (nrow(plot_data) * row_height) + 56
+
+    to_width <- function(probability) {
+        round(bar_width * pmin(pmax(safe_numeric(probability, default = 0), 0), 1), 1)
+    }
+
+    grid_lines <- paste(
+        vapply(seq(0, 1, by = 0.25), function(probability) {
+            x <- left + (probability * bar_width)
+            sprintf(
+                "<line x1='%.1f' y1='28' x2='%.1f' y2='%.1f' stroke='#334155' stroke-dasharray='4 5' stroke-width='1'/>",
+                x,
+                x,
+                height - 34
+            )
+        }, character(1)),
+        collapse = "\n"
+    )
+
+    rows <- paste(
+        purrr::map_chr(seq_len(nrow(plot_data)), function(index) {
+            row <- plot_data[index, , drop = FALSE]
+            y <- top + ((index - 1L) * row_height)
+            accuracy <- safe_numeric(row$accuracy[[1]], default = 0)
+            mean_predicted <- safe_numeric(row$mean_predicted_prob[[1]], default = 0)
+            game_count <- safe_numeric(row$games[[1]], default = 0)
+            game_label <- if (identical(as.integer(game_count), 1L)) "game" else "games"
+            paste0(
+                "<g>",
+                "<text x='18' y='", y + 2, "' font-size='14' font-weight='700' fill='#e5edf7'>", html_escape(truncate_dashboard_label(row$display_round[[1]], width = 22L)), "</text>",
+                "<text x='18' y='", y + 22, "' font-size='12' fill='#a9b6ca'>", html_escape(as.character(game_count)), " ", game_label, "</text>",
+                "<rect x='", left, "' y='", y - 11, "' width='", bar_width, "' height='13' rx='7' fill='#0b1220'/>",
+                "<rect x='", left, "' y='", y - 11, "' width='", to_width(accuracy), "' height='13' rx='7' fill='#38bdf8'/>",
+                "<rect x='", left, "' y='", y + 13, "' width='", bar_width, "' height='13' rx='7' fill='#0b1220'/>",
+                "<rect x='", left, "' y='", y + 13, "' width='", to_width(mean_predicted), "' height='13' rx='7' fill='#f59e0b'/>",
+                "<text x='", left + bar_width + 12, "' y='", y, "' font-size='12' font-weight='700' fill='#dbeafe'>", html_escape(format_probability(accuracy)), "</text>",
+                "<text x='", left + bar_width + 12, "' y='", y + 24, "' font-size='12' font-weight='700' fill='#fde68a'>", html_escape(format_probability(mean_predicted)), "</text>",
+                "</g>"
+            )
+        }),
+        collapse = "\n"
+    )
+
+    axis_labels <- paste(
+        vapply(seq(0, 1, by = 0.25), function(probability) {
+            x <- left + (probability * bar_width)
+            sprintf(
+                "<text x='%.1f' y='%.1f' text-anchor='middle' font-size='11' font-weight='700' fill='#a9b6ca'>%s</text>",
+                x,
+                height - 10,
+                format_probability(probability)
+            )
+        }, character(1)),
+        collapse = "\n"
+    )
+
+    paste0(
+        "<svg viewBox='0 0 ", width, " ", height, "' class='tech-svg tech-svg--live-rounds' role='img' aria-label='Live accuracy and average picked-team win probability by round'>",
+        "<text x='18' y='22' font-size='12' font-weight='700' fill='#38bdf8'>Accuracy</text>",
+        "<text x='98' y='22' font-size='12' font-weight='700' fill='#f59e0b'>Avg P(pick wins)</text>",
+        grid_lines,
+        rows,
+        axis_labels,
+        "</svg>"
     )
 }
 
@@ -3197,13 +3280,13 @@ render_candidate_fragility_svg <- function(candidate_matchups, top_n = 8L) {
             tier_color = dashboard_tier_color(confidence_tier)
         )
 
-    width <- 860
-    margin_left <- 250
-    margin_right <- 170
-    margin_top <- 34
-    row_height <- 34
+    width <- 620
+    margin_left <- 190
+    margin_right <- 24
+    margin_top <- 48
+    row_height <- 48
     plot_width <- width - margin_left - margin_right
-    height <- margin_top + (nrow(plot_data) * row_height) + 34
+    height <- margin_top + (nrow(plot_data) * row_height) + 44
 
     # Map chosen win probabilities onto the fragility chart axis.
     to_x <- function(probability) {
@@ -3215,10 +3298,10 @@ render_candidate_fragility_svg <- function(candidate_matchups, top_n = 8L) {
         vapply(seq(0, 1, by = 0.2), function(probability) {
             x <- to_x(probability)
             sprintf(
-                "<line x1='%.1f' y1='16' x2='%.1f' y2='%.1f' stroke='#e7e5e4' stroke-dasharray='4 4' stroke-width='1'/>",
+                "<line x1='%.1f' y1='28' x2='%.1f' y2='%.1f' stroke='#475569' stroke-dasharray='4 5' stroke-width='1'/>",
                 x,
                 x,
-                height - 18
+                height - 30
             )
         }, character(1)),
         collapse = "\n"
@@ -3227,17 +3310,20 @@ render_candidate_fragility_svg <- function(candidate_matchups, top_n = 8L) {
         vapply(seq_len(nrow(plot_data)), function(index) {
             row <- plot_data[index, , drop = FALSE]
             y <- margin_top + ((index - 1) * row_height)
+            winner_label <- paste(row$winner[[1]], format_probability(row$chosen_prob[[1]]), sep = " | ")
             sprintf(
                 paste0(
                     "<g>",
-                    "<text x='16' y='%.1f' font-size='12' fill='#1f2937' dominant-baseline='middle'>%s</text>",
-                    "<line x1='%.1f' y1='%.1f' x2='%.1f' y2='%.1f' stroke='%s' stroke-width='4' stroke-linecap='round'/>",
-                    "<circle cx='%.1f' cy='%.1f' r='6' fill='%s' stroke='white' stroke-width='2'/>",
-                    "<text x='%.1f' y='%.1f' font-size='11' fill='#6b7280' dominant-baseline='middle'>%s</text>",
+                    "<text x='18' y='%.1f' font-size='14' font-weight='700' fill='#e5edf7'>%s</text>",
+                    "<text x='18' y='%.1f' font-size='12' fill='#a9b6ca'>%s</text>",
+                    "<line x1='%.1f' y1='%.1f' x2='%.1f' y2='%.1f' stroke='%s' stroke-width='5' stroke-linecap='round'/>",
+                    "<circle cx='%.1f' cy='%.1f' r='7' fill='%s' stroke='#0f172a' stroke-width='2'/>",
                     "</g>"
                 ),
-                y,
-                html_escape(truncate_dashboard_label(row$matchup_label[[1]], width = 34L)),
+                y - 8,
+                html_escape(truncate_dashboard_label(row$matchup_label[[1]], width = 24L)),
+                y + 10,
+                html_escape(truncate_dashboard_label(winner_label, width = 26L)),
                 to_x(row$chosen_ci_lower[[1]]),
                 y,
                 to_x(row$chosen_ci_upper[[1]]),
@@ -3245,10 +3331,7 @@ render_candidate_fragility_svg <- function(candidate_matchups, top_n = 8L) {
                 row$tier_color[[1]],
                 to_x(row$chosen_prob[[1]]),
                 y,
-                row$tier_color[[1]],
-                width - margin_right + 8,
-                y,
-                html_escape(truncate_dashboard_label(paste(row$winner[[1]], format_probability(row$chosen_prob[[1]]), sep = " | "), width = 24L))
+                row$tier_color[[1]]
             )
         }, character(1)),
         collapse = "\n"
@@ -3257,9 +3340,9 @@ render_candidate_fragility_svg <- function(candidate_matchups, top_n = 8L) {
         vapply(seq(0, 1, by = 0.2), function(probability) {
             x <- to_x(probability)
             sprintf(
-                "<text x='%.1f' y='%s' text-anchor='middle' font-size='11' fill='#57534e'>%s</text>",
+                "<text x='%.1f' y='%s' text-anchor='middle' font-size='12' font-weight='700' fill='#a9b6ca'>%s</text>",
                 x,
-                height - 2,
+                height - 8,
                 format_probability(probability)
             )
         }, character(1)),
@@ -3267,11 +3350,11 @@ render_candidate_fragility_svg <- function(candidate_matchups, top_n = 8L) {
     )
 
     paste0(
-        "<svg viewBox='0 0 ", width, " ", height, "' class='tech-svg' role='img' aria-label='Candidate fragility board'>",
+        "<svg viewBox='0 0 ", width, " ", height, "' class='tech-svg tech-svg--fragility' role='img' aria-label='Candidate fragility board'>",
+        "<text x='18' y='24' font-size='13' font-weight='700' fill='#a9b6ca'>Most fragile selected matchups</text>",
         grid_lines,
         row_html,
         axis_labels,
-        "<text x='16' y='18' font-size='11' fill='#6b7280'>Selected matchup</text>",
         "</svg>"
     )
 }
@@ -3288,12 +3371,12 @@ render_calibration_svg <- function(calibration_tbl) {
         return("<p class='empty-state'>Backtest calibration was not available for this run.</p>")
     }
 
-    width <- 660
-    height <- 300
-    plot_top <- 18
-    margin_left <- 74
-    margin_right <- 18
-    margin_bottom <- 42
+    width <- 760
+    height <- 420
+    plot_top <- 50
+    margin_left <- 88
+    margin_right <- 34
+    margin_bottom <- 64
     plot_width <- width - margin_left - margin_right
     plot_height <- height - margin_bottom - plot_top
     # Map predicted and observed probabilities into calibration-plot coordinates.
@@ -3302,6 +3385,7 @@ render_calibration_svg <- function(calibration_tbl) {
 
     calibration_tbl <- calibration_tbl %>%
         dplyr::arrange(mean_predicted)
+    tick_values <- seq(0, 1, by = 0.25)
     point_titles <- purrr::pmap_chr(
         list(
             if ("bin" %in% names(calibration_tbl)) calibration_tbl$bin else rep(NA_character_, nrow(calibration_tbl)),
@@ -3332,27 +3416,63 @@ render_calibration_svg <- function(calibration_tbl) {
         ),
         collapse = " "
     )
+    grid_lines <- paste(
+        vapply(tick_values, function(probability) {
+            x <- to_x(probability)
+            y <- to_y(probability)
+            sprintf(
+                paste0(
+                    "<line x1='%.1f' y1='%.1f' x2='%.1f' y2='%.1f' stroke='#223047' stroke-width='1'/>",
+                    "<line x1='%.1f' y1='%.1f' x2='%.1f' y2='%.1f' stroke='#223047' stroke-width='1'/>"
+                ),
+                x,
+                plot_top,
+                x,
+                plot_top + plot_height,
+                margin_left,
+                y,
+                margin_left + plot_width,
+                y
+            )
+        }, character(1)),
+        collapse = "\n"
+    )
     points_html <- paste(
         sprintf(
-            "<circle cx='%.1f' cy='%.1f' r='5' fill='#457b9d' stroke='white' stroke-width='1.5'><title>%s</title></circle>",
+            "<circle cx='%.1f' cy='%.1f' r='7' fill='#38bdf8' stroke='#0f172a' stroke-width='2'><title>%s</title></circle>",
             to_x(calibration_tbl$mean_predicted),
             to_y(calibration_tbl$empirical_rate),
             html_escape(point_titles)
         ),
         collapse = "\n"
     )
+    axis_labels <- paste(
+        vapply(tick_values, function(probability) {
+            x <- to_x(probability)
+            y <- to_y(probability)
+            paste0(
+                "<text x='", sprintf("%.1f", x), "' y='", height - 22, "' text-anchor='middle' font-size='13' font-weight='700' fill='#a9b6ca'>", html_escape(format_probability(probability)), "</text>",
+                "<text x='", margin_left - 14, "' y='", sprintf("%.1f", y + 5), "' text-anchor='end' font-size='13' font-weight='700' fill='#a9b6ca'>", html_escape(format_probability(probability)), "</text>"
+            )
+        }, character(1)),
+        collapse = "\n"
+    )
 
     paste0(
-        "<svg viewBox='0 0 ", width, " ", height, "' class='tech-svg tech-svg-compact tech-svg--calibration' role='img' aria-label='Backtest calibration chart'>",
-        "<line x1='", margin_left, "' y1='", plot_top + plot_height, "' x2='", margin_left + plot_width, "' y2='", plot_top, "' stroke='#d6d3d1' stroke-dasharray='4 4' stroke-width='1.5'/>",
-        "<line x1='", margin_left, "' y1='", plot_top, "' x2='", margin_left, "' y2='", plot_top + plot_height, "' stroke='#a8a29e' stroke-width='1'/>",
-        "<line x1='", margin_left, "' y1='", plot_top + plot_height, "' x2='", margin_left + plot_width, "' y2='", plot_top + plot_height, "' stroke='#a8a29e' stroke-width='1'/>",
-        "<polyline points='", polyline_points, "' fill='none' stroke='#1d4ed8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>",
+        "<svg viewBox='0 0 ", width, " ", height, "' class='tech-svg tech-svg--calibration' role='img' aria-label='Backtest calibration chart'>",
+        "<rect x='", margin_left, "' y='", plot_top, "' width='", plot_width, "' height='", plot_height, "' rx='12' fill='#0b1220' stroke='#334155' stroke-width='1'/>",
+        grid_lines,
+        "<line x1='", margin_left, "' y1='", plot_top + plot_height, "' x2='", margin_left + plot_width, "' y2='", plot_top, "' stroke='#e5edf7' stroke-dasharray='6 6' stroke-width='2' opacity='0.85'/>",
+        "<line x1='", margin_left, "' y1='", plot_top, "' x2='", margin_left, "' y2='", plot_top + plot_height, "' stroke='#94a3b8' stroke-width='2'/>",
+        "<line x1='", margin_left, "' y1='", plot_top + plot_height, "' x2='", margin_left + plot_width, "' y2='", plot_top + plot_height, "' stroke='#94a3b8' stroke-width='2'/>",
+        "<polyline points='", polyline_points, "' fill='none' stroke='#38bdf8' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/>",
         points_html,
-        "<text x='", margin_left, "' y='", height - 8, "' font-size='11' fill='#6b7280'>0%</text>",
-        "<text x='", margin_left + plot_width, "' y='", height - 8, "' text-anchor='end' font-size='11' fill='#6b7280'>100%</text>",
-        "<text x='", margin_left + (plot_width / 2), "' y='", height - 8, "' text-anchor='middle' font-size='11' fill='#6b7280'>Average predicted win probability</text>",
-        "<text x='26' y='", plot_top + (plot_height / 2), "' font-size='11' fill='#6b7280' transform='rotate(-90 26 ", plot_top + (plot_height / 2), ")'>Observed win rate in bucket</text>",
+        axis_labels,
+        "<text x='", margin_left + (plot_width / 2), "' y='", height - 2, "' text-anchor='middle' font-size='14' font-weight='700' fill='#cbd5e1'>Average predicted win probability</text>",
+        "<text x='24' y='", plot_top + (plot_height / 2), "' font-size='14' font-weight='700' fill='#cbd5e1' transform='rotate(-90 24 ", plot_top + (plot_height / 2), ")'>Observed win rate</text>",
+        "<text x='", margin_left, "' y='26' font-size='13' font-weight='700' fill='#38bdf8'>Observed bucket rate</text>",
+        "<line x1='", margin_left + 186, "' y1='21' x2='", margin_left + 226, "' y2='21' stroke='#e5edf7' stroke-dasharray='6 6' stroke-width='2'/>",
+        "<text x='", margin_left + 236, "' y='26' font-size='13' font-weight='700' fill='#cbd5e1'>Perfect calibration</text>",
         "</svg>"
     )
 }
@@ -3363,11 +3483,12 @@ render_calibration_svg <- function(calibration_tbl) {
 #' @keywords internal
 render_calibration_help_html <- function() {
     paste0(
-        "<div class='legend-row'>",
-        "<div class='legend-chip'><span class='legend-swatch' style='background:#457b9d;'></span>Observed win rate in that probability range</div>",
-        "<div class='legend-chip'><span class='legend-swatch' style='background:transparent;border:1px dashed #d6d3d1;box-sizing:border-box;'></span>Perfect line</div>",
-        "</div>",
-        "<p class='legend-copy calibration-note'><strong>How to read this chart:</strong> each point groups held-out games into a probability range, such as 30% to 40%. Mean predicted is the model's average pregame win probability in that range, and empirical rate is how often that side actually won. So if a point sits near 35% on the x-axis, read it as: among games where the model gave one side about a 35% chance to win, how often did that side actually win? If the observed rate is also about 35%, that range is well calibrated. This is about long-run frequency matching, not whether those were the easiest or 'best' individual predictions. Points below the dashed line mean the model was too optimistic; points above it mean the model was too pessimistic.</p>"
+        "<div class='calibration-help-grid'>",
+        "<div class='explain-card'><div class='explain-label'>Point</div><p>Held-out games grouped by predicted win-probability range.</p></div>",
+        "<div class='explain-card'><div class='explain-label'>Dashed line</div><p>Perfect long-run calibration: predicted rate equals observed rate.</p></div>",
+        "<div class='explain-card'><div class='explain-label'>Below line</div><p>The model was too optimistic in that probability range.</p></div>",
+        "<div class='explain-card'><div class='explain-label'>Above line</div><p>The model was too pessimistic in that probability range.</p></div>",
+        "</div>"
     )
 }
 
@@ -3498,13 +3619,6 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
     candidate_diff_classes <- inspection_row_class(candidate_diff$inspection_level)
     candidate_diff <- candidate_diff %>%
         dplyr::select(-inspection_level)
-
-    candidate_one_path <- build_candidate_sequence_view(decision_sheet, "matchup_label", "candidate_1_pick")
-    candidate_two_path <- build_candidate_sequence_view(decision_sheet, "candidate_2_matchup", "candidate_2_pick")
-    candidate_one_classes <- inspection_row_class(candidate_one_path$inspection_level)
-    candidate_two_classes <- inspection_row_class(candidate_two_path$inspection_level)
-    candidate_one_path <- candidate_one_path %>% dplyr::select(-inspection_level)
-    candidate_two_path <- candidate_two_path %>% dplyr::select(-inspection_level)
 
     quality_context <- model_quality_context
     if (is.null(quality_context)) {
@@ -3649,7 +3763,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
     }
 
     # Render the candidate-specific tab with path, totals, and fragility views.
-    candidate_view_panel <- function(candidate, candidate_key, sequence_view, row_classes) {
+    candidate_view_panel <- function(candidate, candidate_key) {
         tiebreaker_row <- lookup_candidate_tiebreaker(candidate$candidate_id)
         tiebreaker_html <- if (nrow(tiebreaker_row) == 1L) {
             paste0(
@@ -3680,11 +3794,6 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
             "<p class='panel-caption'>These are the slots where this bracket is leaning on the smallest edge or widest uncertainty band.</p>",
             render_candidate_fragility_svg(candidate$matchups),
             "</div>",
-            "</div>",
-            "<div class='panel'>",
-            "<h2>Candidate ", candidate$candidate_id, " Path Review</h2>",
-            "<p class='panel-caption'>Read this after Compare when you want the full single-bracket path without the side-by-side comparison noise.</p>",
-            render_html_table(sequence_view, row_classes = row_classes),
             "</div>",
             "</div>"
         )
@@ -3749,7 +3858,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".diagnostics-detail-grid{grid-template-columns:minmax(460px,1.08fr) minmax(360px,0.92fr);}",
         ".quality-card{background:#fff;border:1px solid #e7e5e4;border-radius:14px;padding:14px;box-shadow:0 1px 2px rgba(0,0,0,0.03);}",
         ".quality-card h3{margin-bottom:10px;}",
-        ".quality-card--calibration{overflow:hidden;}",
+        ".quality-card--calibration{grid-column:1/-1;overflow:hidden;}",
         ".quality-note{margin:10px 0 0 0;font-size:13px;color:#6b7280;}",
         ".panel{background:white;border:1px solid #d6d3d1;border-radius:16px;padding:18px;box-shadow:0 2px 10px rgba(15,23,42,0.04);margin-bottom:18px;}",
         ".panel-caption{color:#6b7280;margin:0 0 12px 0;}",
@@ -3788,8 +3897,9 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".tech-svg{width:100%;height:auto;background:#fcfbf7;border:1px solid #e7e5e4;border-radius:14px;padding:8px;display:block;}",
         ".tech-svg-compact{max-width:520px;}",
         ".tech-svg--calibration{max-width:none;}",
-        ".calibration-layout{display:grid;grid-template-columns:minmax(340px,1.25fr) minmax(240px,0.75fr);gap:14px;align-items:start;}",
+        ".calibration-layout{display:grid;grid-template-columns:minmax(520px,1.35fr) minmax(260px,0.65fr);gap:18px;align-items:start;}",
         ".calibration-layout__plot,.calibration-layout__meta{min-width:0;}",
+        ".calibration-help-grid{display:grid;grid-template-columns:1fr;gap:10px;}",
         ".comparison-board{display:flex;flex-direction:column;border:1px solid #e7e5e4;border-radius:16px;background:#fff;overflow:hidden;}",
         ".comparison-board__header{display:grid;grid-template-columns:minmax(220px,1.25fr) minmax(150px,0.8fr) minmax(150px,0.8fr) minmax(320px,1.4fr) minmax(260px,1.25fr);gap:16px;padding:16px 18px;background:#fcfbf7;border-bottom:1px solid #e7e5e4;font-size:12px;font-weight:700;letter-spacing:0.03em;color:#64748b;text-transform:uppercase;}",
         ".comparison-board__header--four{grid-template-columns:minmax(220px,1.2fr) minmax(320px,1.35fr) minmax(220px,1fr) minmax(260px,1.1fr);}",
@@ -3802,16 +3912,20 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".board-cell--plot{min-width:0;}",
         ".board-value{font-size:15px;font-weight:700;line-height:1.35;color:#0f172a;overflow-wrap:anywhere;}",
         ".board-note{margin-top:4px;font-size:14px;line-height:1.45;color:#475569;overflow-wrap:anywhere;}",
-        ".prob-track{display:flex;flex-direction:column;gap:8px;min-width:0;}",
+        ".prob-track{display:flex;flex-direction:column;gap:10px;min-width:0;}",
+        ".prob-track__summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}",
+        ".prob-track__stat{border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;padding:8px 10px;min-width:0;}",
+        ".prob-track__stat span{display:block;font-size:10px;font-weight:800;line-height:1.2;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;margin-bottom:3px;}",
+        ".prob-track__stat strong{display:block;font-size:15px;line-height:1.25;color:#0f172a;overflow-wrap:anywhere;}",
         ".prob-track__lane{position:relative;height:22px;border-radius:999px;border:1px solid #dbe4ef;background:linear-gradient(90deg,#f8fafc 0%,#f1f5f9 100%);overflow:visible;}",
         ".prob-track__range{position:absolute;top:50%;height:6px;transform:translateY(-50%);border-radius:999px;opacity:0.95;}",
         ".prob-track__point{position:absolute;top:50%;width:16px;height:16px;transform:translate(-50%,-50%);border-radius:999px;border:3px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,0.2);}",
-        ".prob-track__scale{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#64748b;}",
         ".prob-track__caption{font-size:13px;line-height:1.45;color:#334155;overflow-wrap:anywhere;}",
         ".prob-track__caption strong{color:#111827;}",
         ".prob-track-stack{display:flex;flex-direction:column;gap:12px;}",
         ".prob-track-block{padding:12px;border:1px solid #e7e5e4;border-radius:12px;background:#fafaf9;}",
         ".prob-track-block__title{font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280;margin-bottom:8px;}",
+        ".prob-track-block__note{margin:0;color:#475569;font-size:13px;line-height:1.45;}",
         ".muted{color:#6b7280;}",
         ".empty-state{color:#6b7280;font-style:italic;}",
         ".legend-row{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 14px 0;}",
@@ -3825,6 +3939,7 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".diagnostic-bullets{margin:0;padding-left:18px;}",
         ".diagnostic-bullets li{margin-bottom:6px;}",
         dashboard_disclosure_css(),
+        dashboard_dark_surface_css(),
         "@media (max-width: 1240px){.comparison-board__header{display:none;}.board-row--ranked,.board-row--divergence,.board-row--upset{grid-template-columns:1fr;}.board-cell::before{display:block;}}",
         "@media (max-width: 1024px){body{padding:18px;}.two-column,.distribution-grid,.quality-grid,.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.overview-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}.panel,.summary-card,.quality-card,.guide-card,.explain-card{padding:16px;}}",
         "@media (max-width: 900px){.quality-grid,.diagnostics-overview-grid,.diagnostics-detail-grid,.calibration-layout{grid-template-columns:1fr;}.tech-svg-compact{max-width:none;}}",
@@ -3897,13 +4012,13 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
             why_it_matters = "A second bracket candidate is only useful if you can explain how and where it differs from the safer path.",
             math_text = "This board filters to rows where the chosen winner or matchup path changes between candidates. Late-round rows are shown first because they create larger downstream payoff differences."
         ),
-        render_candidate_divergence_svg(decision_sheet),
+        render_candidate_divergence_svg(decision_sheet, candidates),
         "</div>",
         totals_section,
         "</div>",
         "</div>",
-        candidate_view_panel(candidates[[1]], "candidate-1", candidate_one_path, candidate_one_classes),
-        candidate_view_panel(if (length(candidates) >= 2) candidates[[2]] else candidates[[1]], "candidate-2", candidate_two_path, candidate_two_classes),
+        candidate_view_panel(candidates[[1]], "candidate-1"),
+        candidate_view_panel(if (length(candidates) >= 2) candidates[[2]] else candidates[[1]], "candidate-2"),
         render_dashboard_disclosure_html(
             title = "Backtest and calibration evidence",
             role = "evidence",
@@ -3991,6 +4106,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     bracket_tree_data <- dashboard_context$bracket_tree_data
     build_metadata <- dashboard_context$build_metadata %||% list()
     championship_distribution <- total_points_predictions$championship_distribution %||% tibble::tibble()
+    entry_region_order <- c("East", "West", "South", "Midwest", "National", "Unassigned")
 
     primary_candidate <- if (length(candidates) >= 1L) candidates[[1]] else list(candidate_id = 1L, type = "safe", champion = NA_character_, final_four = NA_character_, bracket_log_prob = NA_real_, mean_game_prob = NA_real_, diff_summary = "Primary bracket.")
     alternate_candidate <- if (length(candidates) >= 2L) candidates[[2]] else primary_candidate
@@ -4217,7 +4333,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         team_a_name <- row_value(row, "teamA", row_value(row, "teamA_Team", "Team A"))
         team_b_name <- row_value(row, "teamB", row_value(row, "teamB_Team", "Team B"))
         feature_specs <- tibble::tibble(
-            Feature = c("same_conf", "Seed", "Barthag logit", "AdjOE", "AdjDE", "WAB", "TOR", "TORD", "ORB", "DRB", "3P%", "3P%D", "Adj T."),
+            Feature = c("Same conference", "Seed", "Barthag logit", "AdjOE", "AdjDE", "WAB", "TOR", "TORD", "ORB", "DRB", "3P%", "3P%D", "Adj T."),
             team_a_column = c("same_conf", "teamA_Seed", "teamA_barthag_logit", "teamA_AdjOE", "teamA_AdjDE", "teamA_WAB", "teamA_TOR", "teamA_TORD", "teamA_ORB", "teamA_DRB", "teamA_3P%", "teamA_3P%D", "teamA_Adj T."),
             team_b_column = c("same_conf", "teamB_Seed", "teamB_barthag_logit", "teamB_AdjOE", "teamB_AdjDE", "teamB_WAB", "teamB_TOR", "teamB_TORD", "teamB_ORB", "teamB_DRB", "teamB_3P%", "teamB_3P%D", "teamB_Adj T."),
             diff_column = c("same_conf", "seed_diff", "barthag_logit_diff", "AdjOE_diff", "AdjDE_diff", "WAB_diff", "TOR_diff", "TORD_diff", "ORB_diff", "DRB_diff", "3P%_diff", "3P%D_diff", "Adj T._diff"),
@@ -4271,8 +4387,30 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             Diff = diff_values,
             `Diff favors` = purrr::map2_chr(diff_numeric, feature_specs$preferred_direction, favor_label)
         )
+        same_conf_value <- safe_numeric(row_value(row, "same_conf", NA_real_), default = NA_real_)
+        same_conf_label <- dplyr::case_when(
+            !is.finite(same_conf_value) ~ "Conference relationship unavailable",
+            same_conf_value >= 1 ~ "Same conference",
+            TRUE ~ "Different conferences"
+        )
+        context_flags_html <- paste0(
+            "<div class='matchup-context-flags' aria-label='Model context flags'>",
+            "<span class='context-flag context-flag--conference'>",
+            "<span>Conference</span>",
+            "<strong>", html_escape(same_conf_label), "</strong>",
+            "</span>",
+            "</div>"
+        )
 
         advantage_rows <- metric_rows %>%
+            dplyr::mutate(
+                team_a_display = team_a_values,
+                team_b_display = team_b_values,
+                team_a_numeric = team_a_numeric,
+                team_b_numeric = team_b_numeric,
+                diff_numeric = diff_numeric
+            ) %>%
+            dplyr::filter(.data$Feature != "Same conference") %>%
             dplyr::mutate(
                 direction = dplyr::case_when(
                     `Diff favors` == team_a_name ~ "left",
@@ -4281,7 +4419,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                     TRUE ~ "neutral"
                 ),
                 track_width = purrr::pmap_dbl(
-                    list(diff_numeric, team_a_numeric, team_b_numeric, direction),
+                    list(.data$diff_numeric, .data$team_a_numeric, .data$team_b_numeric, .data$direction),
                     function(diff_value, team_a_value, team_b_value, direction) {
                         if (!identical(direction, "left") && !identical(direction, "right")) {
                             return(0)
@@ -4320,12 +4458,12 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                 paste0(
                     "<div class='advantage-row advantage-row--", html_escape(direction), "'>",
                     "<div class='advantage-row__metric'>", html_escape(row_data$Feature[[1]]), "</div>",
-                    "<div class='advantage-row__value advantage-row__value--left'>", html_escape(team_a_values[[index]]), "</div>",
+                    "<div class='advantage-row__value advantage-row__value--left'>", html_escape(row_data$team_a_display[[1]]), "</div>",
                     "<div class='advantage-track'>",
                     "<div class='advantage-track__center'></div>",
                     fill_html,
                     "</div>",
-                    "<div class='advantage-row__value advantage-row__value--right'>", html_escape(team_b_values[[index]]), "</div>",
+                    "<div class='advantage-row__value advantage-row__value--right'>", html_escape(row_data$team_b_display[[1]]), "</div>",
                     "<div class='advantage-row__favor'>", html_escape(row_data$favor_text[[1]]), "</div>",
                     "</div>"
                 )
@@ -4336,6 +4474,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         paste0(
             "<div class='mini-table-card matchup-comparison-card'>",
             "<div class='mini-table-title'>Model-facing matchup comparison</div>",
+            context_flags_html,
             "<div class='advantage-chart'>",
             "<div class='advantage-chart__header'>",
             "<span>Metric</span>",
@@ -4467,7 +4606,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
 
         paste0(
             "<div class='candidate-comparison-panel'>",
-            "<div class='section-label'>Choose the bracket to enter</div>",
+            "<div class='section-label'>Candidate comparison</div>",
             "<div class='table-shell'>",
             "<table class='dashboard-table candidate-comparison-table'>",
             "<thead><tr><th>Entry</th><th>Champion</th><th>Final Four</th><th>Log prob</th><th>Mean pick prob</th><th>Changes</th><th>Tiebreaker</th></tr></thead>",
@@ -4496,14 +4635,29 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                 champion = NA_character_,
                 final_four = NA_character_,
                 championship_matchup = NA_character_,
-                recommended_tiebreaker_points = NA_integer_
+                recommended_tiebreaker_points = NA_integer_,
+                predicted_total_median = NA_real_,
+                predicted_total_80_lower = NA_real_,
+                predicted_total_80_upper = NA_real_
             )
         }
+        tiebreaker_points <- display_value(row_value(summary_row, "recommended_tiebreaker_points", NA_real_), digits = 0L)
+        tiebreaker_median <- display_value(row_value(summary_row, "predicted_total_median", NA_real_), digits = 1L)
+        tiebreaker_interval <- format_total_interval(
+            row_value(summary_row, "predicted_total_80_lower", NA_real_),
+            row_value(summary_row, "predicted_total_80_upper", NA_real_)
+        )
 
         entry_rows <- decision_sheet %>%
             dplyr::mutate(
+                region_text = as.character(region),
+                region_display = dplyr::case_when(
+                    !is.na(region_text) & nzchar(region_text) & !region_text %in% c("NA", "n/a", "N/A") ~ region_text,
+                    as.character(round) %in% c("Final Four", "Championship") ~ "National",
+                    TRUE ~ "Unassigned"
+                ),
                 fill_round = factor(as.character(round), levels = round_order),
-                fill_region = factor(as.character(region), levels = c(region_order, "National")),
+                fill_region = factor(region_display, levels = entry_region_order),
                 entry_matchup = .data[[matchup_column]],
                 entry_winner = .data[[winner_column]],
                 evidence_id = paste0("evidence-", as.character(slot_key)),
@@ -4514,21 +4668,34 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                     display_value(teamB_seed, digits = 0L)
                 ),
                 review_label = dplyr::case_when(
-                    candidate_diff_flag ~ "Review split",
-                    inspection_level == "primary" ~ "Inspect",
-                    inspection_level == "secondary" ~ "Watch",
-                    TRUE ~ "Enter"
-                )
+                    candidate_diff_flag ~ "Review",
+                    inspection_level == "primary" ~ "Review",
+                    inspection_level == "secondary" ~ "Review",
+                    TRUE ~ "Ready"
+                ),
+                confidence_tier_label = as.character(confidence_tier),
+                confidence_tier_class = gsub("[^a-z0-9]+", "-", tolower(confidence_tier_label))
             ) %>%
             dplyr::arrange(fill_region, fill_round, matchup_number)
 
         render_region_block <- function(region_name, rows) {
+            region_class <- gsub("[^a-z0-9]+", "-", tolower(region_name))
+            fill_step <- dplyr::case_when(
+                region_name == "East" ~ "Fill 1",
+                region_name == "West" ~ "Fill 2",
+                region_name == "South" ~ "Fill 3",
+                region_name == "Midwest" ~ "Fill 4",
+                region_name == "National" ~ "Finals",
+                TRUE ~ "Review"
+            )
             row_html <- paste(
                 purrr::map_chr(seq_len(nrow(rows)), function(index) {
                     row <- rows[index, , drop = FALSE]
                     review_needed <- isTRUE(row$review_needed[[1]])
                     paste0(
-                        "<article class='entry-pick", if (review_needed) " entry-pick--review" else "", if (isTRUE(row$candidate_diff_flag[[1]])) " entry-pick--diff" else "", "'>",
+                        "<article class='entry-pick entry-pick--tier-", html_escape(row$confidence_tier_class[[1]]),
+                        if (review_needed) " entry-pick--review" else "",
+                        if (isTRUE(row$candidate_diff_flag[[1]])) " entry-pick--diff" else "", "'>",
                         "<div class='entry-pick__round'>", html_escape(as.character(row$round[[1]])), "</div>",
                         "<div class='entry-pick__main'>",
                         "<strong>", html_escape(row$entry_winner[[1]]), "</strong>",
@@ -4536,12 +4703,17 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                         "</div>",
                         "<div class='entry-pick__meta'>",
                         "<span>Seeds ", html_escape(row$seed_label[[1]]), "</span>",
-                        "<span>", html_escape(row$confidence_tier[[1]]), "</span>",
+                        "<span class='entry-tier-badge entry-tier-badge--", html_escape(row$confidence_tier_class[[1]]), "'>Confidence: ", html_escape(row$confidence_tier_label[[1]]), "</span>",
+                        if (isTRUE(row$candidate_diff_flag[[1]])) {
+                            "<span class='entry-split-badge'>C1/C2 split</span>"
+                        } else {
+                            ""
+                        },
                         "</div>",
                         if (review_needed) {
                             paste0("<button type='button' class='entry-review-button' data-open-evidence='", html_escape(row$evidence_id[[1]]), "'>", html_escape(row$review_label[[1]]), "</button>")
                         } else {
-                            "<span class='entry-check'>Enter</span>"
+                            "<span class='entry-check'>Ready to enter</span>"
                         },
                         "</article>"
                     )
@@ -4550,8 +4722,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             )
 
             paste0(
-                "<section class='entry-region'>",
-                "<h4>", html_escape(region_name), "</h4>",
+                "<section class='entry-region entry-region--", html_escape(region_class), "'>",
+                "<div class='entry-region__head'><h4>", html_escape(region_name), "</h4><span>", html_escape(fill_step), "</span></div>",
                 "<div class='entry-pick-list'>", row_html, "</div>",
                 "</section>"
             )
@@ -4561,7 +4733,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             dplyr::group_split(fill_region, .keep = TRUE)
         region_html <- paste(
             purrr::map_chr(region_blocks, function(rows) {
-                region_name <- as.character(rows$region[[1]])
+                region_name <- as.character(rows$region_display[[1]])
                 render_region_block(region_name, rows)
             }),
             collapse = ""
@@ -4570,11 +4742,15 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         paste0(
             "<div class='entry-panel", if (identical(candidate_id_int, 1L)) " is-active" else "", "' data-entry-panel='candidate-", candidate_id_int, "'",
             if (!identical(candidate_id_int, 1L)) " hidden" else "", ">",
+            "<div class='entry-summary-panel' aria-label='Selected candidate entry summary'>",
+            "<div class='entry-summary-panel__head'><span>Entry summary</span><strong>Candidate ", candidate_id_int, "</strong></div>",
             "<div class='entry-summary-strip'>",
-            "<div><span>Champion</span><strong>", html_escape(row_value(summary_row, "champion", "n/a")), "</strong></div>",
-            "<div><span>Final Four</span><strong>", html_escape(row_value(summary_row, "final_four", "n/a")), "</strong></div>",
-            "<div><span>Title game</span><strong>", html_escape(row_value(summary_row, "championship_matchup", "n/a")), "</strong></div>",
-            "<div><span>Tiebreaker</span><strong>", html_escape(display_value(row_value(summary_row, "recommended_tiebreaker_points", NA_real_), digits = 0L)), "</strong></div>",
+            "<div class='entry-summary-item'><span>Champion</span><strong>", html_escape(row_value(summary_row, "champion", "n/a")), "</strong></div>",
+            "<div class='entry-summary-item entry-summary-item--wide'><span>Final Four</span><strong>", html_escape(row_value(summary_row, "final_four", "n/a")), "</strong></div>",
+            "<div class='entry-summary-item'><span>Title game</span><strong>", html_escape(row_value(summary_row, "championship_matchup", "n/a")), "</strong></div>",
+            "<div class='entry-summary-item entry-summary-item--tiebreaker'><span>Tiebreaker</span><strong>", html_escape(tiebreaker_points), "</strong><small>Rounded median total: ", html_escape(tiebreaker_median), " | 80% interval ", html_escape(tiebreaker_interval), "</small></div>",
+            "</div>",
+            "<p class='entry-summary-note'>These are the values to copy into the bracket entry. The tiebreaker is the rounded median of the model's championship total-points distribution for this path.</p>",
             "</div>",
             "<div class='entry-grid'>", region_html, "</div>",
             "</div>"
@@ -4639,10 +4815,10 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             "<p>Candidate 1 is the baseline bracket. Candidate 2 is the alternate if you want the changed route shown below.</p>",
             "</div>",
             "<div class='next-action-grid'>",
-            "<div><span>Baseline champion</span><strong>", html_escape(row_value(primary_row, "champion", "n/a")), "</strong></div>",
-            "<div><span>Alternate champion</span><strong>", html_escape(row_value(alternate_row, "champion", "n/a")), "</strong></div>",
-            "<div><span>Review picks</span><strong>", html_escape(display_value(review_count, digits = 0L)), "</strong><small>", html_escape(display_value(bracket_change_count, digits = 0L)), " bracket-changing</small></div>",
-            "<div><span>Baseline tiebreaker</span><strong>", html_escape(display_value(row_value(primary_row, "recommended_tiebreaker_points", NA_real_), digits = 0L)), "</strong></div>",
+            "<div class='next-action-stat'><span>Baseline champion</span><strong>", html_escape(row_value(primary_row, "champion", "n/a")), "</strong></div>",
+            "<div class='next-action-stat'><span>Alternate champion</span><strong>", html_escape(row_value(alternate_row, "champion", "n/a")), "</strong></div>",
+            "<div class='next-action-stat next-action-stat--review'><span>Review picks</span><strong>", html_escape(display_value(review_count, digits = 0L)), "</strong><small>", html_escape(display_value(bracket_change_count, digits = 0L)), " bracket-changing</small></div>",
+            "<div class='next-action-stat'><span>Baseline tiebreaker</span><strong>", html_escape(display_value(row_value(primary_row, "recommended_tiebreaker_points", NA_real_), digits = 0L)), "</strong></div>",
             "</div>",
             "</section>"
         )
@@ -4778,7 +4954,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                 paste0(
                     "<", tag_name, " ", paste(attrs, collapse = " "), ">",
                     "<div class='divergence-cell__region'>", html_escape(region_value), "</div>",
-                    "<div class='divergence-cell__count'>", if (has_divergence) html_escape(display_value(total_count, digits = 0L)) else "&middot;", "</div>",
+                    "<div class='divergence-cell__count'>", if (has_divergence) html_escape(display_value(total_count, digits = 0L)) else "0", "</div>",
                     "<div class='divergence-cell__meta'>", pill_html, "</div>",
                     "<div class='divergence-cell__note'>", html_escape(if (has_divergence) ifelse(target_kind == "evidence", "Jump to surfaced evidence", "Open full exact diff") else "No divergence in this bucket"), "</div>",
                     "</", tag_name, ">"
@@ -4852,12 +5028,14 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
             "<div>",
             "<div class='surface-pill'>", surface_attr, "</div>",
             "<h3>", html_escape(matchup_label), "</h3>",
-            "<p class='watchlist-card__meta'>", html_escape(round_name), " | ", html_escape(row_value(row, "region", "n/a")), " | Seeds ", html_escape(seeds_label), "</p>",
+            "<div class='watchlist-card__meta-row'><span>", html_escape(round_name), "</span><span>", html_escape(row_value(row, "region", "n/a")), "</span><span>Seeds ", html_escape(seeds_label), "</span></div>",
             "</div>",
             "<button type='button' class='jump-button' data-open-evidence='", html_escape(row_value(row, "evidence_id", "")), "'>Open evidence</button>",
             "</div>",
-            "<p><strong>Why this matters:</strong> ", html_escape(why), "</p>",
-            "<p><strong>Candidate usage:</strong> ", html_escape(usage), "</p>",
+            "<div class='watchlist-card__body'>",
+            "<div class='watchlist-card__callout'><span>Why this matters</span><strong>", html_escape(why), "</strong></div>",
+            "<div class='watchlist-card__callout'><span>Candidate usage</span><strong>", html_escape(usage), "</strong></div>",
+            "</div>",
             probability_track,
             if (late_round) "<p class='watchlist-card__note'>Late-round only row.</p>" else "",
             "</article>"
@@ -5186,6 +5364,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
 
     top_links <- paste0(
         "<nav class='jump-nav' aria-label='Dashboard sections'>",
+        "<a href='#how-to-read'>How to read</a>",
         "<a href='#build'>Enter bracket</a>",
         "<a href='#review-queue'>Review picks</a>",
         "<a href='#bracket-tree'>Tree</a>",
@@ -5237,21 +5416,39 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".candidate-card__tiebreaker{margin-top:12px;padding-top:12px;border-top:1px dashed #e2e8f0;}",
         ".summary-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:12px 0 0;}",
         ".summary-strip .summary-chip{box-shadow:none;}",
+        ".review-board{border:1px solid #dbe4ef;border-radius:20px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);padding:16px;margin:16px 0;box-shadow:0 6px 24px rgba(15,23,42,0.04);}",
+        ".review-board__head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px;}",
+        ".review-board__head h3{margin:0 0 5px 0;}",
+        ".review-board__head p{margin:0;color:#475569;line-height:1.45;max-width:74ch;}",
+        ".review-board .summary-strip{margin:0 0 12px 0;}",
+        ".review-board .filter-toolbar{margin:0 0 14px 0;}",
+        ".review-board .show-more-row{margin-top:14px;}",
+        ".comparison-link-panel{border:1px solid #dbeafe;border-radius:18px;background:linear-gradient(180deg,#f8fbff 0%,#ffffff 100%);padding:16px;margin:14px 0 0;box-shadow:0 10px 24px rgba(15,23,42,0.05);}",
+        ".comparison-link-panel__head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px;}",
+        ".comparison-link-panel__head h2{margin:0 0 7px 0;}",
+        ".comparison-link-panel__head .panel-caption{margin:0;color:#475569;line-height:1.5;max-width:76ch;}",
+        ".comparison-link-button{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;border:1px solid #0ea5e9;border-radius:999px;background:#38bdf8;color:#03131f;padding:9px 14px;font-size:13px;font-weight:800;text-decoration:none;}",
+        ".comparison-link-button:hover{text-decoration:none;background:#7dd3fc;}",
+        ".comparison-link-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}",
+        ".comparison-link-fact{border:1px solid #dbe4ef;border-radius:14px;background:#f8fafc;padding:11px 12px;min-width:0;}",
+        ".comparison-link-fact span{display:block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin-bottom:5px;}",
+        ".comparison-link-fact strong{display:block;font-size:16px;line-height:1.25;color:#0f172a;overflow-wrap:anywhere;}",
+        ".comparison-link-fact p{margin:6px 0 0;color:#475569;font-size:13px;line-height:1.4;}",
         ".divergence-map-panel{background:linear-gradient(180deg,#fffaf5 0%,#ffffff 100%);border:1px solid #f1dcc4;border-radius:20px;padding:16px;box-shadow:0 6px 24px rgba(15,23,42,0.04);margin:14px 0 16px;}",
         ".divergence-map-panel__head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}",
         ".divergence-map{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:14px;}",
-        ".divergence-round{border:1px solid #e7e5e4;border-radius:18px;background:#fff;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0;}",
+        ".divergence-round{border:1px solid #e7e5e4;border-radius:18px;background:#fff;padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0;overflow:hidden;box-sizing:border-box;}",
         ".divergence-round--late{border-color:#f1b980;box-shadow:inset 0 0 0 1px rgba(234,88,12,0.08);background:linear-gradient(180deg,#fff8f1 0%,#ffffff 100%);}",
         ".divergence-round__head{display:flex;flex-direction:column;gap:4px;}",
         ".divergence-round__title{font-size:15px;font-weight:800;color:#0f172a;}",
         ".divergence-round__note{font-size:12px;color:#64748b;line-height:1.4;}",
         ".divergence-round__grid{display:grid;gap:10px;}",
-        ".divergence-cell{appearance:none;width:100%;text-align:left;border:1px solid #dbe4ef;background:#f8fafc;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px;cursor:pointer;transition:transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;background-clip:padding-box;}",
+        ".divergence-cell{appearance:none;width:100%;min-width:0;box-sizing:border-box;text-align:left;border:1px solid #dbe4ef;background:#f8fafc;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:8px;cursor:pointer;transition:transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;background-clip:padding-box;}",
         ".divergence-cell:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(15,23,42,0.08);}",
         ".divergence-cell.is-active{background:linear-gradient(180deg,#ffffff 0%,#fff8f1 100%);border-color:#f1b980;}",
-        ".divergence-cell.is-selected{outline:2px solid #101827;outline-offset:2px;}",
+        ".divergence-cell.is-selected{outline:2px solid #101827;outline-offset:-2px;}",
         ".divergence-cell--late.is-active{border-color:#ea580c;box-shadow:0 8px 22px rgba(234,88,12,0.12);}",
-        ".divergence-cell--empty{background:#f8fafc;border-style:dashed;border-color:#d7dde5;cursor:default;}",
+        ".divergence-cell--empty{background:#f8fafc;border-style:dashed;border-color:#d7dde5;cursor:default;text-align:center;align-items:center;justify-content:center;min-height:118px;}",
         ".divergence-cell--empty:hover{transform:none;box-shadow:none;}",
         ".divergence-cell__region{font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;}",
         ".divergence-cell__count{font-size:28px;font-weight:800;line-height:1;color:#0f172a;}",
@@ -5270,10 +5467,53 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".dashboard-table th{background:#f8fafc;position:sticky;top:0;z-index:1;}",
         ".dashboard-table tr:last-child td{border-bottom:none;}",
         ".watchlist-toolbar,.filter-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px;}",
+        ".reading-guide{display:grid;gap:16px;margin-top:4px;}",
+        ".reading-guide__hero,.reading-guide__section,.term-legend{border:1px solid #dbe4ef;border-radius:18px;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);box-shadow:0 10px 24px rgba(15,23,42,0.04);}",
+        ".reading-guide__hero{padding:18px 20px;background:linear-gradient(135deg,#eff6ff 0%,#ffffff 62%);}",
+        ".reading-guide__eyebrow,.guide-label,.term-legend__label{font-size:11px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#1d4ed8;margin-bottom:8px;}",
+        ".reading-guide__title{margin:0 0 8px 0;font-size:22px;color:#0f172a;max-width:28ch;}",
+        ".reading-guide__lede{margin:0;max-width:78ch;color:#475569;line-height:1.6;}",
+        ".reading-guide__section,.term-legend{padding:16px 18px;}",
+        ".reading-guide__cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px;}",
+        ".reading-guide__card{padding:13px 14px;border-radius:14px;background:#fff;border:1px solid #dbe4ef;min-width:0;}",
+        ".reading-guide__card strong{display:block;font-size:14px;color:#0f172a;margin-bottom:5px;}",
+        ".reading-guide__card span{display:block;font-size:13px;line-height:1.5;color:#475569;}",
+        ".reading-guide__section--legend .legend-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:10px 0 0;}",
+        ".reading-guide__section--legend .legend-chip{border-radius:12px;background:#fff;border:1px solid #dbe4ef;padding:10px 12px;}",
+        ".term-legend{margin:0;}",
+        ".term-legend__intro{margin:0 0 12px 0;font-size:13px;color:#475569;}",
+        ".term-legend__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;}",
+        ".term-chip{padding:11px 12px;border-radius:14px;background:#fff;border:1px solid #dbe4ef;display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 10px;align-items:start;min-width:0;}",
+        ".term-chip strong{display:inline-flex;align-self:start;padding:4px 7px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;font-size:12px;color:#1d4ed8;line-height:1.1;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;}",
+        ".term-chip span{display:block;font-size:13px;color:#334155;line-height:1.42;min-width:0;}",
+        ".term-legend__note{margin:12px 0 0 0;font-size:12px;color:#64748b;line-height:1.55;}",
+        ".confidence-legend{border:1px solid #e7e5e4;border-radius:16px;background:#fff;padding:12px;margin:12px 0 16px;}",
+        ".confidence-legend .legend-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:8px 0 0;}",
+        ".confidence-legend .legend-chip{display:flex;gap:9px;border-radius:12px;align-items:flex-start;background:#f8fafc;border-color:#e2e8f0;}",
+        ".confidence-legend .legend-swatch{width:12px;height:12px;border-radius:999px;display:inline-block;flex:0 0 12px;margin-top:3px;}",
+        ".legend-copy{color:#64748b;line-height:1.35;}",
         ".filter-chip.is-active{background:#101827;color:#fff;border-color:#101827;}",
-        ".watchlist-shell{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start;}",
-        ".watchlist-card p{margin:8px 0 0;}",
-        ".watchlist-card__meta{color:#64748b;font-size:13px;}",
+        ".watchlist-shell{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start;}",
+        ".watchlist-card{display:flex;flex-direction:column;gap:14px;}",
+        ".watchlist-card p{margin:0;}",
+        ".watchlist-card__head > div{display:grid;gap:7px;min-width:0;}",
+        ".watchlist-card__head h3{margin:0;overflow-wrap:anywhere;}",
+        ".watchlist-card__meta,.watchlist-card__meta-row{color:#64748b;font-size:13px;}",
+        ".watchlist-card__meta-row{display:flex;flex-wrap:wrap;gap:7px;}",
+        ".watchlist-card__meta-row span{display:inline-flex;align-items:center;border:1px solid #e2e8f0;border-radius:999px;padding:4px 8px;background:#f8fafc;}",
+        ".watchlist-card__body{display:grid;gap:10px;}",
+        ".watchlist-card__callout{border:1px solid #e2e8f0;border-radius:14px;padding:10px 12px;background:#f8fafc;}",
+        ".watchlist-card__callout span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;font-weight:800;margin-bottom:4px;}",
+        ".watchlist-card__callout strong{display:block;font-size:14px;line-height:1.45;font-weight:700;color:#0f172a;}",
+        ".watchlist-card__probability{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#fff;}",
+        ".watchlist-card__probability .prob-track{gap:12px;}",
+        ".watchlist-card__probability .prob-track__summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}",
+        ".watchlist-card__probability .prob-track__stat{display:flex;flex-direction:column;gap:4px;min-width:0;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;padding:9px 10px;}",
+        ".watchlist-card__probability .prob-track__stat span{display:block;font-size:10px;font-weight:800;line-height:1.2;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;}",
+        ".watchlist-card__probability .prob-track__stat strong{display:block;font-size:15px;line-height:1.25;color:#0f172a;overflow-wrap:anywhere;}",
+        ".watchlist-card__probability .prob-track__lane{height:16px;background:#020617;border-color:#334155;}",
+        ".watchlist-card__probability .prob-track__range{height:8px;}",
+        ".watchlist-card__probability .prob-track__point{width:14px;height:14px;border-width:2px;}",
         ".collapsed-row{display:none;}",
         ".watchlist-shell:not(.is-expanded) .collapsed-row{display:none;}",
         ".show-more-row{margin-top:12px;}",
@@ -5284,7 +5524,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".evidence-panel > summary{list-style:none;cursor:pointer;padding:16px;}",
         ".evidence-panel > summary::-webkit-details-marker{display:none;}",
         ".evidence-panel__body{padding:0 16px 16px;}",
-        ".evidence-panel__lede,.evidence-panel__implication,.evidence-panel__note{margin:12px 0 0;color:#334155;}",
+        ".evidence-panel__lede,.evidence-panel__implication{margin:12px 0 0;color:#334155;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;background:#f8fafc;}.evidence-panel__lede strong,.evidence-panel__implication strong{color:#0f172a;}.evidence-panel__note{margin:12px 0 0;color:#334155;}",
         ".evidence-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:14px 0;}",
         ".summary-chip small{display:block;color:#64748b;margin-top:4px;}",
         ".team-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin:14px 0;}",
@@ -5299,6 +5539,10 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".mini-table-title{text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;}",
         ".mini-table-card{margin-top:12px;}",
         ".mini-table-card .dashboard-table{min-width:0;}",
+        ".matchup-context-flags{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px 0;}",
+        ".context-flag{display:inline-flex;align-items:center;gap:8px;border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;padding:7px 10px;min-width:0;}",
+        ".context-flag span{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;}",
+        ".context-flag strong{font-size:12px;color:#0f172a;line-height:1.2;}",
         ".advantage-chart{display:grid;gap:10px;}",
         ".advantage-chart__header,.advantage-row{display:grid;grid-template-columns:minmax(96px,1.1fr) minmax(70px,0.7fr) minmax(140px,1.2fr) minmax(70px,0.7fr) minmax(90px,0.9fr);gap:10px;align-items:center;}",
         ".advantage-chart__header{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;font-weight:700;padding:0 12px;}",
@@ -5353,23 +5597,28 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ":root{--bg:#080b12;--bg-soft:#0f172a;--panel:#111827;--panel-2:#172033;--panel-3:#1e293b;--border:#334155;--border-soft:#243244;--text:#e5edf7;--muted:#9aa8bd;--faint:#64748b;--action:#38bdf8;--action-2:#f59e0b;--candidate-1:#22c55e;--candidate-2:#a78bfa;--reference:#94a3b8;--danger:#fb7185;--shadow:0 18px 44px rgba(0,0,0,0.32);}",
         "body{background:radial-gradient(circle at 12% 0%,rgba(56,189,248,0.12),transparent 30%),linear-gradient(180deg,#080b12 0%,#0f172a 52%,#111827 100%);color:var(--text);}",
         "a{color:#7dd3fc;} a:hover{color:#bae6fd;}",
-        ".hero,.section,.dashboard-disclosure,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout,.divergence-map-panel,.candidate-comparison-panel,.next-action-panel{background:linear-gradient(180deg,rgba(17,24,39,0.96),rgba(15,23,42,0.96));border-color:var(--border);box-shadow:var(--shadow);}",
+        ".hero,.section,.dashboard-disclosure,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout,.divergence-map-panel,.review-board,.comparison-link-panel,.candidate-comparison-panel,.next-action-panel{background:linear-gradient(180deg,rgba(17,24,39,0.96),rgba(15,23,42,0.96));border-color:var(--border);box-shadow:var(--shadow);}",
         ".hero{border-radius:20px;}.section{border-radius:18px;}.section--entry{border-color:rgba(56,189,248,0.34);}",
         ".eyebrow,.candidate-card__eyebrow,.team-card__eyebrow,.surface-pill,.summary-chip span,.metric-pill span,.hero-meta__chip span,.section-label,.entry-pick__round,.divergence-cell__region,.mini-table-title,.advantage-chart__header,.role-kicker{color:var(--muted);letter-spacing:0.08em;}",
         "h1,h2,h3,h4,.candidate-card__mini,.dashboard-disclosure__title,.candidate-card__facts strong,.summary-chip strong,.metric-pill strong,.hero-meta__chip strong,.entry-pick__main strong{color:var(--text);}",
         ".lede,.section-note,.candidate-card__subline,.watchlist-card__meta,.entry-pick__main span,.entry-pick__meta,.divergence-cell__note,.dashboard-disclosure__note,.path-panel__lede,.muted,.empty-state{color:var(--muted);}",
-        ".hero-meta__chip,.candidate-card__facts div,.summary-chip,.metric-pill,.team-card,.advantage-row,.comparison-details,.surface-pill,.prob-track-block,.entry-summary-strip div,.next-action-grid div{background:var(--panel-2);border-color:var(--border-soft);color:var(--text);}",
+        ".hero-meta__chip,.candidate-card__facts div,.summary-chip,.metric-pill,.team-card,.advantage-row,.comparison-details,.surface-pill,.prob-track-block,.next-action-grid div,.context-flag{background:var(--panel-2);border-color:var(--border-soft);color:var(--text);}",
+        ".watchlist-card__meta-row span,.watchlist-card__callout,.watchlist-card__probability{background:rgba(15,23,42,0.72);border-color:var(--border-soft);color:var(--text);}.watchlist-card__callout span{color:var(--muted);}.watchlist-card__callout strong{color:var(--text);}.watchlist-card__probability .prob-track__stat{background:rgba(30,41,59,0.82);border-color:var(--border-soft);}.watchlist-card__probability .prob-track__stat span{color:#cbd5e1;}.watchlist-card__probability .prob-track__stat strong{color:var(--text);}",
         ".jump-nav{position:sticky;top:0;z-index:20;padding:8px 0;background:linear-gradient(180deg,rgba(8,11,18,0.96),rgba(8,11,18,0.72));backdrop-filter:blur(10px);overflow-x:auto;flex-wrap:nowrap;}",
         ".jump-nav a,.filter-chip,.show-more-button,.jump-button,.btree-toggle,.entry-toggle,.entry-review-button{background:var(--panel-3);border-color:var(--border);color:var(--text);border-radius:999px;}",
         ".jump-nav a,.filter-chip.is-active,.btree-toggle.is-active,.entry-toggle.is-active,.jump-button,.entry-review-button{background:var(--action);border-color:var(--action);color:#03131f;}",
-        ".role-kicker--act,.section-label{color:#fbbf24;}.role-kicker--evidence{color:#7dd3fc;}.role-kicker--reference{color:var(--reference);}",
+        ".role-kicker--orientation{color:#67e8f9;}.role-kicker--act,.section-label{color:#fbbf24;}.role-kicker--evidence{color:#7dd3fc;}.role-kicker--reference{color:var(--reference);}",
         ".status-final{background:rgba(20,83,45,0.42);border-color:#22c55e;color:#bbf7d0;}.status-simulated{background:rgba(120,53,15,0.48);border-color:#f59e0b;color:#fde68a;}.status-unknown{background:rgba(49,46,129,0.45);border-color:#818cf8;color:#c7d2fe;}",
-        ".entry-workspace{display:grid;gap:16px;margin-top:16px;}.entry-controls,.bracket-tree-controls{display:flex;gap:10px;flex-wrap:wrap;}.entry-panel[hidden]{display:none !important;}.entry-summary-strip,.next-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0;}.entry-summary-strip span,.next-action-grid span{display:block;font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}.entry-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;align-items:start;}.entry-region{background:rgba(15,23,42,0.66);border:1px solid var(--border-soft);border-radius:14px;padding:12px;}.entry-pick-list{display:grid;gap:8px;}.entry-pick{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'round action' 'main action' 'meta action';gap:6px 10px;align-items:center;padding:10px;border:1px solid var(--border-soft);border-radius:12px;background:#0f172a;}.entry-pick--review{border-color:#f59e0b;background:rgba(245,158,11,0.1);}.entry-pick--diff{box-shadow:inset 3px 0 0 var(--candidate-2);}.entry-pick__round{grid-area:round;}.entry-pick__main{grid-area:main;display:flex;flex-direction:column;gap:2px;min-width:0;}.entry-pick__main strong,.entry-pick__main span{overflow-wrap:anywhere;}.entry-pick__meta{grid-area:meta;display:flex;flex-wrap:wrap;gap:6px 10px;font-size:12px;}.entry-review-button,.entry-check{grid-area:action;align-self:center;}.entry-check{color:#86efac;font-weight:700;font-size:12px;}.candidate-comparison-panel{padding:14px;margin:16px 0;border-radius:14px;}.comparison-role{display:block;color:var(--muted);font-size:12px;margin-top:3px;}.candidate-card--baseline{border-color:rgba(34,197,94,0.5);}.candidate-card--alternate{border-color:rgba(167,139,250,0.55);}.candidate-card__side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}.candidate-role-pill{display:inline-flex;border:1px solid var(--border);border-radius:999px;padding:5px 9px;color:var(--text);background:var(--panel-3);font-size:12px;font-weight:700;}.candidate-card__distribution .tiebreaker-svg{max-width:100%;height:auto;background:rgba(8,11,18,0.5);border-radius:10px;}",
-        ".divergence-map--route{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}.divergence-round{background:rgba(15,23,42,0.78);border-color:var(--border-soft);}.divergence-round--late{background:rgba(120,53,15,0.22);border-color:rgba(245,158,11,0.55);}.divergence-cell{background:#0f172a;border-color:var(--border-soft);color:var(--text);}.divergence-cell.is-active{background:rgba(56,189,248,0.09);border-color:#38bdf8;}.divergence-cell--late.is-active{border-color:#f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,0.32);}.divergence-cell--empty{background:rgba(15,23,42,0.56);border-color:#263244;}.divergence-pill--winner{background:rgba(56,189,248,0.18);color:#bae6fd;}.divergence-pill--path{background:rgba(245,158,11,0.18);color:#fde68a;}.divergence-pill--reference{background:rgba(167,139,250,0.18);color:#ddd6fe;}.divergence-pill--quiet{background:rgba(100,116,139,0.24);color:#cbd5e1;}",
-        ".dashboard-table th{background:#172033;color:var(--text);}.dashboard-table th,.dashboard-table td{border-color:var(--border-soft);}.table-shell{background:var(--panel);border-color:var(--border);}.prob-track__lane{background:#0b1220;border-color:#334155;}.prob-track__point{border-color:#0f172a;}.prob-track__scale,.prob-track__caption{color:var(--muted);}.prob-track__caption strong{color:var(--text);}.team-card__role--favorite{background:rgba(56,189,248,0.18);color:#bae6fd;}.team-card__role--underdog{background:rgba(245,158,11,0.18);color:#fde68a;}.team-card__seed{background:#0f172a;border-color:var(--border);color:var(--text);}.team-card__meta,.advantage-row__value,.advantage-row__favor,.btree-legend-item{color:var(--muted);}.advantage-track{background:#0b1220;}.advantage-track__center{background:#475569;}.comparison-details > summary{color:var(--text);}.btree-svg{background:#0b1220;border-radius:12px;}.btree-edge--route-diff{filter:drop-shadow(0 0 4px rgba(245,158,11,0.45));}.btree-node--route-diff rect{filter:drop-shadow(0 0 5px rgba(245,158,11,0.45));}.btree-legend-line{display:inline-block;width:22px;height:3px;border-radius:999px;background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.5);}#btree-tooltip{background:#020617;color:var(--text);border:1px solid var(--border);}",
-        "@media (max-width: 1024px){.page{padding:20px 18px 40px;}.hero,.section{padding:18px;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary,.divergence-map-panel__head{flex-wrap:wrap;}.candidate-card__facts,.summary-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.candidate-card__links,.appendix-links,.jump-nav,.watchlist-toolbar,.filter-toolbar,.bracket-tree-controls{gap:8px;}.table-shell .dashboard-table{min-width:680px;}}",
-        "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.section-grid,.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid,.divergence-map{grid-template-columns:1fr;}.candidate-card__facts,.summary-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.table-shell .dashboard-table{min-width:620px;}.btree-svg{min-width:900px;}.advantage-chart__header{display:none;}.advantage-row{grid-template-columns:repeat(2,minmax(0,1fr));}.advantage-row__metric,.advantage-track,.advantage-row__favor{grid-column:1 / -1;}.advantage-row__value--left{text-align:left;}.advantage-row__value--right{text-align:right;}}",
-        "@media (max-width: 640px){.page{padding:14px 12px 28px;}h1{font-size:29px;}h2{font-size:21px;}h3{font-size:17px;}.hero,.section,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout{padding:14px;}.hero-meta{display:none;}.jump-nav{margin-left:-4px;margin-right:-4px;padding:8px 4px;}.jump-nav a{white-space:nowrap;flex:0 0 auto;}.next-action-panel p,.next-action-grid{display:none;}.watchlist-toolbar,.filter-toolbar,.candidate-card__links,.appendix-links,.bracket-tree-controls,.entry-controls{overflow-x:auto;flex-wrap:nowrap;align-items:center;}.filter-chip,.show-more-button,.jump-button,.btree-toggle,.entry-toggle{justify-content:center;white-space:nowrap;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary{flex-direction:column;align-items:flex-start;}.candidate-card__facts,.summary-strip,.entry-summary-strip{grid-template-columns:1fr;}.entry-grid{grid-template-columns:1fr;}.entry-pick{grid-template-columns:minmax(0,1fr) auto;align-items:center;}.table-shell .dashboard-table{min-width:560px;}.btree-svg{min-width:760px;}.candidate-card__mini{font-size:18px;}}"
+        ".entry-workspace{display:grid;gap:16px;margin-top:16px;}.entry-controls,.bracket-tree-controls{display:flex;gap:10px;flex-wrap:wrap;}.entry-panel[hidden]{display:none !important;}.entry-summary-panel{margin:12px 0 14px;padding:13px 14px;border:1px solid var(--border-soft);border-radius:14px;background:rgba(15,23,42,0.52);}.entry-summary-panel__head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;}.entry-summary-panel__head span{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:800;}.entry-summary-panel__head strong{font-size:13px;color:var(--text);}.entry-summary-strip{display:grid;grid-template-columns:minmax(130px,0.8fr) minmax(240px,1.35fr) minmax(190px,1fr) minmax(250px,1.25fr);gap:12px;margin:0;align-items:start;}.next-action-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0;}.next-action-grid{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));align-items:stretch;}.entry-summary-item{min-width:0;padding:0 12px 0 0;border-right:1px solid var(--border-soft);}.entry-summary-item:last-child{border-right:0;padding-right:0;}.entry-summary-item span,.next-action-grid span{display:block;font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}.entry-summary-item strong{display:block;color:var(--text);font-size:16px;line-height:1.2;overflow-wrap:anywhere;}.entry-summary-item small{display:block;margin-top:4px;color:var(--muted);font-size:12px;line-height:1.35;}.entry-summary-note{margin:10px 0 0;color:var(--muted);font-size:13px;line-height:1.45;}.next-action-stat{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;padding:12px;border:1px solid var(--border-soft);border-radius:12px;}.next-action-stat strong{display:block;font-size:22px;line-height:1.05;font-weight:800;overflow-wrap:anywhere;}.next-action-stat small{display:block;color:var(--muted);font-size:13px;line-height:1.3;overflow-wrap:anywhere;}.next-action-stat--review{background:linear-gradient(180deg,rgba(56,189,248,0.12),rgba(15,23,42,0.94));border-color:rgba(56,189,248,0.42);}.entry-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:'east west' 'south midwest' 'national national' 'unassigned unassigned';gap:14px;align-items:start;}.entry-region{background:rgba(15,23,42,0.66);border:1px solid var(--border-soft);border-radius:14px;padding:12px;}.entry-region--east{grid-area:east;}.entry-region--west{grid-area:west;}.entry-region--south{grid-area:south;}.entry-region--midwest{grid-area:midwest;}.entry-region--national{grid-area:national;}.entry-region--unassigned{grid-area:unassigned;}.entry-region__head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}.entry-region__head h4{margin:0;}.entry-region__head span{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:3px 8px;background:var(--panel-3);color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;}.entry-pick-list{display:grid;gap:8px;}.entry-pick{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'round action' 'main action' 'meta action';gap:6px 10px;align-items:center;padding:10px;border:1px solid var(--border-soft);border-radius:12px;background:#0f172a;}.entry-pick--review{border-color:rgba(148,163,184,0.56);background:rgba(100,116,139,0.08);}.entry-pick--tier-lean.entry-pick--review{border-color:#38bdf8;background:rgba(14,116,144,0.18);}.entry-pick--tier-toss-up.entry-pick--review{border-color:#f59e0b;background:rgba(120,53,15,0.28);}.entry-pick--tier-volatile.entry-pick--review{border-color:#fb7185;background:rgba(136,19,55,0.24);}.entry-pick--tier-lock.entry-pick--review{border-color:#22c55e;background:rgba(20,83,45,0.18);}.entry-pick--diff{box-shadow:inset 3px 0 0 var(--candidate-2);}.entry-pick__round{grid-area:round;}.entry-pick__main{grid-area:main;display:flex;flex-direction:column;gap:2px;min-width:0;}.entry-pick__main strong,.entry-pick__main span{overflow-wrap:anywhere;}.entry-pick__meta{grid-area:meta;display:flex;flex-wrap:wrap;gap:6px 10px;font-size:12px;}.entry-tier-badge,.entry-split-badge{display:inline-flex;align-items:center;border-radius:999px;padding:2px 7px;border:1px solid rgba(148,163,184,0.38);background:rgba(148,163,184,0.12);color:#cbd5e1;font-weight:800;}.entry-split-badge{background:rgba(167,139,250,0.16);border-color:rgba(167,139,250,0.58);color:#ddd6fe;}.entry-tier-badge--lean{background:rgba(56,189,248,0.18);border-color:rgba(56,189,248,0.58);color:#bae6fd;}.entry-tier-badge--toss-up{background:rgba(245,158,11,0.18);border-color:rgba(245,158,11,0.62);color:#fde68a;}.entry-tier-badge--volatile{background:rgba(251,113,133,0.18);border-color:rgba(251,113,133,0.62);color:#fecdd3;}.entry-tier-badge--lock{background:rgba(34,197,94,0.14);border-color:rgba(34,197,94,0.5);color:#bbf7d0;}.entry-review-button,.entry-check{grid-area:action;align-self:center;}.entry-check{display:inline-flex;align-items:center;border:1px solid rgba(34,197,94,0.45);border-radius:999px;padding:4px 8px;background:rgba(34,197,94,0.1);color:#bbf7d0;font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;}.candidate-comparison-panel{padding:14px;margin:16px 0;border-radius:14px;}.comparison-role{display:block;color:var(--muted);font-size:12px;margin-top:3px;}.candidate-card--baseline{border-color:rgba(34,197,94,0.5);}.candidate-card--alternate{border-color:rgba(167,139,250,0.55);}.candidate-card__side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}.candidate-role-pill{display:inline-flex;border:1px solid var(--border);border-radius:999px;padding:5px 9px;color:var(--text);background:var(--panel-3);font-size:12px;font-weight:700;}.candidate-card__distribution .tiebreaker-svg{max-width:100%;height:auto;background:rgba(8,11,18,0.5);border-radius:10px;}",
+        ".confidence-legend{background:rgba(15,23,42,0.72);border-color:var(--border-soft);}.confidence-legend .legend-chip{background:rgba(15,23,42,0.92);border-color:var(--border-soft);color:var(--text);}.confidence-legend .legend-copy{color:var(--muted);}",
+        ".review-board__head p{color:var(--muted);}",
+        ".comparison-link-panel__head .panel-caption,.comparison-link-fact p{color:var(--muted);}.comparison-link-fact{background:rgba(15,23,42,0.72);border-color:var(--border-soft);}.comparison-link-fact span{color:#cbd5e1;}.comparison-link-fact strong{color:var(--text);}.comparison-link-button{background:var(--action);border-color:var(--action);color:#03131f;}",
+        ".reading-guide__hero,.reading-guide__section,.term-legend{background:linear-gradient(180deg,rgba(17,24,39,0.88),rgba(15,23,42,0.88));border-color:var(--border-soft);box-shadow:none;}.reading-guide__hero{background:linear-gradient(135deg,rgba(14,116,144,0.18),rgba(15,23,42,0.88));}.reading-guide__eyebrow,.guide-label,.term-legend__label{color:#7dd3fc;}.reading-guide__title{color:var(--text);}.reading-guide__lede,.reading-guide__card span,.term-legend__intro,.term-chip span,.term-legend__note{color:#cbd5e1;}.reading-guide__card,.term-chip,.reading-guide__section--legend .legend-chip{background:rgba(15,23,42,0.72);border-color:var(--border-soft);}.reading-guide__card strong{color:var(--text);}.term-chip strong{background:rgba(56,189,248,0.14);border-color:rgba(56,189,248,0.42);color:#bae6fd;}",
+        ".divergence-map--route{grid-template-columns:repeat(4,minmax(0,1fr));}.divergence-map-panel{background:linear-gradient(180deg,rgba(17,24,39,0.98),rgba(15,23,42,0.98));overflow:hidden;}.divergence-round{background:rgba(15,23,42,0.92);border-color:var(--border-soft);}.divergence-round--late{background:rgba(30,41,59,0.92);border-color:rgba(245,158,11,0.65);box-shadow:inset 0 0 0 1px rgba(245,158,11,0.16);}.divergence-round__title{color:var(--text);}.divergence-round__note{color:#cbd5e1;}.divergence-cell{background:#0f172a;border-color:var(--border-soft);color:var(--text);}.divergence-cell.is-active{background:rgba(14,116,144,0.28);border-color:#38bdf8;}.divergence-cell--late.is-active{background:rgba(68,64,60,0.74);border-color:#f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,0.32);}.divergence-cell--empty{background:rgba(2,6,23,0.42);border-color:#334155;}.divergence-cell__region{color:#cbd5e1;}.divergence-cell__count{color:var(--text);}.divergence-cell__note{color:#dbeafe;}.divergence-cell--empty .divergence-cell__count{color:#94a3b8;}.divergence-cell--empty .divergence-cell__note{color:#cbd5e1;}.divergence-pill--winner{background:rgba(56,189,248,0.24);color:#e0f2fe;}.divergence-pill--path{background:rgba(245,158,11,0.22);color:#fde68a;}.divergence-pill--reference{background:rgba(167,139,250,0.24);color:#ede9fe;}.divergence-pill--quiet{background:rgba(100,116,139,0.34);color:#f8fafc;}",
+        ".dashboard-table th{background:#172033;color:var(--text);}.dashboard-table th,.dashboard-table td{border-color:var(--border-soft);}.table-shell{background:var(--panel);border-color:var(--border);}.prob-track__stat{background:rgba(30,41,59,0.82);border-color:var(--border-soft);}.prob-track__stat span{color:#cbd5e1;}.prob-track__stat strong{color:var(--text);}.prob-track__lane{background:#0b1220;border-color:#334155;}.prob-track__point{border-color:#0f172a;}.prob-track__caption{color:var(--muted);}.prob-track__caption strong{color:var(--text);}.evidence-panel__lede,.evidence-panel__implication{background:rgba(15,23,42,0.72);border-color:var(--border-soft);color:#cbd5e1;}.evidence-panel__lede strong,.evidence-panel__implication strong{color:var(--text);}.team-card__role--favorite{background:rgba(56,189,248,0.18);color:#bae6fd;}.team-card__role--underdog{background:rgba(245,158,11,0.18);color:#fde68a;}.team-card__seed{background:#0f172a;border-color:var(--border);color:var(--text);}.team-card__meta,.advantage-row__value,.advantage-row__favor,.btree-legend-item{color:var(--muted);}.advantage-row__metric,.context-flag strong{color:var(--text);}.context-flag span{color:var(--muted);}.advantage-track{background:#0b1220;}.advantage-track__center{background:#475569;}.comparison-details > summary{color:var(--text);}.btree-svg{background:#0b1220;border-radius:12px;}.btree-edge--route-diff{filter:drop-shadow(0 0 4px rgba(245,158,11,0.45));}.btree-node--route-diff rect{filter:drop-shadow(0 0 5px rgba(245,158,11,0.45));}.btree-legend-line{display:inline-block;width:22px;height:3px;border-radius:999px;background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.5);}#btree-tooltip{background:#020617;color:var(--text);border:1px solid var(--border);}",
+        "@media (max-width: 1024px){.page{padding:20px 18px 40px;}.hero,.section{padding:18px;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary,.divergence-map-panel__head{flex-wrap:wrap;}.candidate-card__facts,.summary-strip,.entry-summary-strip,.comparison-link-facts{grid-template-columns:repeat(2,minmax(0,1fr));}.candidate-card__links,.appendix-links,.jump-nav,.watchlist-toolbar,.filter-toolbar,.bracket-tree-controls{gap:8px;}.table-shell .dashboard-table{min-width:680px;}}",
+        "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.section-grid,.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid,.divergence-map{grid-template-columns:1fr;}.entry-grid{grid-template-columns:1fr;grid-template-areas:'east' 'west' 'south' 'midwest' 'national' 'unassigned';}.candidate-card__facts,.summary-strip,.entry-summary-strip,.comparison-link-facts{grid-template-columns:repeat(2,minmax(0,1fr));}.table-shell .dashboard-table{min-width:620px;}.btree-svg{min-width:900px;}.advantage-chart__header{display:none;}.advantage-row{grid-template-columns:repeat(2,minmax(0,1fr));}.advantage-row__metric,.advantage-track,.advantage-row__favor{grid-column:1 / -1;}.advantage-row__value--left{text-align:left;}.advantage-row__value--right{text-align:right;}}",
+        "@media (max-width: 640px){.page{padding:14px 12px 28px;}h1{font-size:29px;}h2{font-size:21px;}h3{font-size:17px;}.hero,.section,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout{padding:14px;}.hero-meta{display:none;}.jump-nav{margin-left:-4px;margin-right:-4px;padding:8px 4px;}.jump-nav a{white-space:nowrap;flex:0 0 auto;}.next-action-panel p,.next-action-grid{display:none;}.watchlist-toolbar,.filter-toolbar,.candidate-card__links,.appendix-links,.bracket-tree-controls,.entry-controls{overflow-x:auto;flex-wrap:nowrap;align-items:center;}.filter-chip,.show-more-button,.jump-button,.btree-toggle,.entry-toggle{justify-content:center;white-space:nowrap;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary,.comparison-link-panel__head{flex-direction:column;align-items:flex-start;}.comparison-link-button{width:100%;}.comparison-link-facts,.candidate-card__facts,.summary-strip,.entry-summary-strip{grid-template-columns:1fr;}.entry-summary-item{border-right:0;border-bottom:1px solid var(--border-soft);padding:0 0 10px;}.entry-summary-item:last-child{border-bottom:0;padding-bottom:0;}.entry-grid{grid-template-columns:1fr;}.entry-pick{grid-template-columns:minmax(0,1fr) auto;align-items:center;}.table-shell .dashboard-table{min-width:560px;}.btree-svg{min-width:760px;}.candidate-card__mini{font-size:18px;}}"
     )
 
     script <- paste0(
@@ -5518,32 +5767,42 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         top_links,
         "</header>",
         status_panel,
-        "<section class='section section--entry' id='build'>",
-        "<div class='role-kicker role-kicker--act'>Enter bracket</div>",
-        "<h2>Candidate Recommendations</h2>",
-        "<p class='section-note'>Use this section like a bracket sheet: choose Candidate 1 or Candidate 2, copy winners by region and round, then enter the champion and tiebreaker. Review markers show the picks worth pausing on.</p>",
-        next_action_html,
-        candidate_entry_html,
-        candidate_comparison_html,
-        "<div class='candidate-grid candidate-grid--detail'>",
-        candidate_cards_html,
-        "</div>",
-        "</section>",
         render_dashboard_disclosure_html(
             title = "How to read this workspace",
-            role = "evidence",
+            role = "orientation",
             note = "Open this for the confidence legend, glossary, and row-reading guide.",
             open = FALSE,
+            id = "how-to-read",
             body = paste0(
                 render_dashboard_reading_guide_html(),
                 render_dashboard_term_legend_html()
             )
         ),
+        "<section class='section section--entry' id='build'>",
+        "<div class='role-kicker role-kicker--act'>Enter bracket</div>",
+        "<h2>Candidate Recommendations</h2>",
+        "<p class='section-note'>Use this section like a bracket sheet: choose Candidate 1 or Candidate 2, copy winners by region and round, then enter the champion and tiebreaker. Review markers show the picks worth pausing on.</p>",
+        next_action_html,
+        candidate_comparison_html,
+        candidate_entry_html,
+        "<div class='candidate-grid candidate-grid--detail'>",
+        candidate_cards_html,
+        "</div>",
+        "</section>",
         "<section class='section' id='review-queue'>",
         "<div class='role-kicker role-kicker--act'>Decide now</div>",
         "<h2>Review Queue</h2>",
         "<p class='section-note'>Use this after the fill-in view. Read the divergence route map to see where Candidate 2 actually splits, then work the queue for bracket-changing disagreements, upset pivots, and fragile favorites that deserve manual attention.</p>",
+        render_confidence_legend_html(title = "Confidence tiers"),
         divergence_map_html,
+        "<div class='review-board' aria-label='Review queue board'>",
+        "<div class='review-board__head'>",
+        "<div>",
+        "<div class='role-kicker role-kicker--act'>Work the queue</div>",
+        "<h3>Review picks that still need attention</h3>",
+        "<p>The divergence map above explains where the alternate path splits. These counts, filters, and cards are the action board for deciding which picks to inspect.</p>",
+        "</div>",
+        "</div>",
         "<div class='summary-strip'>",
         "<div class='summary-chip'><span>Candidate 2 changes</span><strong>", html_escape(display_value(nrow(candidate_delta_rows), digits = 0L)), "</strong></div>",
         "<div class='summary-chip'><span>Bracket-changing rows</span><strong>", html_escape(display_value(get_watchlist_count("Bracket-changing toss-ups"), digits = 0L)), "</strong></div>",
@@ -5551,8 +5810,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<div class='summary-chip'><span>Fragile favorites</span><strong>", html_escape(display_value(get_watchlist_count("Fragile favorites"), digits = 0L)), "</strong></div>",
         "</div>",
         watchlist_filter_toolbar,
-        render_confidence_legend_html(),
         watchlist_shell,
+        "</div>",
         render_dashboard_disclosure_html(
             title = "Candidate 2 changes from the baseline",
             role = "reference",

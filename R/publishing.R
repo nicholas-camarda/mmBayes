@@ -100,7 +100,8 @@ publish_release_bundle <- function(config = NULL,
     manifest_path <- file.path(release_root, "release_manifest.txt")
     manifest_lines <- c(
         sprintf("release_date: %s", format(as.Date(release_date), "%Y-%m-%d")),
-        sprintf("output_dir: %s", output_dir),
+        "source: configured runtime output directory",
+        "deliverables_dir: deliverables",
         "deliverables:",
         paste0("  - ", deliverable_manifest)
     )

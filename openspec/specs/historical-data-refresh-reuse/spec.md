@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Define how data refreshes reuse complete historical coverage, report degraded historical coverage, and preserve the canonical workbook contract.
+
+## Requirements
 
 ### Requirement: Historical collection SHALL align with the analysis window
 The refresh pipeline SHALL derive the oldest historical year to collect from the model's actual analysis window, and SHALL not scrape extra legacy years unless an explicit buffer policy is configured or documented.
@@ -15,12 +19,13 @@ The refresh pipeline SHALL reuse a historical year from the canonical cloud file
 - **WHEN** `update_tournament_data()` runs and a historical year is already present with complete team-feature and game-result coverage
 - **THEN** the refresh pipeline SHALL reuse that year instead of re-scraping it from upstream sources
 
-### Requirement: Incomplete historical years SHALL be refreshed from source
-The refresh pipeline SHALL treat any missing or incomplete historical year as a cache miss and SHALL refresh that year from upstream sources before writing the canonical outputs.
+### Requirement: Incomplete historical years SHALL be refreshed from source or reported as degraded
+The refresh pipeline SHALL treat any missing or incomplete historical year as a cache miss and SHALL try to refresh that year from upstream sources before writing the canonical outputs. If source refresh cannot recover the year, the pipeline SHALL report degraded historical coverage and make the omission explicit.
 
 #### Scenario: A year with missing coverage is not silently reused
 - **WHEN** a historical year is absent or fails completeness validation
-- **THEN** the refresh pipeline SHALL refresh that year from source rather than omitting it from the regenerated canonical files
+- **THEN** the refresh pipeline SHALL refresh that year from source when source data are available
+- **THEN** if source data cannot recover the year, the refresh summary SHALL report degraded success and identify the omitted historical year
 
 ### Requirement: Current-year refresh SHALL remain live
 The refresh pipeline SHALL continue to refresh the current bracket year on every run, even when historical years are reused from cache.

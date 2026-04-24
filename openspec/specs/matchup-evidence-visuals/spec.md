@@ -1,5 +1,7 @@
-## ADDED Requirements
+## Purpose
 
+Define the matchup evidence visual contracts used by the bracket dashboard to explain favorite, underdog, and metric-direction evidence.
+## Requirements
 ### Requirement: Evidence summaries SHALL name the favorite and underdog teams
 The bracket dashboard SHALL render matchup evidence summaries with team-specific favorite and underdog labels so a reader can identify the model's current stance without consulting candidate usage or raw tables.
 
@@ -39,3 +41,17 @@ The bracket dashboard SHALL keep the exact numeric metric comparison available b
 #### Scenario: Raw detail can be expanded on demand
 - **WHEN** a user expands the raw-details disclosure in a matchup evidence panel
 - **THEN** the panel SHALL reveal the detailed metric comparison table with exact values and favor labels
+
+### Requirement: Evidence visuals SHALL remain legible in the dark dashboard palette
+Matchup evidence visuals SHALL render with sufficient contrast and semantic consistency when embedded in the redesigned dark bracket dashboard.
+
+#### Scenario: Evidence panels render in dark context
+- **WHEN** a matchup evidence panel appears in the redesigned bracket dashboard
+- **THEN** favorite and underdog labels, probability tracks, directional advantage charts, raw-details disclosures, and jump controls SHALL remain readable against the dark dashboard surfaces
+- **THEN** confidence-tier and team-role colors SHALL remain consistent with the dashboard legend
+
+#### Scenario: Raw detail disclosure remains accessible
+- **WHEN** a user expands exact model-input detail inside a dark evidence panel
+- **THEN** the detailed metric comparison table SHALL remain readable
+- **THEN** the table SHALL preserve exact values and favor labels from the existing evidence visualization behavior
+

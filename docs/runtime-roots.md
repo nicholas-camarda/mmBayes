@@ -28,6 +28,6 @@
 Each dated release folder should contain:
 
 - `deliverables/` for human-facing outputs such as dashboards, CSV summaries, and text summaries.
-- a plain-text release manifest with the release date, source runtime output directory, and copied deliverable list.
+- a plain-text release manifest with the release date, runtime source role, relative deliverables folder, and copied deliverable list.
 
-The publish command is `Rscript scripts/publish_release.R`. It copies approved deliverables from the configured runtime output directory into `releases/<YYYY-MM-DD>/deliverables` under the configured synced project home, writes a plain-text release manifest, and fails closed if a deliverable is missing or if the dated publish folder already exists. Runtime artifacts outside the deliverable manifest are outside the release contract.
+The publish command is `Rscript scripts/publish_release.R`. It copies approved deliverables from the configured runtime output directory into `releases/<YYYY-MM-DD>/deliverables` under the configured synced project home, writes a public-safe plain-text release manifest, and fails closed if a deliverable is missing or if the dated publish folder already exists. Runtime artifacts outside the deliverable manifest are outside the release contract.

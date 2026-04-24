@@ -3,23 +3,23 @@ schema: spec-driven
 context: |
   mmBayes is an R package with a script-driven analysis pipeline; Node/Playwright exists only as a dashboard interaction test sidecar.
   Centralize root and path changes in `R/configuration.R`; defaults split the local source checkout, runtime outputs, and the synced cloud data/releases home.
-  `config.yml` is the runtime contract for data paths, model settings, odds options, and output naming; `default_project_config()` also injects defaults such as `compare_engines = TRUE`.
+  `config.yml` is the runtime contract for data paths, model settings, and output naming; `default_project_config()` also injects defaults such as `compare_engines = TRUE`.
   The authoritative run writes a saved results bundle plus runtime dashboards, CSVs, and TXT artifacts under the runtime `output/` tree.
   Tracked repo `output/` files are publishable mirrors synced from runtime dashboards, not the execution target.
   Dashboard-only refreshes should reuse `regenerate_dashboards_from_saved_results()` and the saved `.rds` bundle rather than creating a second rendering path.
-  Release publishing is intentionally narrow: copy only `release_deliverable_manifest()` outputs plus the runtime odds-history snapshot, never caches, logs, or `.rds` bundles.
-  Betting/odds collection is optional and must degrade cleanly when disabled or history is absent; the winner and total-points pipeline still needs to run.
+  Release publishing is intentionally narrow: copy only `release_deliverable_manifest()` outputs and generated candidate CSVs, never caches, logs, `.rds` bundles, or branch-only betting artifacts.
+  The supported `master` workflow is betting-free; betting-line experimentation is branch-only and is not part of the runtime contract.
 
 rules:
   proposal:
     - Name the affected R modules, scripts, and tests, and whether the change touches `config.yml` keys, project roots, saved-results bundle assumptions, tracked repo snapshots, or release-manifest contents.
     - Call out compatibility and rollback implications when renaming outputs, changing manifest membership, or altering runtime, cloud, or repo artifact boundaries.
   specs:
-    - Use current repo terms precisely: runtime output, tracked repo snapshot, release bundle, odds-history snapshot, saved results bundle, and model comparison dashboard.
-    - Separate behavior for authoritative full simulation, dashboard-only regeneration from cached results, repo HTML sync, and the optional odds sidecar whenever triggers, required inputs, or outputs differ.
+    - Use current repo terms precisely: runtime output, tracked repo snapshot, release bundle, saved results bundle, and model comparison dashboard.
+    - Separate behavior for authoritative full simulation, dashboard-only regeneration from cached results, and repo HTML sync whenever triggers, required inputs, or outputs differ.
   design:
     - Reuse helpers in `R/configuration.R`, `R/utils.R`, `R/publishing.R`, and `R/main.R` before introducing new path, manifest, or render logic.
-    - Describe data and artifact flow across cloud inputs, runtime outputs, tracked repo mirrors, and dated release folders, including failure modes for missing saved bundles or missing odds history.
+    - Describe data and artifact flow across cloud inputs, runtime outputs, tracked repo mirrors, and dated release folders, including failure modes for missing saved bundles or missing deliverables.
   tasks:
     - Break work into small reviewable steps by pipeline stage or artifact boundary, and include config, docs, and manifest updates when roots, filenames, publish behavior, or output contracts change.
     - Add or update `testthat` coverage for R behavior changes, and include Playwright coverage only when dashboard HTML or bracket-tree interactions change.

@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Define the forensic evidence needed to explain historical refresh omissions and distinguish source, join, and overwrite failure points.
+
+## Requirements
 
 ### Requirement: Historical refresh runs SHALL emit year-scoped evidence
 The data refresh workflow SHALL produce year-scoped evidence that identifies which historical years were intended, which years refreshed successfully, which years were omitted, and the first stage where omission occurred.

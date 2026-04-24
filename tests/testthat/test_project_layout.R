@@ -60,7 +60,11 @@ test_that("publish_release_bundle copies only approved deliverables", {
     expect_false(dir.exists(file.path(result$deliverables_dir, "model_cache")))
     expect_false(dir.exists(file.path(result$deliverables_dir, "logs")))
     expect_false(dir.exists(file.path(result$release_root, "data_snapshot")))
-    expect_match(paste(readLines(result$manifest_path, warn = FALSE), collapse = "\n"), "bracket_candidate_3\\.csv")
+    manifest_text <- paste(readLines(result$manifest_path, warn = FALSE), collapse = "\n")
+    expect_match(manifest_text, "bracket_candidate_3\\.csv")
+    expect_match(manifest_text, "source: configured runtime output directory")
+    expect_match(manifest_text, "deliverables_dir: deliverables")
+    expect_false(grepl(output_dir, manifest_text, fixed = TRUE))
 })
 
 test_that("publish_release_bundle defaults to the runtime output contract and fails without candidate CSVs", {

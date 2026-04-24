@@ -1,5 +1,8 @@
-## ADDED Requirements
+# bracket-dashboard-decision-ux Specification
 
+## Purpose
+TBD - created by archiving change redesign-bracket-dashboard-ux. Update Purpose after archive.
+## Requirements
 ### Requirement: Dashboard SHALL expose a bracket-entry-first workflow
 The bracket dashboard SHALL organize the main generated page around filling out a March Madness bracket, with complete candidate entry guidance before optional evidence exploration.
 
@@ -146,3 +149,4 @@ The redesigned dashboard SHALL be verified with automated checks that exercise g
 #### Scenario: Mobile dashboard smoke test passes
 - **WHEN** the fixture dashboard is opened in a mobile browser viewport
 - **THEN** browser coverage SHALL verify compact navigation, readable candidate fill-in guidance, accessible review cards, and usable evidence jumps
+

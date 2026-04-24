@@ -9,6 +9,24 @@ test_that("methods guide is linked from the root readme", {
     expect_match(readme_text, "nicholas-camarda\\.github\\.io/mmBayes")
 })
 
+test_that("README table of contents only points to live headings", {
+    repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
+    readme_lines <- readLines(file.path(repo_root, "README.md"), warn = FALSE)
+    readme_text <- paste(readme_lines, collapse = "\n")
+
+    heading_text <- sub("^#+\\s+", "", grep("^#+\\s+", readme_lines, value = TRUE))
+    heading_anchors <- tolower(heading_text)
+    heading_anchors <- gsub("`", "", heading_anchors, fixed = TRUE)
+    heading_anchors <- gsub("[^a-z0-9 -]", "", heading_anchors)
+    heading_anchors <- gsub("\\s+", "-", heading_anchors)
+
+    toc_links <- regmatches(readme_text, gregexpr("\\[[^]]+\\]\\(#[^)]+\\)", readme_text, perl = TRUE))[[1]]
+    toc_anchors <- sub("^.*\\]\\(#", "", sub("\\)$", "", toc_links))
+
+    expect_equal(setdiff(toc_anchors, heading_anchors), character())
+    expect_no_match(readme_text, "Branch Notes")
+})
+
 test_that("GitHub Pages landing page links to the public dashboards", {
     repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
     index_path <- file.path(repo_root, "index.html")
@@ -19,6 +37,8 @@ test_that("GitHub Pages landing page links to the public dashboards", {
     expect_match(index_text, "output/bracket_dashboard\\.html")
     expect_no_match(index_text, "output/technical_dashboard\\.html")
     expect_no_match(index_text, "output/model_comparison_dashboard\\.html")
+    expect_match(index_text, "color-scheme: dark")
+    expect_no_match(index_text, "color-scheme: light")
 })
 
 test_that("methods guide documents that betting work is parked off master", {

@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Define the historical tournament roster source contract for completed seasons and its separation from current-year monitoring.
+
+## Requirements
 
 ### Requirement: Historical tournament roster SHALL come from Sports-Reference
 The refresh workflow SHALL source completed historical tournament field membership, seeds, and regions from the Sports-Reference postseason page for each historical year instead of Bart `tourneytime.php`.

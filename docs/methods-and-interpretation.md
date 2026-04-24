@@ -843,7 +843,7 @@ This is meant to answer:
 
 ### Candidate files
 
-Each `output/bracket_candidate_{id}.csv` contains matchup-level rows with:
+Each configured runtime output file `bracket_candidate_{id}.csv` contains matchup-level rows with:
 
 - the teams in that realized path
 - posterior team-A win probability
@@ -856,7 +856,7 @@ Release publishing discovers these candidate CSVs dynamically from the runtime o
 
 ### Decision sheet
 
-`output/bracket_decision_sheet.csv` re-expresses the same matchups in a review-friendly format:
+The configured runtime output file `bracket_decision_sheet.csv` re-expresses the same matchups in a review-friendly format:
 
 - favored side
 - underdog side
@@ -869,7 +869,7 @@ Release publishing discovers these candidate CSVs dynamically from the runtime o
 
 ### Human-readable summary
 
-`output/bracket_candidates.txt` provides candidate-level summaries including:
+The configured runtime output file `bracket_candidates.txt` provides candidate-level summaries including:
 
 - champion
 - Final Four
