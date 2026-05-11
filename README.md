@@ -210,7 +210,7 @@ $$
 \Pr(\text{team A wins}) = \text{logit}^{-1}(\delta + w \cdot \text{logit}(p_{\text{Stan}}) + (1-w) \cdot \text{logit}(p_{\text{BART}}))
 $$
 
-where `0 <= w <= 1`. Current production integration requires the learned ensemble to pass a real-data proof gate before it is used as the primary bracket picker.
+where `0 <= w <= 1`. The primary ensemble fit runs rolling real-data validation before fitting the current tournament model; if the learned ensemble fails the configured bracket-score and calibration guardrails, the production ensemble run stops.
 
 A Bayesian logistic regression with a logit link:
 
