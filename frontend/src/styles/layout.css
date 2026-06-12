@@ -21,3 +21,51 @@
   padding: var(--space-5);
   margin: var(--space-4) 0;
 }
+
+.collapsible-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin: var(--space-4) 0;
+  box-shadow: var(--shadow-panel);
+}
+
+.collapsible-panel > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--text-lg);
+  padding: var(--space-4) var(--space-5);
+  list-style: none;
+  color: var(--ink);
+}
+
+.collapsible-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-panel > summary::after {
+  content: "▸";
+  float: right;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.collapsible-panel[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.collapsible-panel__body {
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+.collapsible-panel__body > .technical-panel {
+  margin-top: 0;
+}
+
+@media (min-width: 1024px) {
+  .compare-workspace__nav {
+    position: sticky;
+    top: 12px;
+    z-index: 2;
+  }
+}

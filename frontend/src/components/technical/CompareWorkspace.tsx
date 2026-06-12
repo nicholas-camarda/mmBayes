@@ -34,7 +34,11 @@ export function CompareWorkspace({
     <section className="technical-panel" aria-label="Compare workspace" data-testid="compare-workspace">
       <div className="role-kicker role-kicker--act">Act now</div>
       <h2>Compare workspace</h2>
-      <div className="toggle-bar" role="group" aria-label="Candidate dashboard view">
+      <div
+        className="toggle-bar compare-workspace__nav"
+        role="group"
+        aria-label="Candidate dashboard view"
+      >
         {(
           [
             ["compare", "Compare"],

@@ -3,6 +3,7 @@ import { BuildMetadataBanner } from "../components/BuildMetadataBanner";
 import { MissingSection } from "../components/MissingSection";
 import { StatusPanel } from "../components/bracket/StatusPanel";
 import { TechnicalActionSummary } from "../components/technical/TechnicalActionSummary";
+import { CollapsiblePanel } from "../components/technical/CollapsiblePanel";
 import { CompareWorkspace } from "../components/technical/CompareWorkspace";
 import { BacktestPanel } from "../components/technical/BacktestPanel";
 import { EnsembleDiagnosticsPanel } from "../components/technical/EnsembleDiagnosticsPanel";
@@ -69,44 +70,50 @@ export function TechnicalApp({ payload }: { payload: TechnicalPayload }) {
 
       <LivePerformancePanel livePerformance={payload.live_performance} />
 
-      <ChampionshipTotalsPanel totals={payload.championship_totals} />
+      <CollapsiblePanel title="Championship tiebreaker comparison" defaultOpen={false}>
+        <ChampionshipTotalsPanel totals={payload.championship_totals} />
+      </CollapsiblePanel>
 
       <BacktestPanel backtest={payload.backtest} />
 
       <EnsembleDiagnosticsPanel diagnostics={payload.ensemble_diagnostics} />
 
-      <ModelOverviewPanel overview={payload.model_overview} />
+      <CollapsiblePanel title="Model overview" defaultOpen={false}>
+        <ModelOverviewPanel overview={payload.model_overview} />
+      </CollapsiblePanel>
 
-      <section className="technical-panel" aria-label="Decision summary reference">
-        <h2>Decision summary</h2>
-        {payload.decision_summary ? (
-          <dl data-testid="decision-summary">
-            <dt>Decisions</dt>
-            <dd>{payload.decision_summary.n_decisions ?? "n/a"}</dd>
-            <dt>Candidate divergences</dt>
-            <dd>{payload.decision_summary.n_divergent ?? "n/a"}</dd>
-            <dt>Confidence tiers</dt>
-            <dd>
-              {Object.entries(payload.decision_summary.confidence_tiers ?? {})
-                .map(([tier, count]) => `${tier}: ${count}`)
-                .join(", ") || "n/a"}
-            </dd>
-          </dl>
-        ) : (
-          <MissingSection label="Decision summary" />
-        )}
-        {payload.model_quality ? (
-          <p data-testid="model-quality" className="section-note">
-            Model quality source: {payload.model_quality.source_label ?? "unknown"}
-            {payload.model_quality.used_cached_quality ? " (cached validation snapshot)" : ""}
-          </p>
-        ) : (
-          <MissingSection label="Model quality" />
-        )}
-        {payload.candidate_count != null ? (
-          <p>{payload.candidate_count} candidate brackets generated.</p>
-        ) : null}
-      </section>
+      <CollapsiblePanel title="Decision summary" defaultOpen={false}>
+        <section className="technical-panel" aria-label="Decision summary reference">
+          <h2>Decision summary</h2>
+          {payload.decision_summary ? (
+            <dl data-testid="decision-summary">
+              <dt>Decisions</dt>
+              <dd>{payload.decision_summary.n_decisions ?? "n/a"}</dd>
+              <dt>Candidate divergences</dt>
+              <dd>{payload.decision_summary.n_divergent ?? "n/a"}</dd>
+              <dt>Confidence tiers</dt>
+              <dd>
+                {Object.entries(payload.decision_summary.confidence_tiers ?? {})
+                  .map(([tier, count]) => `${tier}: ${count}`)
+                  .join(", ") || "n/a"}
+              </dd>
+            </dl>
+          ) : (
+            <MissingSection label="Decision summary" />
+          )}
+          {payload.model_quality ? (
+            <p data-testid="model-quality" className="section-note">
+              Model quality source: {payload.model_quality.source_label ?? "unknown"}
+              {payload.model_quality.used_cached_quality ? " (cached validation snapshot)" : ""}
+            </p>
+          ) : (
+            <MissingSection label="Model quality" />
+          )}
+          {payload.candidate_count != null ? (
+            <p>{payload.candidate_count} candidate brackets generated.</p>
+          ) : null}
+        </section>
+      </CollapsiblePanel>
     </main>
   );
 }
