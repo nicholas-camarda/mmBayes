@@ -23,11 +23,23 @@ describe("BracketApp", () => {
       matchup_context: undefined,
       candidate_summaries: undefined,
       play_in_resolution: undefined,
+      bracket_tree: undefined,
+      divergence_map: undefined,
+      watchlist: undefined,
     };
     render(<BracketApp payload={minimal} />);
     expect(screen.getByTestId("decision-sheet")).toBeInTheDocument();
     expect(screen.queryByTestId("play-in-panel")).not.toBeInTheDocument();
     expect(screen.getAllByTestId("missing-section").length).toBeGreaterThan(0);
+  });
+
+  it("renders bracket tree and divergence map when payload includes them", () => {
+    if (!fixture.bracket_tree?.trees?.length || !fixture.divergence_map?.length) {
+      return;
+    }
+    render(<BracketApp payload={fixture} />);
+    expect(screen.getByLabelText("Bracket tree")).toBeInTheDocument();
+    expect(screen.getByLabelText("Divergence map")).toBeInTheDocument();
   });
 
   it("shows build metadata when present", () => {

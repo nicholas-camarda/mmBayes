@@ -2,8 +2,13 @@
 #'
 #' @return The semantic version string for emitted dashboard payloads.
 #' @keywords internal
-dashboard_payload_schema_version <- function() {
-    "1.0.0"
+dashboard_payload_schema_version <- function(dashboard = c("bracket", "technical")) {
+    dashboard <- match.arg(dashboard)
+    switch(
+        dashboard,
+        bracket = "1.1.0",
+        technical = "1.0.0"
+    )
 }
 
 #' Resolve the path to a dashboard payload schema file

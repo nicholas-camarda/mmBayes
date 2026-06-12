@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["dashboard_schema_version", "dashboard", "bracket_year", "generated_at", "build_metadata", "candidates", "decision_sheet"],
   "properties": {
-    "dashboard_schema_version": {"type": "string", "const": "1.0.0"},
+    "dashboard_schema_version": {"type": "string", "const": "1.1.0"},
     "dashboard": {"type": "string", "const": "bracket"},
     "bracket_year": {"type": "integer"},
     "generated_at": {"type": "string"},
@@ -32,6 +32,9 @@
     "decision_sheet": {"type": "array"},
     "matchup_context": {"type": "array"},
     "candidate_summaries": {"type": "array"},
-    "play_in_resolution": {"type": "array"}
+    "play_in_resolution": {"type": "array"},
+    "bracket_tree": {"type": "object"},
+    "divergence_map": {"type": "array"},
+    "watchlist": {"type": "array"}
   }
 }

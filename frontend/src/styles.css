@@ -47,3 +47,121 @@ body {
 .decision-sheet tr.diverges td {
   color: var(--accent);
 }
+
+.section-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.bracket-tree-panel,
+.divergence-map-panel,
+.evidence-panel {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 20px 0;
+}
+
+.bracket-tree-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.btree-toggle {
+  background: #1e293b;
+  color: var(--text);
+  border: 1px solid #334155;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.btree-toggle.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btree-scroll {
+  overflow-x: auto;
+}
+
+.btree-svg {
+  min-width: 900px;
+  height: auto;
+}
+
+.btree-node {
+  cursor: pointer;
+}
+
+.divergence-map {
+  display: grid;
+  gap: 16px;
+}
+
+.divergence-round__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.divergence-cell {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 10px;
+  color: var(--text);
+}
+
+.divergence-cell.is-active {
+  cursor: pointer;
+  border-color: var(--accent);
+}
+
+.divergence-cell--empty {
+  opacity: 0.55;
+}
+
+.divergence-pill {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.evidence-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.evidence-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.evidence-summary {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 12px;
+}
+
+.evidence-callout {
+  border-left: 4px solid var(--accent);
+  padding-left: 12px;
+  color: var(--muted);
+}
+
+.evidence-close {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}

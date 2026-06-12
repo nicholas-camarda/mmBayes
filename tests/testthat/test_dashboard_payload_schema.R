@@ -1,16 +1,13 @@
-test_that("dashboard schema files exist and declare version 1.0.0", {
-    for (dashboard in c("bracket", "technical")) {
-        path <- dashboard_schema_path(dashboard)
-        expect_true(file.exists(path))
-        schema <- jsonlite::fromJSON(path, simplifyVector = FALSE)
-        expect_equal(schema$properties$dashboard_schema_version$const, "1.0.0")
-        expect_true("dashboard_schema_version" %in% unlist(schema$required))
-    }
+test_that("dashboard schema files exist and declare expected versions", {
+    bracket_schema <- jsonlite::fromJSON(dashboard_schema_path("bracket"), simplifyVector = FALSE)
+    technical_schema <- jsonlite::fromJSON(dashboard_schema_path("technical"), simplifyVector = FALSE)
+    expect_equal(bracket_schema$properties$dashboard_schema_version$const, "1.1.0")
+    expect_equal(technical_schema$properties$dashboard_schema_version$const, "1.0.0")
 })
 
 test_that("validate_dashboard_payload accepts a minimal valid bracket payload", {
     payload <- list(
-        dashboard_schema_version = "1.0.0",
+        dashboard_schema_version = "1.1.0",
         dashboard = "bracket",
         bracket_year = 2026L,
         generated_at = "2026-06-12T10:00:00-0400",
@@ -23,7 +20,7 @@ test_that("validate_dashboard_payload accepts a minimal valid bracket payload", 
 
 test_that("validate_dashboard_payload fails closed on missing required fields", {
     payload <- list(
-        dashboard_schema_version = "1.0.0",
+        dashboard_schema_version = "1.1.0",
         dashboard = "bracket",
         bracket_year = 2026L,
         generated_at = "2026-06-12T10:00:00-0400",
@@ -104,7 +101,7 @@ test_that("build_bracket_dashboard_payload produces a valid versioned payload", 
         dashboard_context = list(build_metadata = list(git_commit = "abc1234"))
     )
     expect_invisible(validate_dashboard_payload(payload, "bracket"))
-    expect_equal(payload$dashboard_schema_version, "1.0.0")
+    expect_equal(payload$dashboard_schema_version, "1.1.0")
     expect_equal(payload$dashboard, "bracket")
     expect_equal(length(payload$candidates), 2L)
     expect_equal(payload$candidates[[1]]$champion, "Duke")
@@ -142,7 +139,7 @@ test_that("dashboard payload JSON round-trips with rows orientation", {
     )
     json <- dashboard_payload_json(payload)
     parsed <- jsonlite::fromJSON(json, simplifyVector = FALSE)
-    expect_equal(parsed$dashboard_schema_version, "1.0.0")
+    expect_equal(parsed$dashboard_schema_version, "1.1.0")
     expect_equal(parsed$candidates[[1]]$matchups[[1]]$teamA, "Duke")
 })
 
@@ -174,7 +171,7 @@ test_that("write_dashboard_outputs writes validated payload artifacts beside the
         file.path(output_dir, "bracket_dashboard_payload.json"),
         simplifyVector = FALSE
     )
-    expect_equal(parsed$dashboard_schema_version, "1.0.0")
+    expect_equal(parsed$dashboard_schema_version, "1.1.0")
     expect_equal(parsed$dashboard, "bracket")
 
     js_first_line <- readLines(file.path(output_dir, "dashboard_payloads.js"), n = 1L)

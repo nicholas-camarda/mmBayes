@@ -8,6 +8,51 @@ compact_payload <- function(payload) {
     payload[!vapply(payload, is.null, logical(1))]
 }
 
+#' Select bracket-tree node columns for the dashboard payload
+#'
+#' @param nodes Candidate tree node table from [build_bracket_tree_data()].
+#'
+#' @return A data frame with frontend-facing node fields only.
+#' @keywords internal
+payload_tree_node_columns <- function(nodes) {
+    if (!is.data.frame(nodes) || nrow(nodes) == 0) {
+        return(nodes)
+    }
+    keep <- c(
+        "slot_key", "teamA", "teamB", "teamA_seed", "teamB_seed",
+        "round", "region", "matchup_number", "node_x", "node_y",
+        "confidence_tier", "winner", "candidate_pick", "posterior_favorite",
+        "win_prob_favorite", "upset", "route_diff", "evidence_id", "rationale_short"
+    )
+    keep <- intersect(keep, names(nodes))
+    as.data.frame(nodes[, keep, drop = FALSE])
+}
+
+#' Serialize bracket tree data for the dashboard payload
+#'
+#' @param bracket_tree_data Output from [build_bracket_tree_data()].
+#'
+#' @return A list suitable for JSON serialization, or NULL when empty.
+#' @keywords internal
+serialize_bracket_tree_payload <- function(bracket_tree_data) {
+    trees <- bracket_tree_data$trees %||% list()
+    if (length(trees) == 0) {
+        return(NULL)
+    }
+
+    serialized_trees <- lapply(trees, function(tree) {
+        edges <- tree$edges %||% tibble::tibble()
+        list(
+            candidate_id = as.integer(tree$candidate_id),
+            candidate_label = as.character(tree$candidate_label),
+            nodes = payload_tree_node_columns(tree$nodes),
+            edges = if (is.data.frame(edges) && nrow(edges) > 0) as.data.frame(edges) else edges
+        )
+    })
+
+    list(trees = serialized_trees)
+}
+
 #' Build the versioned bracket dashboard payload
 #'
 #' @param bracket_year The active bracket year.
@@ -43,9 +88,12 @@ build_bracket_dashboard_payload <- function(bracket_year,
 
     matchup_context <- dashboard_context$matchup_context_rows
     candidate_summaries <- total_points_predictions$candidate_summaries
+    bracket_tree <- serialize_bracket_tree_payload(dashboard_context$bracket_tree_data)
+    divergence_map <- dashboard_context$divergence_map_rows
+    watchlist <- dashboard_context$watchlist_rows
 
     compact_payload(list(
-        dashboard_schema_version = dashboard_payload_schema_version(),
+        dashboard_schema_version = dashboard_payload_schema_version("bracket"),
         dashboard = "bracket",
         bracket_year = as.integer(bracket_year),
         generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
@@ -54,7 +102,10 @@ build_bracket_dashboard_payload <- function(bracket_year,
         decision_sheet = as.data.frame(decision_sheet),
         matchup_context = if (is.data.frame(matchup_context) && nrow(matchup_context) > 0) as.data.frame(matchup_context) else NULL,
         candidate_summaries = if (is.data.frame(candidate_summaries) && nrow(candidate_summaries) > 0) as.data.frame(candidate_summaries) else NULL,
-        play_in_resolution = if (is.data.frame(play_in_resolution) && nrow(play_in_resolution) > 0) as.data.frame(play_in_resolution) else NULL
+        play_in_resolution = if (is.data.frame(play_in_resolution) && nrow(play_in_resolution) > 0) as.data.frame(play_in_resolution) else NULL,
+        bracket_tree = bracket_tree,
+        divergence_map = if (is.data.frame(divergence_map) && nrow(divergence_map) > 0) as.data.frame(divergence_map) else NULL,
+        watchlist = if (is.data.frame(watchlist) && nrow(watchlist) > 0) as.data.frame(watchlist) else NULL
     ))
 }
 
@@ -101,7 +152,7 @@ build_technical_dashboard_payload <- function(bracket_year,
     }
 
     compact_payload(list(
-        dashboard_schema_version = dashboard_payload_schema_version(),
+        dashboard_schema_version = dashboard_payload_schema_version("technical"),
         dashboard = "technical",
         bracket_year = as.integer(bracket_year),
         generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),

@@ -1,4 +1,4 @@
-export const SUPPORTED_SCHEMA_VERSION = "1.0.0";
+export const SUPPORTED_SCHEMA_VERSION = "1.1.0";
 
 export interface BuildMetadata {
   git_commit?: string;
@@ -38,6 +38,86 @@ export interface DecisionSheetRow {
   [key: string]: unknown;
 }
 
+export interface MatchupContextRow extends Record<string, unknown> {
+  slot_key?: string;
+  evidence_id?: string;
+  matchup_label?: string;
+  teamA?: string;
+  teamB?: string;
+  posterior_favorite?: string;
+  win_prob_favorite?: number;
+  confidence_tier?: string;
+  rationale_short?: string;
+  candidate_usage?: string;
+  why_this_matters?: string;
+}
+
+export interface BracketTreeNode {
+  slot_key: string;
+  teamA: string;
+  teamB: string;
+  teamA_seed?: number;
+  teamB_seed?: number;
+  round: string;
+  region: string;
+  matchup_number?: number;
+  node_x: number;
+  node_y: number;
+  confidence_tier?: string;
+  winner?: string;
+  candidate_pick?: string;
+  posterior_favorite?: string;
+  win_prob_favorite?: number;
+  upset?: boolean;
+  route_diff?: boolean;
+  evidence_id?: string;
+  rationale_short?: string;
+}
+
+export interface BracketTreeEdge {
+  from_slot: string;
+  to_slot: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  route_diff?: boolean;
+}
+
+export interface BracketTreeEntry {
+  candidate_id: number;
+  candidate_label: string;
+  nodes: BracketTreeNode[];
+  edges: BracketTreeEdge[];
+}
+
+export interface BracketTreePayload {
+  trees: BracketTreeEntry[];
+}
+
+export interface DivergenceMapRow {
+  round: string;
+  region: string;
+  total_count: number;
+  winner_change_count?: number;
+  path_only_count?: number;
+  unsurfaced_count?: number;
+  has_divergence?: boolean;
+  all_in_watchlist?: boolean;
+  late_round_only?: boolean;
+  target_evidence_id?: string;
+}
+
+export interface WatchlistRow extends Record<string, unknown> {
+  slot_key?: string;
+  evidence_id?: string;
+  reason_surface?: string;
+  matchup_label?: string;
+  round?: string;
+  region?: string;
+  candidate_diff_flag?: boolean;
+}
+
 export interface Candidate {
   candidate_id: number;
   type: string;
@@ -61,9 +141,12 @@ export interface BracketPayload extends PayloadBase {
   dashboard: "bracket";
   candidates: Candidate[];
   decision_sheet: DecisionSheetRow[];
-  matchup_context?: Record<string, unknown>[];
+  matchup_context?: MatchupContextRow[];
   candidate_summaries?: Record<string, unknown>[];
   play_in_resolution?: Record<string, unknown>[];
+  bracket_tree?: BracketTreePayload;
+  divergence_map?: DivergenceMapRow[];
+  watchlist?: WatchlistRow[];
 }
 
 export interface TechnicalPayload extends PayloadBase {
