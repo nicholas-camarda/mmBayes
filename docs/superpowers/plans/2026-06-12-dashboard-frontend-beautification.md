@@ -1,6 +1,6 @@
 # Dashboard Frontend Beautification Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make the React dashboard app visually coherent, spacious, and readable on desktop and mobile without changing R payload contracts or decision logic.
 
@@ -36,7 +36,7 @@
 - Modify: `frontend/index.html`, `frontend/technical.html`
 - Test: `e2e/frontend_app.spec.cjs` (existing smoke tests)
 
-- [ ] **Step 1: Add token file**
+- [x] **Step 1: Add token file**
 
 ```css
 /* frontend/src/styles/tokens.css */
@@ -74,7 +74,7 @@
 }
 ```
 
-- [ ] **Step 2: Load Inter in HTML shells**
+- [x] **Step 2: Load Inter in HTML shells**
 
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -84,14 +84,14 @@
 
 Add to both `frontend/index.html` and `frontend/technical.html` inside `<head>`.
 
-- [ ] **Step 3: Import tokens at top of `frontend/src/styles.css`**
+- [x] **Step 3: Import tokens at top of `frontend/src/styles.css`**
 
 ```css
 @import "./styles/tokens.css";
 @import "./styles/layout.css";
 ```
 
-- [ ] **Step 4: Replace hard-coded body/hero colors with tokens**
+- [x] **Step 4: Replace hard-coded body/hero colors with tokens**
 
 ```css
 body {
@@ -109,7 +109,7 @@ body {
 }
 ```
 
-- [ ] **Step 5: Run smoke tests**
+- [x] **Step 5: Run smoke tests**
 
 ```sh
 cd frontend && npm run build && npm test
@@ -118,7 +118,7 @@ cd .. && npm test -- e2e/frontend_app.spec.cjs
 
 Expected: all tests PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/styles/tokens.css frontend/src/styles/layout.css frontend/src/styles.css frontend/index.html frontend/technical.html
@@ -134,7 +134,7 @@ git commit -m "style(frontend): add design tokens and Inter typography baseline"
 - Modify: `frontend/src/components/bracket/ProbabilityTrack.tsx`
 - Test: `frontend/src/components/bracket/ProbabilityTrack.test.tsx` (new)
 
-- [ ] **Step 1: Write failing DOM structure test**
+- [x] **Step 1: Write failing DOM structure test**
 
 ```tsx
 // frontend/src/components/bracket/ProbabilityTrack.test.tsx
@@ -157,13 +157,13 @@ test("renders labeled stats and lane for accessibility", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails or needs lane class**
+- [x] **Step 2: Run test to verify it fails or needs lane class**
 
 ```sh
 cd frontend && npm test -- src/components/bracket/ProbabilityTrack.test.tsx
 ```
 
-- [ ] **Step 3: Port legacy lane CSS**
+- [x] **Step 3: Port legacy lane CSS**
 
 ```css
 /* frontend/src/styles/components/prob-track.css */
@@ -223,7 +223,7 @@ Import in `styles.css`: `@import "./styles/components/prob-track.css";`
 
 Remove duplicate `.prob-track*` rules from `styles.css`.
 
-- [ ] **Step 4: Re-run tests**
+- [x] **Step 4: Re-run tests**
 
 ```sh
 cd frontend && npm test -- src/components/bracket/ProbabilityTrack.test.tsx
@@ -231,7 +231,7 @@ cd frontend && npm test -- src/components/bracket/ProbabilityTrack.test.tsx
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/styles/components/prob-track.css frontend/src/components/bracket/ProbabilityTrack.test.tsx frontend/src/styles.css
@@ -248,7 +248,7 @@ git commit -m "style(frontend): polish probability track to match legacy board r
 - Modify: `frontend/src/components/technical/RankedDecisionBoard.tsx`
 - Test: `e2e/frontend_app.spec.cjs` (extend desktop screenshot assertion)
 
-- [ ] **Step 1: Extract board CSS from `styles.css` into `comparison-board.css`**
+- [x] **Step 1: Extract board CSS from `styles.css` into `comparison-board.css`**
 
 Key rules to port from legacy (`R/plotting_functions.R` ~3717–3728):
 - Header row with uppercase muted labels on `var(--panel-2)` background
@@ -256,7 +256,7 @@ Key rules to port from legacy (`R/plotting_functions.R` ~3717–3728):
 - `.board-value` at `15px/700`, `.board-note` at `14px` muted
 - On mobile: keep `data-label` pseudo-labels (already present)
 
-- [ ] **Step 2: Hide redundant table fallback on desktop**
+- [x] **Step 2: Hide redundant table fallback on desktop**
 
 ```css
 @media (min-width: 1241px) {
@@ -266,7 +266,7 @@ Key rules to port from legacy (`R/plotting_functions.R` ~3717–3728):
 }
 ```
 
-- [ ] **Step 3: Add Playwright assertion for board minimum height**
+- [x] **Step 3: Add Playwright assertion for board minimum height**
 
 ```js
 // e2e/frontend_app.spec.cjs inside technical page test
@@ -275,7 +275,7 @@ const boardBox = await page.getByTestId("ranked-decisions-board").boundingBox();
 expect(boardBox.height).toBeGreaterThan(280);
 ```
 
-- [ ] **Step 4: Run Playwright**
+- [x] **Step 4: Run Playwright**
 
 ```sh
 cd frontend && npm run build && cd .. && npm test -- e2e/frontend_app.spec.cjs
@@ -283,7 +283,7 @@ cd frontend && npm run build && cd .. && npm test -- e2e/frontend_app.spec.cjs
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/styles/components/comparison-board.css frontend/src/components/technical/*.tsx e2e/frontend_app.spec.cjs frontend/src/styles.css
@@ -299,7 +299,7 @@ git commit -m "style(frontend): refine comparison board spacing and desktop hier
 - Modify: `frontend/src/components/technical/CompareWorkspace.tsx`
 - Test: `frontend/src/components/technical/BoardExplainer.test.tsx`
 
-- [ ] **Step 1: Write component test**
+- [x] **Step 1: Write component test**
 
 ```tsx
 import { render, screen } from "@testing-library/react";
@@ -319,7 +319,7 @@ test("renders four explainer cards", () => {
 });
 ```
 
-- [ ] **Step 2: Implement component**
+- [x] **Step 2: Implement component**
 
 ```tsx
 interface BoardExplainerProps {
@@ -349,7 +349,7 @@ export function BoardExplainer({ what, how, why, math }: BoardExplainerProps) {
 }
 ```
 
-- [ ] **Step 3: Wire into `CompareWorkspace` above ranked board**
+- [x] **Step 3: Wire into `CompareWorkspace` above ranked board**
 
 ```tsx
 <BoardExplainer
@@ -360,9 +360,9 @@ export function BoardExplainer({ what, how, why, math }: BoardExplainerProps) {
 />
 ```
 
-- [ ] **Step 4: Add `.explain-grid` styles (2x2 desktop, 1-col mobile)**
+- [x] **Step 4: Add `.explain-grid` styles (2x2 desktop, 1-col mobile)**
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 ```bash
 git add frontend/src/components/technical/BoardExplainer.tsx frontend/src/components/technical/BoardExplainer.test.tsx frontend/src/components/technical/CompareWorkspace.tsx frontend/src/styles.css
@@ -379,7 +379,7 @@ git commit -m "feat(frontend): add compare board explainer cards"
 - Modify: `frontend/src/components/bracket/AdvantageChart.tsx`
 - Test: `e2e/frontend_app.spec.cjs` (evidence screenshot after open)
 
-- [ ] **Step 1: Two-column evidence body on wide screens**
+- [x] **Step 1: Two-column evidence body on wide screens**
 
 ```css
 @media (min-width: 1100px) {
@@ -401,19 +401,19 @@ git commit -m "feat(frontend): add compare board explainer cards"
 
 Wrap summary/lede/callouts in `evidence-panel__summary-block` in `EvidencePanel.tsx`.
 
-- [ ] **Step 2: Soften team cards**
+- [x] **Step 2: Soften team cards**
 
 - Border `var(--border)`, radius `var(--radius-md)`, reduce stat grid density to 3 rows
 - Collapse advantage chart rows: alternate row background `#0f172a` / `#111827`
 
-- [ ] **Step 3: Playwright — open evidence and assert advantage chart visible**
+- [x] **Step 3: Playwright — open evidence and assert advantage chart visible**
 
 ```js
 await page.locator(".watchlist-card .jump-button[data-open-evidence]").first().click();
 await expect(page.getByTestId("advantage-chart")).toBeVisible();
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "style(frontend): improve evidence drawer layout and team card density"
@@ -428,7 +428,7 @@ git commit -m "style(frontend): improve evidence drawer layout and team card den
 - Create: `frontend/src/components/technical/CollapsiblePanel.tsx`
 - Modify: `frontend/src/styles/layout.css`
 
-- [ ] **Step 1: Collapsible reference sections**
+- [x] **Step 1: Collapsible reference sections**
 
 Wrap `ModelOverviewPanel`, decision summary reference, and championship totals in `<CollapsiblePanel defaultOpen={false}>` so Compare + Live + Backtest stay above the fold.
 
@@ -451,7 +451,7 @@ export function CollapsiblePanel({
 }
 ```
 
-- [ ] **Step 2: Sticky compare subnav on desktop**
+- [x] **Step 2: Sticky compare subnav on desktop**
 
 ```css
 @media (min-width: 1024px) {
@@ -463,7 +463,7 @@ export function CollapsiblePanel({
 }
 ```
 
-- [ ] **Step 3: Run full test suite**
+- [x] **Step 3: Run full test suite**
 
 ```sh
 Rscript tests/testthat.R
@@ -471,7 +471,7 @@ cd frontend && npm run build && npm test && cd ..
 npm test
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(frontend): collapse technical reference panels and sticky compare nav"
@@ -486,7 +486,7 @@ git commit -m "feat(frontend): collapse technical reference panels and sticky co
 - Modify: `frontend/src/bracket/BracketApp.tsx`
 - Test: `frontend/src/components/bracket/PlayInStatusPanel.test.tsx`
 
-- [ ] **Step 1: Test renders resolved/unresolved counts**
+- [x] **Step 1: Test renders resolved/unresolved counts**
 
 ```tsx
 import { render, screen } from "@testing-library/react";
@@ -502,9 +502,9 @@ test("shows unresolved First Four slots", () => {
 });
 ```
 
-- [ ] **Step 2: Implement table UI replacing `<pre>` JSON in `BracketApp.tsx`**
+- [x] **Step 2: Implement table UI replacing `<pre>` JSON in `BracketApp.tsx`**
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "feat(frontend): replace play-in JSON dump with readable status panel"
@@ -518,7 +518,7 @@ git commit -m "feat(frontend): replace play-in JSON dump with readable status pa
 - Create: `e2e/frontend_visual.spec.cjs`
 - Modify: `package.json` (optional `test:visual` script)
 
-- [ ] **Step 1: Add screenshot tests at 1320x960 and 390x900**
+- [x] **Step 1: Add screenshot tests at 1320x960 and 390x900**
 
 ```js
 test("bracket desktop visual baseline", async ({ page }, testInfo) => {
@@ -531,13 +531,13 @@ test("bracket desktop visual baseline", async ({ page }, testInfo) => {
 });
 ```
 
-- [ ] **Step 2: Document update command in README**
+- [x] **Step 2: Document update command in README**
 
 ```sh
 npm test -- e2e/frontend_visual.spec.cjs --update-snapshots
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "test: add Playwright visual regression for dashboard app"
@@ -552,18 +552,18 @@ git commit -m "test: add Playwright visual regression for dashboard app"
 - Modify: `docs/dashboard-frontend-architecture.md`
 - Modify: `README.md` (visual test command)
 
-- [ ] **Step 1: Rebuild and sync**
+- [x] **Step 1: Rebuild and sync**
 
 ```sh
 cd frontend && npm run build && cd ..
 Rscript -e 'pkgload::load_all(".", quiet=TRUE); sync_frontend_app(getwd(), file.path(getwd(),"output"), file.path(getwd(),"output"))'
 ```
 
-- [ ] **Step 2: Regenerate fixture shim if needed**
+- [x] **Step 2: Regenerate fixture shim if needed**
 
 Ensure `output/app/dashboard_payloads.js` exists (from runtime regen or fixture node script used in PR #8).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "chore: sync beautified dashboard app assets"

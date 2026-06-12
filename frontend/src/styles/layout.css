@@ -1,0 +1,116 @@
+.dashboard,
+.page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-6);
+}
+
+.hero {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: var(--space-4) 0;
+}
+
+.collapsible-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin: var(--space-4) 0;
+  box-shadow: var(--shadow-panel);
+}
+
+.collapsible-panel > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--text-lg);
+  padding: var(--space-4) var(--space-5);
+  list-style: none;
+  color: var(--ink);
+}
+
+.collapsible-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-panel > summary::after {
+  content: "▸";
+  float: right;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.collapsible-panel[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.collapsible-panel__body {
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+.collapsible-panel__body > .technical-panel {
+  margin-top: 0;
+}
+
+@media (min-width: 1024px) {
+  .compare-workspace__nav {
+    position: sticky;
+    top: 12px;
+    z-index: 2;
+  }
+}
+
+.play-in-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.play-in-status__warning {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(251, 146, 60, 0.45);
+  background: rgba(251, 146, 60, 0.12);
+  color: var(--ink);
+}
+
+.play-in-status__ok {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.1);
+  color: var(--ink);
+}
+
+.play-in-status__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.play-in-status__table th,
+.play-in-status__table td {
+  border: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+
+.play-in-status__table th {
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

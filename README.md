@@ -23,7 +23,7 @@ If you want the published dashboard entrypoint, start at the GitHub Pages hub:
 
 [Open the GitHub Pages dashboard hub](https://nicholas-camarda.github.io/mmBayes/)
 
-The hub links to the main bracket dashboard plus the technical diagnostics page.
+The hub links to the React bracket app (`output/app/index.html`) plus the technical diagnostics page (`output/app/technical.html`). Legacy R-rendered HTML snapshots remain available for backward compatibility.
 
 The authoritative full run now refreshes the tracked repo dashboard snapshot automatically, so a successful `Rscript scripts/run_simulation.R` updates both the runtime HTML bundle and the GitHub Pages source files under `output/`.
 
@@ -43,7 +43,8 @@ Live tournament commentary is separate from the prediction-time inputs: First Fo
 
 Optional diagnostics:
 
-- [Technical dashboard](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) - ensemble diagnostics, calibration, and simulation detail
+- [Technical dashboard (React app)](https://nicholas-camarda.github.io/mmBayes/output/app/technical.html) - compare boards, calibration, and backtest detail
+- [Technical dashboard (legacy HTML)](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) - R-rendered snapshot kept for backward compatibility
 
 ## Working Roots
 
@@ -171,13 +172,31 @@ Notes:
 The R pipeline emits versioned JSON payloads
 (`bracket_dashboard_payload.json`, `technical_dashboard_payload.json`,
 schema v1.1.0, contracts in `inst/schemas/`) and syncs a static React + Vite
-frontend in `frontend/` to `output/app/`:
+frontend in `frontend/` to `output/app/`. The beautified React app is the
+primary dashboard entry surface; legacy R-rendered HTML is still generated as a
+secondary snapshot.
 
 ```sh
 cd frontend && npm install && npm run build
 Rscript scripts/regenerate_and_sync_dashboards.R
 open output/app/index.html
 ```
+
+**Frontend development and tests:**
+
+```sh
+cd frontend && npm install
+npm run build          # production bundle to frontend/dist/
+npm test               # Vitest component tests
+cd ..
+npm test               # Playwright interaction tests (e2e/frontend_app.spec.cjs)
+npm run test:visual    # Playwright visual regression (e2e/frontend_visual.spec.cjs)
+npm test -- e2e/frontend_visual.spec.cjs --update-snapshots  # refresh screenshot baselines
+```
+
+Styling uses a token-driven CSS module layout under `frontend/src/styles/`:
+`tokens.css` (design variables), `layout.css` (panel shells and grid rhythm),
+and `components/*.css` (comparison boards, probability tracks, evidence drawer).
 
 If the frontend is not built, all R commands work unchanged and the legacy
 HTML dashboards are still produced. Build the frontend before publishing so

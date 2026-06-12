@@ -73,11 +73,14 @@ test.describe("static frontend dashboards", () => {
     const stageDir = stageApp();
     await page.goto(`file://${path.join(stageDir, "technical.html")}`);
     await expect(page.getByRole("heading", { name: /technical bracket dashboard/i })).toBeVisible();
+    await page.locator("details.collapsible-panel summary", { hasText: "Decision summary" }).click();
     await expect(page.getByTestId("decision-summary")).toBeVisible();
     await expect(page.getByTestId("compare-workspace")).toBeVisible();
     await expect(page.getByTestId("backtest-panel")).toBeVisible();
     await expect(page.getByTestId("calibration-chart")).toBeVisible();
     await expect(page.getByTestId("ranked-decisions-board")).toBeVisible();
+    const boardBox = await page.getByTestId("ranked-decisions-board").boundingBox();
+    expect(boardBox.height).toBeGreaterThan(280);
     await expect(page.getByTestId("live-performance-panel")).toBeVisible();
   });
 
@@ -259,6 +262,7 @@ test.describe("static frontend dashboards", () => {
     expect(evidenceId).toBeTruthy();
     await reviewJump.click();
     await expect(page.locator(`details[id="${evidenceId}"] .evidence-panel__lede`)).toBeVisible();
+    await expect(page.getByTestId("advantage-chart")).toBeVisible();
 
     await page.locator(".jump-nav a[href='#bracket-tree']").click();
     const visibleTreeContainer = page.locator(".bracket-tree-container").first();

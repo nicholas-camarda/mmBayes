@@ -5,7 +5,8 @@
     "@playwright/test": "^1.55.0"
   },
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:visual": "playwright test e2e/frontend_visual.spec.cjs"
   }
 }
 

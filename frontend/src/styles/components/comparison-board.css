@@ -1,0 +1,122 @@
+/* frontend/src/styles/components/comparison-board.css */
+.comparison-board {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.comparison-board__header {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.25fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(320px, 1.4fr) minmax(260px, 1.25fr);
+  gap: 16px;
+  padding: 16px 18px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.comparison-board__header--four {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(320px, 1.35fr) minmax(220px, 1fr) minmax(260px, 1.1fr);
+}
+
+.board-row {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  align-items: start;
+  border-top: 1px solid var(--border);
+}
+
+.board-row:first-of-type {
+  border-top: none;
+}
+
+.board-row--ranked,
+.board-row--divergence {
+  grid-template-columns: minmax(220px, 1.25fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(320px, 1.4fr) minmax(260px, 1.25fr);
+}
+
+.board-row--upset {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(320px, 1.35fr) minmax(220px, 1fr) minmax(260px, 1.1fr);
+}
+
+.board-cell {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.board-cell::before {
+  display: none;
+  content: attr(data-label);
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.board-cell--plot {
+  min-width: 0;
+}
+
+.board-value {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.board-note {
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.comparison-board__table-fallback {
+  display: none;
+}
+
+@media (min-width: 1241px) {
+  .comparison-board__table-fallback {
+    display: none !important;
+  }
+}
+
+@media (max-width: 1240px) {
+  .comparison-board__header {
+    display: none;
+  }
+
+  .board-row,
+  .board-row--ranked,
+  .board-row--divergence,
+  .board-row--upset {
+    grid-template-columns: 1fr;
+  }
+
+  .board-cell::before {
+    display: block;
+  }
+
+  .comparison-board__table-fallback {
+    display: block;
+  }
+}
+
+@media (max-width: 640px) {
+  .board-row {
+    padding: 14px;
+    gap: 12px;
+  }
+}
