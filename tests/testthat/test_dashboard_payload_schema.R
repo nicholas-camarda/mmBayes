@@ -2,7 +2,7 @@ test_that("dashboard schema files exist and declare expected versions", {
     bracket_schema <- jsonlite::fromJSON(dashboard_schema_path("bracket"), simplifyVector = FALSE)
     technical_schema <- jsonlite::fromJSON(dashboard_schema_path("technical"), simplifyVector = FALSE)
     expect_equal(bracket_schema$properties$dashboard_schema_version$const, "1.1.0")
-    expect_equal(technical_schema$properties$dashboard_schema_version$const, "1.0.0")
+    expect_equal(technical_schema$properties$dashboard_schema_version$const, "1.1.0")
 })
 
 test_that("validate_dashboard_payload accepts a minimal valid bracket payload", {
@@ -46,7 +46,7 @@ test_that("validate_dashboard_payload rejects schema version mismatches", {
 
 test_that("validate_dashboard_payload tolerates absent optional sections", {
     payload <- list(
-        dashboard_schema_version = "1.0.0",
+        dashboard_schema_version = "1.1.0",
         dashboard = "technical",
         bracket_year = 2026L,
         generated_at = "2026-06-12T10:00:00-0400",
@@ -127,6 +127,64 @@ test_that("build_technical_dashboard_payload produces a valid versioned payload"
     expect_equal(payload$decision_summary$n_decisions, 2L)
     expect_equal(payload$decision_summary$n_divergent, 1L)
     expect_equal(payload$model_quality$source_label, "current run")
+})
+
+test_that("build_technical_dashboard_payload serializes backtest and decision tables", {
+    decision_sheet <- data.frame(
+        slot_key = c("a", "b"),
+        round = c("Round of 64", "Sweet 16"),
+        region = c("East", "West"),
+        matchup_number = c(1L, 2L),
+        matchup_label = c("A vs B", "C vs D"),
+        posterior_favorite = c("A", "C"),
+        win_prob_favorite = c(0.7, 0.55),
+        ci_lower = c(0.6, 0.45),
+        ci_upper = c(0.8, 0.65),
+        confidence_tier = c("Lock", "Toss-up"),
+        candidate_diff_flag = c(FALSE, TRUE),
+        candidate_1_pick = c("A", "C"),
+        candidate_2_pick = c("A", "D"),
+        decision_rank = c(1L, 2L),
+        decision_score = c(2.1, 1.4),
+        inspection_level = c("primary", "secondary"),
+        rationale_short = c("r1", "r2"),
+        upset_leverage = c(0.1, 0.4),
+        underdog = c("B", "D"),
+        alternate_rationale = c(NA_character_, "swap")
+    )
+    backtest <- list(
+        summary = tibble::tibble(
+            mean_log_loss = 0.401,
+            mean_brier = 0.188,
+            mean_accuracy = 0.713,
+            mean_bracket_score = 85.4,
+            mean_correct_picks = 42.7
+        ),
+        calibration = tibble::tibble(
+            bin = "(0.5,0.6]",
+            mean_predicted = 0.55,
+            empirical_rate = 0.58,
+            n_games = 120L
+        ),
+        predictions = tibble::tibble(
+            round = c("Round of 64", "Sweet 16"),
+            predicted_prob = c(0.7, 0.55),
+            actual_outcome = c(1, 0)
+        )
+    )
+    payload <- build_technical_dashboard_payload(
+        bracket_year = 2026L,
+        decision_sheet = decision_sheet,
+        candidates = make_payload_test_candidates(),
+        model_quality_context = list(source_label = "fixture backtest", backtest = backtest),
+        build_metadata = list(git_commit = "abc1234")
+    )
+    expect_invisible(validate_dashboard_payload(payload, "technical"))
+    expect_equal(payload$dashboard_schema_version, "1.1.0")
+    expect_true(is.data.frame(payload$ranked_decisions))
+    expect_true(is.data.frame(payload$candidate_differences))
+    expect_equal(payload$backtest$summary$mean_log_loss[[1]], 0.401)
+    expect_true(length(payload$key_warnings) >= 1L)
 })
 
 test_that("dashboard payload JSON round-trips with rows orientation", {

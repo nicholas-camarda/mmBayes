@@ -521,6 +521,122 @@ body {
   margin: 14px 0;
 }
 
+.technical-dashboard .technical-panel,
+.technical-dashboard .technical-subpanel {
+  background: var(--panel);
+  border: 1px solid #22304a;
+  border-radius: 18px;
+  padding: 20px;
+  margin: 18px 0;
+}
+
+.technical-dashboard .technical-subpanel {
+  margin-top: 14px;
+}
+
+.technical-dashboard .guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.technical-dashboard .guide-card {
+  border: 1px solid #334155;
+  border-radius: 14px;
+  padding: 14px;
+  background: #0f172a;
+}
+
+.technical-dashboard .guide-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.technical-dashboard .diagnostics-overview-grid,
+.technical-dashboard .diagnostics-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.technical-dashboard .quality-card {
+  border: 1px solid #334155;
+  border-radius: 14px;
+  padding: 14px;
+  background: #0f172a;
+}
+
+.technical-dashboard .quality-card--calibration {
+  grid-column: 1 / -1;
+}
+
+.technical-dashboard .diagnostic-callout {
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #11192a;
+  margin-top: 10px;
+}
+
+.technical-dashboard .diagnostic-bullets {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.technical-dashboard .toggle-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0 16px;
+}
+
+.technical-dashboard .toggle-button {
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.technical-dashboard .toggle-button.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #03131f;
+}
+
+.technical-dashboard .tech-svg {
+  width: 100%;
+  height: auto;
+  background: #0b1220;
+  border: 1px solid #334155;
+  border-radius: 14px;
+}
+
+.technical-dashboard .distribution-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.technical-dashboard .dashboard-table tr.inspection-primary td {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.technical-dashboard .dashboard-table tr.inspection-secondary td {
+  background: rgba(234, 88, 12, 0.1);
+}
+
+.technical-dashboard .summary-chip--wide strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
 @media (max-width: 640px) {
   .page {
     padding: 14px 12px 28px;

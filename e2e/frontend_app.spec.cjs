@@ -72,8 +72,12 @@ test.describe("static frontend dashboards", () => {
   test("technical page renders fixture payload offline over file://", async ({ page }) => {
     const stageDir = stageApp();
     await page.goto(`file://${path.join(stageDir, "technical.html")}`);
-    await expect(page.getByRole("heading", { name: /technical dashboard/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /technical bracket dashboard/i })).toBeVisible();
     await expect(page.getByTestId("decision-summary")).toBeVisible();
+    await expect(page.getByTestId("compare-workspace")).toBeVisible();
+    await expect(page.getByTestId("backtest-panel")).toBeVisible();
+    await expect(page.getByTestId("calibration-chart")).toBeVisible();
+    await expect(page.getByTestId("ranked-decisions-table")).toBeVisible();
   });
 
   test("bracket entry toggles and review markers work without console errors", async ({ page }) => {

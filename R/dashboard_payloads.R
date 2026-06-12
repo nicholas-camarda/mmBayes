@@ -109,6 +109,319 @@ build_bracket_dashboard_payload <- function(bracket_year,
     ))
 }
 
+#' Resolve the backtest bundle used for technical dashboard payloads
+#'
+#' @param model_quality_context Optional resolved model-quality context.
+#' @param backtest Optional direct backtest bundle from the active run.
+#'
+#' @return A backtest bundle or NULL when unavailable.
+#' @keywords internal
+resolve_technical_backtest <- function(model_quality_context = NULL, backtest = NULL) {
+    quality_backtest <- NULL
+    if (!is.null(model_quality_context) && is.list(model_quality_context) &&
+        model_quality_has_backtest(model_quality_context$backtest %||% NULL)) {
+        quality_backtest <- model_quality_context$backtest
+    }
+    if (!model_quality_has_backtest(quality_backtest) && model_quality_has_backtest(backtest)) {
+        quality_backtest <- backtest
+    }
+    quality_backtest
+}
+
+#' Serialize backtest diagnostics for the technical dashboard payload
+#'
+#' @param quality_backtest A backtest bundle with summary and calibration tables.
+#' @param quality_source_label Optional source label for provenance display.
+#'
+#' @return A list suitable for JSON serialization, or NULL when empty.
+#' @keywords internal
+serialize_backtest_payload <- function(quality_backtest, quality_source_label = NULL) {
+    if (!model_quality_has_backtest(quality_backtest)) {
+        return(NULL)
+    }
+
+    diagnostics <- summarize_backtest_diagnostics(quality_backtest)
+    summary_row <- quality_backtest$summary %>% dplyr::slice_head(n = 1)
+    calibration <- quality_backtest$calibration %||% tibble::tibble()
+    round_summary <- diagnostics$round_summary %||% tibble::tibble()
+
+    compact_payload(list(
+        source_label = quality_source_label,
+        summary = if (nrow(summary_row) > 0) as.data.frame(summary_row) else NULL,
+        calibration = if (nrow(calibration) > 0) as.data.frame(calibration) else NULL,
+        round_performance = if (nrow(round_summary) > 0) as.data.frame(round_summary) else NULL,
+        strengths = as.list(diagnostics$strengths %||% character()),
+        weaknesses = as.list(diagnostics$weaknesses %||% character()),
+        backtest_years = diagnostics$backtest_years
+    ))
+}
+
+#' Serialize model overview metadata for the technical dashboard payload
+#'
+#' @param model_overview A normalized or bundled model overview object.
+#'
+#' @return A compact list for JSON serialization, or NULL when empty.
+#' @keywords internal
+serialize_model_overview_payload <- function(model_overview) {
+    overview <- normalize_model_overview(model_overview)
+    if (length(overview) == 0) {
+        return(NULL)
+    }
+
+    compact_payload(list(
+        engine = overview$engine %||% NULL,
+        engine_label = overview$engine_label %||% overview$engine %||% NULL,
+        predictor_count = overview$predictor_count %||% length(overview$predictor_columns %||% character()),
+        predictor_columns = as.list(overview$predictor_columns %||% character()),
+        prior_type = overview$prior_type %||% NULL,
+        interaction_terms = as.list(overview$interaction_terms %||% character()),
+        configured_history_window = overview$configured_history_window %||% NULL,
+        effective_historical_years = overview$effective_historical_years %||% NULL
+    ))
+}
+
+#' Serialize ensemble diagnostics for the technical dashboard payload
+#'
+#' @param model_overview A normalized or bundled model overview object.
+#'
+#' @return A compact list for JSON serialization, or NULL when not an ensemble.
+#' @keywords internal
+serialize_ensemble_diagnostics_payload <- function(model_overview) {
+    overview <- normalize_model_overview(model_overview)
+    if (length(overview) == 0 || !identical(overview$engine %||% NULL, "ensemble")) {
+        return(NULL)
+    }
+
+    validation <- overview$ensemble_validation %||% list()
+    validation_summary <- validation$summary %||% tibble::tibble()
+    gate_conditions <- validation$gate_conditions %||% tibble::tibble()
+    combiner <- overview$ensemble_combiner %||% list()
+
+    compact_payload(list(
+        weight_stan_glm = combiner$weight_stan_glm %||% NULL,
+        weight_bart = combiner$weight_bart %||% NULL,
+        intercept = combiner$intercept %||% NULL,
+        gate_passed = validation$gate_passed %||% NULL,
+        validation_summary = if (nrow(validation_summary) > 0) as.data.frame(validation_summary) else NULL,
+        gate_conditions = if (nrow(gate_conditions) > 0) as.data.frame(gate_conditions) else NULL
+    ))
+}
+
+#' Serialize technical decision tables from the decision sheet
+#'
+#' @param decision_sheet Decision sheet from [build_decision_sheet()].
+#'
+#' @return A list with ranked decision and candidate-difference tables.
+#' @keywords internal
+serialize_technical_decision_tables <- function(decision_sheet) {
+    if (!is.data.frame(decision_sheet) || nrow(decision_sheet) == 0) {
+        return(list(ranked_decisions = NULL, candidate_differences = NULL))
+    }
+
+    arrange_cols <- list()
+    if ("decision_score" %in% names(decision_sheet)) {
+        arrange_cols <- c(arrange_cols, list(dplyr::desc(decision_sheet$decision_score)))
+    }
+    if ("round" %in% names(decision_sheet)) {
+        arrange_cols <- c(arrange_cols, list(decision_sheet$round))
+    }
+    if ("region" %in% names(decision_sheet)) {
+        arrange_cols <- c(arrange_cols, list(decision_sheet$region))
+    }
+    if ("matchup_number" %in% names(decision_sheet)) {
+        arrange_cols <- c(arrange_cols, list(decision_sheet$matchup_number))
+    }
+    ranked_decisions <- if (length(arrange_cols) > 0) {
+        decision_sheet %>% dplyr::arrange(!!!arrange_cols)
+    } else {
+        decision_sheet
+    }
+    ranked_decisions <- ranked_decisions %>%
+        dplyr::transmute(
+            rank = if ("decision_rank" %in% names(.)) decision_rank else dplyr::row_number(),
+            round = if ("round" %in% names(.)) as.character(round) else NA_character_,
+            region = if ("region" %in% names(.)) as.character(region) else NA_character_,
+            matchup = if ("matchup_label" %in% names(.)) matchup_label else NA_character_,
+            favorite = if ("posterior_favorite" %in% names(.)) posterior_favorite else NA_character_,
+            favorite_prob = if ("win_prob_favorite" %in% names(.)) win_prob_favorite else NA_real_,
+            ci_lower = if ("ci_lower" %in% names(.)) ci_lower else NA_real_,
+            ci_upper = if ("ci_upper" %in% names(.)) ci_upper else NA_real_,
+            tier = if ("confidence_tier" %in% names(.)) confidence_tier else NA_character_,
+            recommended_pick = if ("candidate_1_pick" %in% names(.)) candidate_1_pick else NA_character_,
+            alternate_pick = if ("candidate_2_pick" %in% names(.)) candidate_2_pick else NA_character_,
+            inspection_level = if ("inspection_level" %in% names(.)) {
+                dplyr::coalesce(inspection_level, "none")
+            } else {
+                "none"
+            },
+            rationale = if ("rationale_short" %in% names(.)) rationale_short else NA_character_
+        ) %>%
+        dplyr::slice_head(n = 25L)
+
+    candidate_differences <- if ("candidate_diff_flag" %in% names(decision_sheet)) {
+        decision_sheet %>%
+            dplyr::filter(candidate_diff_flag) %>%
+            dplyr::transmute(
+                round = if ("round" %in% names(.)) as.character(round) else NA_character_,
+                region = if ("region" %in% names(.)) as.character(region) else NA_character_,
+                slot = if ("matchup_number" %in% names(.)) matchup_number else NA_integer_,
+                matchup = if ("matchup_label" %in% names(.)) matchup_label else NA_character_,
+                candidate_1 = if ("candidate_1_pick" %in% names(.)) candidate_1_pick else NA_character_,
+                candidate_2 = if ("candidate_2_pick" %in% names(.)) candidate_2_pick else NA_character_,
+                tier = if ("confidence_tier" %in% names(.)) confidence_tier else NA_character_,
+                leverage = if ("upset_leverage" %in% names(.)) upset_leverage else NA_real_,
+                why = if ("alternate_rationale" %in% names(.)) alternate_rationale else NA_character_
+            )
+    } else {
+        tibble::tibble()
+    }
+
+    list(
+        ranked_decisions = if (nrow(ranked_decisions) > 0) as.data.frame(ranked_decisions) else NULL,
+        candidate_differences = if (nrow(candidate_differences) > 0) as.data.frame(candidate_differences) else NULL
+    )
+}
+
+#' Build the technical action-summary strip payload
+#'
+#' @param decision_sheet Decision sheet from [build_decision_sheet()].
+#' @param candidates Candidate bracket objects.
+#'
+#' @return A named list for the action summary cards.
+#' @keywords internal
+build_action_summary_payload <- function(decision_sheet, candidates = list()) {
+    tier_counts <- if (is.data.frame(decision_sheet) && "confidence_tier" %in% names(decision_sheet)) {
+        as.list(table(as.character(decision_sheet$confidence_tier)))
+    } else {
+        list()
+    }
+
+    top_leverage <- if (is.data.frame(decision_sheet) && nrow(decision_sheet) > 0) {
+        leverage_sheet <- decision_sheet
+        if ("upset_leverage" %in% names(leverage_sheet)) {
+            leverage_sheet <- leverage_sheet %>% dplyr::arrange(dplyr::desc(upset_leverage))
+        }
+        if ("decision_score" %in% names(leverage_sheet)) {
+            leverage_sheet <- leverage_sheet %>% dplyr::arrange(dplyr::desc(decision_score))
+        }
+        leverage_sheet %>% dplyr::slice_head(n = 1)
+    } else {
+        tibble::tibble()
+    }
+    top_leverage_label <- if (nrow(top_leverage) == 1L) {
+        paste0(
+            if ("underdog" %in% names(top_leverage)) top_leverage$underdog[[1]] else "n/a",
+            " over ",
+            if ("posterior_favorite" %in% names(top_leverage)) top_leverage$posterior_favorite[[1]] else "n/a",
+            " | ",
+            if ("round" %in% names(top_leverage)) as.character(top_leverage$round[[1]]) else "n/a"
+        )
+    } else {
+        "No leverage slot available"
+    }
+
+    candidate_cards <- lapply(candidates, function(candidate) {
+        compact_payload(list(
+            candidate_id = as.integer(candidate$candidate_id),
+            type = as.character(candidate$type),
+            champion = as.character(candidate$champion),
+            final_four = as.character(candidate$final_four %||% "")
+        ))
+    })
+
+    list(
+        candidates = candidate_cards,
+        tier_counts = tier_counts,
+        candidate_diff_count = if (is.data.frame(decision_sheet) && "candidate_diff_flag" %in% names(decision_sheet)) {
+            sum(decision_sheet$candidate_diff_flag %in% TRUE)
+        } else {
+            0L
+        },
+        top_leverage_label = top_leverage_label
+    )
+}
+
+#' Build key warning lines for the technical dashboard payload
+#'
+#' @param decision_sheet Decision sheet from [build_decision_sheet()].
+#' @param play_in_resolution Optional play-in resolution tibble.
+#' @param diagnostics_summary Output from [summarize_backtest_diagnostics()].
+#'
+#' @return A character vector of warning lines.
+#' @keywords internal
+build_technical_key_warnings <- function(decision_sheet,
+                                         play_in_resolution = NULL,
+                                         diagnostics_summary = NULL) {
+    warnings <- character()
+    top_review_row <- if (is.data.frame(decision_sheet) && nrow(decision_sheet) > 0) {
+        review_sheet <- decision_sheet
+        if ("decision_score" %in% names(review_sheet)) {
+            review_sheet <- review_sheet %>% dplyr::arrange(dplyr::desc(decision_score))
+        }
+        if (all(c("round", "region", "matchup_number") %in% names(review_sheet))) {
+            review_sheet <- review_sheet %>% dplyr::arrange(round, region, matchup_number)
+        }
+        review_sheet %>% dplyr::slice_head(n = 1)
+    } else {
+        tibble::tibble()
+    }
+
+    if (nrow(top_review_row) == 1L && all(c("matchup_label", "round", "posterior_favorite", "win_prob_favorite") %in% names(top_review_row))) {
+        warnings <- c(
+            warnings,
+            sprintf(
+                "Top review spot: %s in %s. The current favorite is %s at %.1f%%, so this is still one of the most consequential manual-review slots.",
+                top_review_row$matchup_label[[1]],
+                as.character(top_review_row$round[[1]]),
+                top_review_row$posterior_favorite[[1]],
+                100 * safe_numeric(top_review_row$win_prob_favorite[[1]], default = NA_real_)
+            )
+        )
+    }
+    if (!is.null(diagnostics_summary) && length(diagnostics_summary$weaknesses %||% character()) > 0L) {
+        warnings <- c(warnings, diagnostics_summary$weaknesses)
+    }
+    if (!is.null(play_in_resolution) && nrow(play_in_resolution) > 0 &&
+        isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
+        warnings <- c(
+            warnings,
+            sprintf(
+                "%s First Four slots are still unresolved, so some downstream bracket paths can still move before the field is final.",
+                play_in_resolution$unresolved_slots[[1]]
+            )
+        )
+    }
+    if (length(warnings) == 0L) {
+        warnings <- "No high-signal warnings were recorded for this run."
+    }
+    warnings
+}
+
+#' Serialize championship tiebreaker distributions for the technical payload
+#'
+#' @param total_points_predictions Optional bundle from [predict_candidate_total_points()].
+#'
+#' @return A list suitable for JSON serialization, or NULL when empty.
+#' @keywords internal
+serialize_championship_totals_payload <- function(total_points_predictions) {
+    if (is.null(total_points_predictions)) {
+        return(NULL)
+    }
+
+    summaries <- total_points_predictions$candidate_summaries %||% tibble::tibble()
+    distribution <- total_points_predictions$championship_distribution %||% tibble::tibble()
+    if ((!is.data.frame(summaries) || nrow(summaries) == 0) &&
+        (!is.data.frame(distribution) || nrow(distribution) == 0)) {
+        return(NULL)
+    }
+
+    compact_payload(list(
+        candidate_summaries = if (nrow(summaries) > 0) as.data.frame(summaries) else NULL,
+        championship_distribution = if (nrow(distribution) > 0) as.data.frame(distribution) else NULL,
+        scale = build_championship_distribution_scale(distribution)
+    ))
+}
+
 #' Build the versioned technical dashboard payload
 #'
 #' @param bracket_year The active bracket year.
@@ -116,6 +429,10 @@ build_bracket_dashboard_payload <- function(bracket_year,
 #' @param candidates Optional list of candidate bracket objects.
 #' @param model_quality_context Optional resolved model-quality context.
 #' @param build_metadata Optional build metadata list.
+#' @param model_overview Optional model overview bundle.
+#' @param total_points_predictions Optional championship totals bundle.
+#' @param play_in_resolution Optional play-in resolution tibble.
+#' @param backtest Optional direct backtest bundle from the active run.
 #'
 #' @return A named list satisfying inst/schemas/technical_dashboard_payload.schema.json.
 #' @keywords internal
@@ -123,7 +440,11 @@ build_technical_dashboard_payload <- function(bracket_year,
                                               decision_sheet = NULL,
                                               candidates = list(),
                                               model_quality_context = NULL,
-                                              build_metadata = NULL) {
+                                              build_metadata = NULL,
+                                              model_overview = NULL,
+                                              total_points_predictions = NULL,
+                                              play_in_resolution = NULL,
+                                              backtest = NULL) {
     decision_summary <- NULL
     if (is.data.frame(decision_sheet) && nrow(decision_sheet) > 0) {
         decision_summary <- list(
@@ -140,6 +461,11 @@ build_technical_dashboard_payload <- function(bracket_year,
             }
         )
     }
+
+    quality_source_label <- model_quality_context$source_label %||% "Current run backtest"
+    quality_backtest <- resolve_technical_backtest(model_quality_context, backtest)
+    diagnostics_summary <- summarize_backtest_diagnostics(quality_backtest)
+    decision_tables <- serialize_technical_decision_tables(decision_sheet)
 
     model_quality <- NULL
     if (!is.null(model_quality_context)) {
@@ -159,7 +485,28 @@ build_technical_dashboard_payload <- function(bracket_year,
         build_metadata = build_metadata %||% list(),
         model_quality = model_quality,
         decision_summary = decision_summary,
-        candidate_count = length(candidates)
+        candidate_count = length(candidates),
+        action_summary = if (!is.null(decision_sheet)) {
+            build_action_summary_payload(decision_sheet, candidates)
+        } else {
+            NULL
+        },
+        key_warnings = as.list(build_technical_key_warnings(
+            decision_sheet = decision_sheet,
+            play_in_resolution = play_in_resolution,
+            diagnostics_summary = diagnostics_summary
+        )),
+        ranked_decisions = decision_tables$ranked_decisions,
+        candidate_differences = decision_tables$candidate_differences,
+        backtest = serialize_backtest_payload(quality_backtest, quality_source_label),
+        model_overview = serialize_model_overview_payload(model_overview),
+        ensemble_diagnostics = serialize_ensemble_diagnostics_payload(model_overview),
+        championship_totals = serialize_championship_totals_payload(total_points_predictions),
+        play_in_resolution = if (is.data.frame(play_in_resolution) && nrow(play_in_resolution) > 0) {
+            as.data.frame(play_in_resolution)
+        } else {
+            NULL
+        }
     ))
 }
 

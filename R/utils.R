@@ -3048,7 +3048,11 @@ write_dashboard_outputs <- function(bracket_year,
             decision_sheet = decision_sheet,
             candidates = candidates,
             model_quality_context = model_quality_context,
-            build_metadata = dashboard_context$build_metadata %||% list()
+            build_metadata = dashboard_context$build_metadata %||% list(),
+            model_overview = model_overview,
+            total_points_predictions = total_points_predictions,
+            play_in_resolution = play_in_resolution,
+            backtest = backtest
         ),
         output_dir = output_dir
     )

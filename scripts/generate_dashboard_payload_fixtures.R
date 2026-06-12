@@ -46,6 +46,36 @@ play_in_resolution <- summarize_play_in_resolution(
     current_teams = loaded$current_teams,
     actual_play_in_results = loaded$current_play_in_results
 )
+model_overview <- summarize_model_overview(
+    model_results,
+    draws = 25L,
+    history_summary = loaded$history_summary %||% tibble::tibble()
+)
+fixture_backtest <- list(
+    summary = tibble::tibble(
+        mean_log_loss = 0.451,
+        mean_brier = 0.192,
+        mean_accuracy = 0.708,
+        mean_bracket_score = 83.6,
+        mean_correct_picks = 41.2
+    ),
+    calibration = tibble::tibble(
+        bin = c("(0.4,0.5]", "(0.5,0.6]", "(0.6,0.7]", "(0.7,0.8]"),
+        mean_predicted = c(0.45, 0.55, 0.65, 0.75),
+        empirical_rate = c(0.42, 0.58, 0.63, 0.72),
+        n_games = c(120L, 180L, 150L, 90L)
+    ),
+    predictions = tibble::tibble(
+        round = c("Round of 64", "Round of 64", "Sweet 16", "Elite 8"),
+        predicted_prob = c(0.7, 0.55, 0.62, 0.48),
+        actual_outcome = c(1, 0, 1, 0)
+    )
+)
+model_quality_context <- list(
+    backtest = fixture_backtest,
+    source_label = "fixture backtest",
+    used_cached_quality = FALSE
+)
 
 build_metadata <- list(
     git_commit = "fixture",
@@ -71,8 +101,11 @@ technical_payload <- build_technical_dashboard_payload(
     bracket_year = 2026L,
     decision_sheet = decision_sheet,
     candidates = candidates,
-    model_quality_context = list(source_label = "fixture", used_cached_quality = FALSE),
-    build_metadata = build_metadata
+    model_quality_context = model_quality_context,
+    build_metadata = build_metadata,
+    model_overview = model_overview,
+    play_in_resolution = play_in_resolution,
+    backtest = fixture_backtest
 )
 # Pin generated_at so fixture regeneration is deterministic.
 bracket_payload$generated_at <- "2026-01-01T00:00:00+0000"

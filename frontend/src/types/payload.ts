@@ -176,6 +176,114 @@ export interface BracketPayload extends PayloadBase {
   watchlist?: WatchlistRow[];
 }
 
+export interface TechnicalDecisionRow {
+  rank?: number;
+  round?: string;
+  region?: string;
+  matchup?: string;
+  favorite?: string;
+  favorite_prob?: number;
+  ci_lower?: number;
+  ci_upper?: number;
+  tier?: string;
+  recommended_pick?: string;
+  alternate_pick?: string;
+  inspection_level?: string;
+  rationale?: string;
+}
+
+export interface TechnicalCandidateDifferenceRow {
+  round?: string;
+  region?: string;
+  slot?: number;
+  matchup?: string;
+  candidate_1?: string;
+  candidate_2?: string;
+  tier?: string;
+  leverage?: number;
+  why?: string;
+}
+
+export interface BacktestSummaryRow {
+  mean_log_loss?: number;
+  mean_brier?: number;
+  mean_accuracy?: number;
+  mean_bracket_score?: number;
+  mean_correct_picks?: number;
+}
+
+export interface CalibrationRow {
+  bin?: string;
+  mean_predicted?: number;
+  empirical_rate?: number;
+  n_games?: number;
+}
+
+export interface RoundPerformanceRow {
+  round?: string;
+  games?: number;
+  accuracy?: number;
+  log_loss?: number;
+  brier?: number;
+  empirical_rate?: number;
+}
+
+export interface BacktestPayload {
+  source_label?: string;
+  summary?: BacktestSummaryRow;
+  calibration?: CalibrationRow[];
+  round_performance?: RoundPerformanceRow[];
+  strengths?: string[];
+  weaknesses?: string[];
+  backtest_years?: string;
+}
+
+export interface EnsembleDiagnosticsPayload {
+  weight_stan_glm?: number;
+  weight_bart?: number;
+  intercept?: number;
+  gate_passed?: boolean;
+  validation_summary?: Record<string, unknown>[];
+  gate_conditions?: Record<string, unknown>[];
+}
+
+export interface ModelOverviewPayload {
+  engine?: string;
+  engine_label?: string;
+  predictor_count?: number;
+  predictor_columns?: string[];
+  prior_type?: string;
+  interaction_terms?: string[];
+  configured_history_window?: number;
+  effective_historical_years?: number;
+}
+
+export interface ChampionshipTotalsPayload {
+  candidate_summaries?: Record<string, unknown>[];
+  championship_distribution?: Array<{
+    candidate_id?: number;
+    total_points?: number;
+    probability?: number;
+  }>;
+  scale?: {
+    min_total?: number;
+    max_total?: number;
+    max_probability?: number;
+  };
+}
+
+export interface TechnicalActionSummary {
+  candidates?: Array<{
+    candidate_id?: number;
+    type?: string;
+    champion?: string;
+    final_four?: string;
+  }>;
+  tier_counts?: Record<string, number>;
+  candidate_diff_count?: number;
+  top_leverage_label?: string;
+}
+
 export interface TechnicalPayload extends PayloadBase {
   dashboard: "technical";
   model_quality?: { source_label?: string; used_cached_quality?: boolean };
@@ -185,6 +293,15 @@ export interface TechnicalPayload extends PayloadBase {
     confidence_tiers?: Record<string, number>;
   };
   candidate_count?: number;
+  action_summary?: TechnicalActionSummary;
+  key_warnings?: string[];
+  ranked_decisions?: TechnicalDecisionRow[];
+  candidate_differences?: TechnicalCandidateDifferenceRow[];
+  backtest?: BacktestPayload;
+  model_overview?: ModelOverviewPayload;
+  ensemble_diagnostics?: EnsembleDiagnosticsPayload;
+  championship_totals?: ChampionshipTotalsPayload;
+  play_in_resolution?: Record<string, unknown>[];
 }
 
 export interface DashboardPayloads {

@@ -5,13 +5,22 @@
   "type": "object",
   "required": ["dashboard_schema_version", "dashboard", "bracket_year", "generated_at", "build_metadata"],
   "properties": {
-    "dashboard_schema_version": {"type": "string", "const": "1.0.0"},
+    "dashboard_schema_version": {"type": "string", "const": "1.1.0"},
     "dashboard": {"type": "string", "const": "technical"},
     "bracket_year": {"type": "integer"},
     "generated_at": {"type": "string"},
     "build_metadata": {"type": "object"},
     "model_quality": {"type": "object"},
     "decision_summary": {"type": "object"},
-    "candidate_count": {"type": "integer"}
+    "candidate_count": {"type": "integer"},
+    "action_summary": {"type": "object"},
+    "key_warnings": {"type": "array"},
+    "ranked_decisions": {"type": "array"},
+    "candidate_differences": {"type": "array"},
+    "backtest": {"type": "object"},
+    "model_overview": {"type": "object"},
+    "ensemble_diagnostics": {"type": "object"},
+    "championship_totals": {"type": "object"},
+    "play_in_resolution": {"type": "array"}
   }
 }

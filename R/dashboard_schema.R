@@ -7,7 +7,7 @@ dashboard_payload_schema_version <- function(dashboard = c("bracket", "technical
     switch(
         dashboard,
         bracket = "1.1.0",
-        technical = "1.0.0"
+        technical = "1.1.0"
     )
 }
 
