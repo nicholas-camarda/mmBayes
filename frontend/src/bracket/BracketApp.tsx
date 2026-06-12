@@ -14,6 +14,7 @@ import { CandidateComparisonPanel } from "../components/bracket/CandidateCompari
 import { EntryWorkspace } from "../components/bracket/EntryWorkspace";
 import { WatchlistPanel } from "../components/bracket/WatchlistPanel";
 import { CandidatePathsPanel } from "../components/bracket/CandidatePathsPanel";
+import { PlayInStatusPanel } from "../components/bracket/PlayInStatusPanel";
 import { ReadingGuidePanel } from "../components/bracket/ReadingGuidePanel";
 import { ConfidenceLegend } from "../components/bracket/ConfidenceLegend";
 
@@ -161,9 +162,7 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
         <DecisionSheetTable rows={payload.decision_sheet} />
         <h3>Play-in status</h3>
         {payload.play_in_resolution && payload.play_in_resolution.length > 0 ? (
-          <pre data-testid="play-in-panel">
-            {JSON.stringify(payload.play_in_resolution[0], null, 2)}
-          </pre>
+          <PlayInStatusPanel rows={payload.play_in_resolution} />
         ) : (
           <MissingSection label="Play-in resolution" />
         )}
