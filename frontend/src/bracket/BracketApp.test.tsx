@@ -13,7 +13,7 @@ describe("BracketApp", () => {
     expect(screen.getAllByTestId("candidate-card").length).toBe(fixture.candidates.length);
     expect(screen.getByTestId("decision-sheet")).toBeInTheDocument();
     expect(screen.getAllByTestId("candidate-card")[0]).toHaveTextContent(
-      new RegExp(fixture.candidates[0].champion)
+      new RegExp(fixture.candidates[0].champion),
     );
   });
 

@@ -2,7 +2,8 @@ import type { DecisionSheetRow } from "../types/payload";
 
 export function DecisionSheetTable({ rows }: { rows: DecisionSheetRow[] }) {
   const sorted = [...rows].sort(
-    (a, b) => (a.decision_rank ?? Number.MAX_SAFE_INTEGER) - (b.decision_rank ?? Number.MAX_SAFE_INTEGER)
+    (a, b) =>
+      (a.decision_rank ?? Number.MAX_SAFE_INTEGER) - (b.decision_rank ?? Number.MAX_SAFE_INTEGER),
   );
   return (
     <section aria-label="Decision sheet">

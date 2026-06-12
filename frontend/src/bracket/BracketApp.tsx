@@ -17,7 +17,9 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
       <DecisionSheetTable rows={payload.decision_sheet} />
       <h2>Play-in status</h2>
       {payload.play_in_resolution && payload.play_in_resolution.length > 0 ? (
-        <pre data-testid="play-in-panel">{JSON.stringify(payload.play_in_resolution[0], null, 2)}</pre>
+        <pre data-testid="play-in-panel">
+          {JSON.stringify(payload.play_in_resolution[0], null, 2)}
+        </pre>
       ) : (
         <MissingSection label="Play-in resolution" />
       )}

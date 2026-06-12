@@ -87,7 +87,7 @@ export function assertSchemaCompatible(payload: PayloadBase): void {
   if (major(payload.dashboard_schema_version) !== major(SUPPORTED_SCHEMA_VERSION)) {
     throw new Error(
       `Unsupported dashboard_schema_version ${payload.dashboard_schema_version}; ` +
-        `this frontend supports ${SUPPORTED_SCHEMA_VERSION}`
+        `this frontend supports ${SUPPORTED_SCHEMA_VERSION}`,
     );
   }
 }

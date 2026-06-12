@@ -6,12 +6,18 @@ import "../styles.css";
 
 const root = createRoot(document.getElementById("root")!);
 loadTechnicalPayload()
-  .then((payload) => root.render(<StrictMode><TechnicalApp payload={payload} /></StrictMode>))
+  .then((payload) =>
+    root.render(
+      <StrictMode>
+        <TechnicalApp payload={payload} />
+      </StrictMode>,
+    ),
+  )
   .catch((error: Error) => {
     root.render(
       <main className="dashboard">
         <h1>Technical Dashboard</h1>
         <p role="alert">Failed to load dashboard payload: {error.message}</p>
-      </main>
+      </main>,
     );
   });
