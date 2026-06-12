@@ -1,0 +1,35 @@
+.explain-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .explain-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.explain-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--panel-2);
+}
+
+.explain-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+
+.explain-card p {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}

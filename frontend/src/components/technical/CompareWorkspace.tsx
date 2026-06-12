@@ -5,6 +5,7 @@ import type {
   TechnicalDecisionRow,
   UpsetOpportunityRow,
 } from "../../types/payload";
+import { BoardExplainer } from "./BoardExplainer";
 import { CandidateProfilePanel } from "./CandidateProfilePanel";
 import { DivergenceBoard } from "./DivergenceBoard";
 import { RankedDecisionBoard } from "./RankedDecisionBoard";
@@ -60,6 +61,12 @@ export function CompareWorkspace({
               Highest-impact review slots with preferred picks, alternate paths, and posterior
               uncertainty in a responsive layout that uses space better than the legacy SVG boards.
             </p>
+            <BoardExplainer
+              what="Highest-impact review slots with preferred and alternate paths."
+              how="Read ranked decisions first, then upset pivots, then divergence forks."
+              why="These are the slots most likely to change your bracket outcome."
+              math="Ranked by decision_score; upset board sorted by upset_leverage."
+            />
             <RankedDecisionBoard rows={rankedDecisions ?? []} />
           </div>
           <div className="technical-subpanel">

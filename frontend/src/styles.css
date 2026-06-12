@@ -2,6 +2,7 @@
 @import "./styles/layout.css";
 @import "./styles/components/prob-track.css";
 @import "./styles/components/comparison-board.css";
+@import "./styles/components/explain.css";
 
 body {
   margin: 0;
