@@ -1,17 +1,11 @@
-:root {
-  --bg: #080b12;
-  --panel: #11192a;
-  --text: #e8edf7;
-  --muted: #8fa1bd;
-  --accent: #5aa9ff;
-}
+@import "./styles/tokens.css";
+@import "./styles/layout.css";
+
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--text);
-  font:
-    15px/1.5 system-ui,
-    sans-serif;
+  color: var(--ink);
+  font: var(--text-base) / 1.55 var(--font-sans);
   overflow-x: hidden;
 }
 
@@ -22,21 +16,6 @@ a {
 a:hover {
   color: #bae6fd;
 }
-.dashboard,
-.page {
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: 24px 22px 48px;
-}
-
-.hero {
-  background: var(--panel);
-  border: 1px solid #22304a;
-  border-radius: 18px;
-  padding: 22px;
-  margin-bottom: 18px;
-}
-
 .eyebrow,
 .section-label,
 .role-kicker {
@@ -103,14 +82,6 @@ a:hover {
   max-width: 940px;
 }
 
-.section {
-  background: var(--panel);
-  border: 1px solid #22304a;
-  border-radius: 18px;
-  padding: 20px;
-  margin: 18px 0;
-}
-
 .jump-nav {
   display: flex;
   flex-wrap: wrap;
@@ -134,7 +105,7 @@ a:hover {
 .btree-toggle {
   border: 1px solid #334155;
   background: #1e293b;
-  color: var(--text);
+  color: var(--ink);
   border-radius: 999px;
   padding: 8px 14px;
   font-weight: 600;
@@ -853,7 +824,7 @@ a:hover {
 
 .technical-dashboard .explain-card p {
   margin: 0;
-  color: var(--text);
+  color: var(--ink);
   font-size: 14px;
   line-height: 1.45;
 }
@@ -892,7 +863,7 @@ a:hover {
 .technical-dashboard .toggle-button {
   border: 1px solid #334155;
   background: #1e293b;
-  color: var(--text);
+  color: var(--ink);
   border-radius: 999px;
   padding: 10px 16px;
   font-weight: 600;
@@ -1099,7 +1070,7 @@ a:hover {
 
 .btree-toggle {
   background: #1e293b;
-  color: var(--text);
+  color: var(--ink);
   border: 1px solid #334155;
   border-radius: 999px;
   padding: 6px 12px;
@@ -1172,7 +1143,7 @@ a:hover {
   border: 1px solid #334155;
   border-radius: 10px;
   padding: 10px;
-  color: var(--text);
+  color: var(--ink);
 }
 
 .divergence-cell.is-active {
