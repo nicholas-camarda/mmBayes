@@ -19,11 +19,11 @@ An R-based NCAA tournament bracket lab. Turns pre-tournament team data and histo
 
 This repo is meant to produce bracket-entry materials you can review quickly in a browser or spreadsheet.
 
-If you want the published dashboard entrypoint, start at the GitHub Pages hub:
+Open the published bracket dashboard directly:
 
-[Open the GitHub Pages dashboard hub](https://nicholas-camarda.github.io/mmBayes/)
+[Open the bracket dashboard](https://nicholas-camarda.github.io/mmBayes/output/app/index.html)
 
-From the hub, use **Open bracket dashboard** for the React entry workspace. The published app loads the last synced payload snapshot from `output/app/` (real tournament data after `regenerate_and_sync_dashboards.R` or a full simulation run—not the Vitest fixture payload).
+The [dashboard hub](https://nicholas-camarda.github.io/mmBayes/) links to the bracket and technical apps. The published app loads the last synced payload snapshot from `output/app/` (real tournament data after `regenerate_and_sync_dashboards.R` or a full simulation run—not the Vitest fixture payload).
 
 The authoritative full run now refreshes the tracked repo dashboard snapshot automatically, so a successful `Rscript scripts/run_simulation.R` updates both the runtime HTML bundle and the GitHub Pages source files under `output/`.
 

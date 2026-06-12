@@ -272,9 +272,12 @@ test_that("sync_frontend_app copies the built app and payload shim to both targe
     dir.create(runtime_dir, recursive = TRUE, showWarnings = FALSE)
     dir.create(repo_dir, recursive = TRUE, showWarnings = FALSE)
     on.exit(unlink(project_root, recursive = TRUE), add = TRUE)
-    writeLines("<html></html>", file.path(project_root, "frontend", "dist", "index.html"))
+    writeLines(
+        '<html><body><script src="./dashboard_payloads.js"></script></body></html>',
+        file.path(project_root, "frontend", "dist", "index.html")
+    )
     writeLines("console.log(1)", file.path(dist_dir, "index.js"))
-    writeLines("window.__MMBAYES_PAYLOADS__ = {};", file.path(runtime_dir, "dashboard_payloads.js"))
+    writeLines("window.__MMBAYES_PAYLOADS__ = {\"bracket\":{\"build_metadata\":{\"commit_short\":\"syncfix\"}}};", file.path(runtime_dir, "dashboard_payloads.js"))
 
     synced <- sync_frontend_app(project_root, runtime_output_dir = runtime_dir, repo_output_dir = repo_dir)
 
@@ -283,5 +286,17 @@ test_that("sync_frontend_app copies the built app and payload shim to both targe
         expect_true(file.exists(file.path(target, "index.html")))
         expect_true(file.exists(file.path(target, "assets", "index.js")))
         expect_true(file.exists(file.path(target, "dashboard_payloads.js")))
+        index_html <- readLines(file.path(target, "index.html"), warn = FALSE)
+        expect_match(paste(index_html, collapse = "\n"), 'dashboard_payloads\\.js\\?v=')
     }
+})
+
+test_that("extract_payload_cache_token prefers commit_short then generated_at", {
+    payload_js <- tempfile(fileext = ".js")
+    on.exit(unlink(payload_js), add = TRUE)
+    writeLines(
+        'window.__MMBAYES_PAYLOADS__ = {"bracket":{"generated_at":"2026-06-12T17:40:50-0400","build_metadata":{"commit_short":"abc1234"}}};',
+        payload_js
+    )
+    expect_equal(extract_payload_cache_token(payload_js), "abc1234")
 })

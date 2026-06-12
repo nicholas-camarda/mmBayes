@@ -64,6 +64,55 @@ sync_dashboard_html_files <- function(source_dir,
 
 #' Sync the built static dashboard frontend into output directories
 #'
+#' Extract a cache-busting token from a dashboard_payloads.js shim.
+#'
+#' @param payload_js_path Path to dashboard_payloads.js.
+#'
+#' @return A URL-safe token, or NULL when the file is missing.
+#' @keywords internal
+extract_payload_cache_token <- function(payload_js_path) {
+    if (!file.exists(payload_js_path)) {
+        return(NULL)
+    }
+    line <- readLines(payload_js_path, n = 1L, warn = FALSE)
+    token <- stringr::str_match(line, '"commit_short":"([^"]+)"')[, 2]
+    if (is.na(token)) {
+        token <- stringr::str_match(line, '"generated_at":"([^"]+)"')[, 2]
+    }
+    if (is.na(token)) {
+        token <- format(file.info(payload_js_path)$mtime, "%Y%m%d%H%M%S")
+    }
+    gsub("[^A-Za-z0-9._-]", "", token)
+}
+
+#' Append a version query to dashboard_payloads.js script tags in app HTML.
+#'
+#' @param app_dir Directory containing index.html and technical.html.
+#' @param token Cache-busting token.
+#'
+#' @return Invisibly NULL.
+#' @keywords internal
+patch_app_html_payload_cache_bust <- function(app_dir, token) {
+    if (is.null(token) || !nzchar(token)) {
+        return(invisible(NULL))
+    }
+    for (page in c("index.html", "technical.html")) {
+        path <- file.path(app_dir, page)
+        if (!file.exists(path)) {
+            next
+        }
+        html <- readLines(path, warn = FALSE)
+        html <- gsub(
+            '(src="./dashboard_payloads\\.js)(\\?[^"]*)?(")',
+            sprintf('\\1?v=%s\\3', token),
+            html,
+            perl = TRUE
+        )
+        writeLines(html, path, useBytes = TRUE)
+    }
+    invisible(NULL)
+}
+
 #' Copies frontend/dist plus the runtime dashboard_payloads.js shim into
 #' an app/ directory under the runtime output dir and, optionally, the
 #' tracked repo output dir. Soft-skips when the frontend has not been
@@ -101,7 +150,12 @@ sync_frontend_app <- function(project_root, runtime_output_dir, repo_output_dir 
             overwrite = TRUE
         )
         if (file.exists(payload_js)) {
-            file.copy(payload_js, file.path(target, "dashboard_payloads.js"), overwrite = TRUE)
+            target_payload_js <- file.path(target, "dashboard_payloads.js")
+            file.copy(payload_js, target_payload_js, overwrite = TRUE)
+            patch_app_html_payload_cache_bust(
+                target,
+                extract_payload_cache_token(target_payload_js)
+            )
         }
     }
     invisible(targets)
