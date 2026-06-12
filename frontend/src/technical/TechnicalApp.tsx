@@ -8,6 +8,7 @@ import { BacktestPanel } from "../components/technical/BacktestPanel";
 import { EnsembleDiagnosticsPanel } from "../components/technical/EnsembleDiagnosticsPanel";
 import { ModelOverviewPanel } from "../components/technical/ModelOverviewPanel";
 import { ChampionshipTotalsPanel } from "../components/technical/ChampionshipTotalsPanel";
+import { LivePerformancePanel } from "../components/technical/LivePerformancePanel";
 
 export function TechnicalApp({ payload }: { payload: TechnicalPayload }) {
   return (
@@ -62,7 +63,11 @@ export function TechnicalApp({ payload }: { payload: TechnicalPayload }) {
       <CompareWorkspace
         rankedDecisions={payload.ranked_decisions}
         candidateDifferences={payload.candidate_differences}
+        upsetOpportunities={payload.upset_opportunities}
+        candidateProfiles={payload.candidate_profiles}
       />
+
+      <LivePerformancePanel livePerformance={payload.live_performance} />
 
       <ChampionshipTotalsPanel totals={payload.championship_totals} />
 

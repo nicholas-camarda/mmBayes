@@ -188,8 +188,88 @@ export interface TechnicalDecisionRow {
   tier?: string;
   recommended_pick?: string;
   alternate_pick?: string;
+  candidate_diff_flag?: boolean;
+  alternate_note?: string;
+  usage_note?: string;
   inspection_level?: string;
   rationale?: string;
+}
+
+export interface UpsetOpportunityRow {
+  matchup?: string;
+  round?: string;
+  region?: string;
+  tier?: string;
+  underdog?: string;
+  favorite?: string;
+  underdog_prob?: number;
+  underdog_ci_lower?: number;
+  underdog_ci_upper?: number;
+  leverage?: number;
+  candidate_1_pick?: string;
+  candidate_2_pick?: string;
+  candidate_diff_flag?: boolean;
+  pivot_note?: string;
+}
+
+export interface CandidateFragilePickRow {
+  round?: string;
+  matchup_label?: string;
+  winner?: string;
+  chosen_prob?: number;
+  chosen_ci_lower?: number;
+  chosen_ci_upper?: number;
+  confidence_tier?: string;
+  decision_score?: number;
+}
+
+export interface CandidateProfile {
+  candidate_id: number;
+  type?: string;
+  champion?: string;
+  final_four?: string;
+  bracket_log_prob?: number | null;
+  mean_game_prob?: number | null;
+  diff_summary?: string;
+  fragile_picks?: CandidateFragilePickRow[];
+}
+
+export interface LivePerformancePayload {
+  model_label?: string;
+  status?: string;
+  monitoring_note?: string;
+  interpretive_status?: string;
+  summary?: {
+    games_played?: number;
+    log_loss?: number;
+    brier?: number;
+    accuracy?: number;
+  };
+  main_bracket_summary?: {
+    games_played?: number;
+    log_loss?: number;
+    brier?: number;
+    accuracy?: number;
+  };
+  round_summary?: Array<{
+    round?: string;
+    games?: number;
+    accuracy?: number;
+    mean_predicted_prob?: number;
+  }>;
+  recent_games?: Array<{
+    round?: string;
+    teamA?: string;
+    teamB?: string;
+    actual_winner?: string;
+    model_pick?: string;
+    model_pick_note?: string;
+    predicted_prob?: number;
+  }>;
+  recent_games_title?: string;
+  recent_games_note?: string;
+  games_played?: number;
+  main_bracket_games_played?: number;
 }
 
 export interface TechnicalCandidateDifferenceRow {
@@ -230,7 +310,7 @@ export interface RoundPerformanceRow {
 
 export interface BacktestPayload {
   source_label?: string;
-  summary?: BacktestSummaryRow;
+  summary?: BacktestSummaryRow | BacktestSummaryRow[];
   calibration?: CalibrationRow[];
   round_performance?: RoundPerformanceRow[];
   strengths?: string[];
@@ -297,6 +377,9 @@ export interface TechnicalPayload extends PayloadBase {
   key_warnings?: string[];
   ranked_decisions?: TechnicalDecisionRow[];
   candidate_differences?: TechnicalCandidateDifferenceRow[];
+  upset_opportunities?: UpsetOpportunityRow[];
+  candidate_profiles?: CandidateProfile[];
+  live_performance?: LivePerformancePayload;
   backtest?: BacktestPayload;
   model_overview?: ModelOverviewPayload;
   ensemble_diagnostics?: EnsembleDiagnosticsPayload;

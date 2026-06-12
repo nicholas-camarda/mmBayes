@@ -77,7 +77,8 @@ test.describe("static frontend dashboards", () => {
     await expect(page.getByTestId("compare-workspace")).toBeVisible();
     await expect(page.getByTestId("backtest-panel")).toBeVisible();
     await expect(page.getByTestId("calibration-chart")).toBeVisible();
-    await expect(page.getByTestId("ranked-decisions-table")).toBeVisible();
+    await expect(page.getByTestId("ranked-decisions-board")).toBeVisible();
+    await expect(page.getByTestId("live-performance-panel")).toBeVisible();
   });
 
   test("bracket entry toggles and review markers work without console errors", async ({ page }) => {
@@ -217,7 +218,14 @@ test.describe("static frontend dashboards", () => {
     expect(navBox.height).toBeLessThan(80);
     const navLabels = await page.locator(".jump-nav a").allTextContents();
     expect(navLabels).toEqual(
-      expect.arrayContaining(["Enter bracket", "Review picks", "Tree", "Evidence", "Reference"]),
+      expect.arrayContaining([
+        "How to read",
+        "Enter bracket",
+        "Review picks",
+        "Tree",
+        "Evidence",
+        "Reference",
+      ]),
     );
 
     await expect(page.locator("h1")).toContainText("Bracket entry workspace");

@@ -1,28 +1,70 @@
-import type { MatchupContextRow } from "../../types/payload";
+import type { MatchupContextRow, WatchlistRow } from "../../types/payload";
+import { MATCHUP_FEATURE_SPECS, formatFeatureValue, sameConferenceLabel } from "../../lib/matchupFeatures";
+import { AdvantageChart } from "./AdvantageChart";
+import { TeamCard } from "./TeamCard";
 
 interface EvidencePanelProps {
   rows: MatchupContextRow[];
+  watchlist?: WatchlistRow[];
   openEvidenceId: string | null;
   onClose: () => void;
 }
 
 function findEvidenceRow(
   rows: MatchupContextRow[],
+  watchlist: WatchlistRow[] | undefined,
   evidenceId: string | null,
-): MatchupContextRow | undefined {
+): Record<string, unknown> | undefined {
   if (!evidenceId) return undefined;
-  return rows.find(
+
+  const slotKey = evidenceId.replace(/^evidence-/, "");
+  const watchlistRow = watchlist?.find(
+    (row) =>
+      row.evidence_id === evidenceId ||
+      row.slot_key === slotKey ||
+      `evidence-${row.slot_key}` === evidenceId,
+  );
+  const contextRow = rows.find(
     (row) =>
       row.evidence_id === evidenceId ||
       `evidence-${row.slot_key}` === evidenceId ||
-      row.slot_key === evidenceId.replace(/^evidence-/, ""),
+      row.slot_key === slotKey,
   );
+
+  if (watchlistRow && contextRow) {
+    return { ...contextRow, ...watchlistRow };
+  }
+  return (watchlistRow ?? contextRow) as Record<string, unknown> | undefined;
 }
 
-export function EvidencePanel({ rows, openEvidenceId, onClose }: EvidencePanelProps) {
-  const row = findEvidenceRow(rows, openEvidenceId);
+function teamName(row: Record<string, unknown>, side: "A" | "B"): string {
+  const direct = row[side === "A" ? "teamA" : "teamB"];
+  if (typeof direct === "string" && direct) return direct;
+  const featureName = row[side === "A" ? "teamA_Team" : "teamB_Team"];
+  return typeof featureName === "string" && featureName ? featureName : `Team ${side}`;
+}
+
+function teamStats(row: Record<string, unknown>, side: "A" | "B") {
+  return MATCHUP_FEATURE_SPECS.slice(0, 6).map((spec) => ({
+    label: spec.label,
+    value: formatFeatureValue(
+      row[side === "A" ? spec.teamAColumn : spec.teamBColumn],
+      spec.digits,
+    ),
+  }));
+}
+
+export function EvidencePanel({
+  rows,
+  watchlist,
+  openEvidenceId,
+  onClose,
+}: EvidencePanelProps) {
+  const row = findEvidenceRow(rows, watchlist, openEvidenceId);
+  const teamAName = row ? teamName(row, "A") : "Team A";
+  const teamBName = row ? teamName(row, "B") : "Team B";
   const matchupLabel = row
-    ? String(row.matchup_label ?? `${row.teamA} vs ${row.teamB}`)
+    ? String(row.matchup_label ?? `${teamAName} vs ${teamBName}`)
     : "Select a matchup";
 
   return (
@@ -87,7 +129,34 @@ export function EvidencePanel({ rows, openEvidenceId, onClose }: EvidencePanelPr
               {row.why_this_matters ? (
                 <p className="evidence-callout">{String(row.why_this_matters)}</p>
               ) : null}
+              {row.downstream_implication_text ? (
+                <p className="evidence-callout evidence-callout--implication">
+                  {String(row.downstream_implication_text)}
+                </p>
+              ) : null}
               {row.rationale_short ? <p>{String(row.rationale_short)}</p> : null}
+
+              <div className="matchup-context-flags" aria-label="Model context flags">
+                <span className="context-flag context-flag--conference">
+                  <span>Conference</span>
+                  <strong>{sameConferenceLabel(row.same_conf)}</strong>
+                </span>
+              </div>
+
+              <div className="evidence-team-grid">
+                <TeamCard
+                  teamName={teamAName}
+                  seed={row.teamA_Seed as number | string | undefined}
+                  stats={teamStats(row, "A")}
+                />
+                <TeamCard
+                  teamName={teamBName}
+                  seed={row.teamB_Seed as number | string | undefined}
+                  stats={teamStats(row, "B")}
+                />
+              </div>
+
+              <AdvantageChart row={row} teamAName={teamAName} teamBName={teamBName} />
             </div>
           </details>
         )}
