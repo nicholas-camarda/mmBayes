@@ -1,6 +1,7 @@
 @import "./styles/tokens.css";
 @import "./styles/layout.css";
 @import "./styles/components/prob-track.css";
+@import "./styles/components/comparison-board.css";
 
 body {
   margin: 0;
@@ -1286,66 +1287,6 @@ a:hover {
   color: var(--muted);
 }
 
-.comparison-board {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  border: 1px solid #334155;
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.72);
-  padding: 12px;
-  overflow: visible;
-}
-
-.comparison-board__header {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.25fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(320px, 1.4fr) minmax(260px, 1.25fr);
-  gap: 16px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #111827;
-  border: 1px solid #334155;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.comparison-board__header--four {
-  grid-template-columns: minmax(220px, 1.2fr) minmax(320px, 1.35fr) minmax(220px, 1fr) minmax(260px, 1.1fr);
-}
-
-.board-row {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.25fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(320px, 1.4fr) minmax(260px, 1.25fr);
-  gap: 16px;
-  padding: 14px;
-  border: 1px solid #40536a;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.76), rgba(17, 24, 39, 0.94));
-}
-
-.board-row--upset,
-.board-row--divergence {
-  grid-template-columns: minmax(220px, 1.2fr) minmax(320px, 1.35fr) minmax(220px, 1fr) minmax(260px, 1.1fr);
-}
-
-.board-value {
-  font-weight: 700;
-}
-
-.board-note {
-  margin-top: 6px;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.45;
-}
-
-.comparison-board__table-fallback {
-  display: none;
-}
-
 .fragility-chart {
   display: grid;
   gap: 12px;
@@ -1445,30 +1386,3 @@ a:hover {
   margin-bottom: 16px;
 }
 
-@media (max-width: 1240px) {
-  .comparison-board__header {
-    display: none;
-  }
-
-  .board-row,
-  .board-row--ranked,
-  .board-row--divergence,
-  .board-row--upset {
-    grid-template-columns: 1fr;
-  }
-
-  .board-cell::before {
-    content: attr(data-label);
-    display: block;
-    margin-bottom: 6px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .comparison-board__table-fallback {
-    display: block;
-  }
-}
