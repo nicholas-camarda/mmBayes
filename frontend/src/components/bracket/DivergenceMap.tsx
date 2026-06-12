@@ -11,10 +11,11 @@ const ROUND_ORDER = [
 
 interface DivergenceMapProps {
   rows: DivergenceMapRow[];
-  onOpenEvidence: (evidenceId: string) => void;
+  activeEvidenceId?: string | null;
+  onOpenEvidence: (evidenceId: string, row: DivergenceMapRow) => void;
 }
 
-export function DivergenceMap({ rows, onOpenEvidence }: DivergenceMapProps) {
+export function DivergenceMap({ rows, activeEvidenceId, onOpenEvidence }: DivergenceMapProps) {
   if (rows.length === 0) {
     return <p className="missing-section">Divergence map is not available in this payload.</p>;
   }
@@ -22,7 +23,7 @@ export function DivergenceMap({ rows, onOpenEvidence }: DivergenceMapProps) {
   const rounds = ROUND_ORDER.filter((round) => rows.some((row) => row.round === round));
 
   return (
-    <section className="divergence-map-panel" aria-label="Divergence map">
+    <div className="divergence-map-panel" aria-label="Divergence map">
       <div className="divergence-map-panel__head">
         <h3>Divergence Map</h3>
         <p className="section-note">
@@ -50,6 +51,8 @@ export function DivergenceMap({ rows, onOpenEvidence }: DivergenceMapProps) {
                 {roundRows.map((row) => {
                   const hasDivergence = (row.total_count ?? 0) > 0;
                   const targetId = row.target_evidence_id ?? "";
+                  const targetKind =
+                    hasDivergence && row.all_in_watchlist && targetId ? "evidence" : "reference";
                   const className = [
                     "divergence-cell",
                     hasDivergence ? "is-active" : "divergence-cell--empty",
@@ -74,8 +77,10 @@ export function DivergenceMap({ rows, onOpenEvidence }: DivergenceMapProps) {
                       className={className}
                       data-divergence-round={row.round}
                       data-divergence-region={row.region}
+                      data-divergence-target-kind={targetKind}
                       data-open-evidence={targetId}
-                      onClick={() => onOpenEvidence(targetId)}
+                      aria-pressed={activeEvidenceId === targetId ? "true" : "false"}
+                      onClick={() => onOpenEvidence(targetId, row)}
                     >
                       <div className="divergence-cell__region">{row.region}</div>
                       <div className="divergence-cell__count">{row.total_count}</div>
@@ -91,6 +96,11 @@ export function DivergenceMap({ rows, onOpenEvidence }: DivergenceMapProps) {
                           </span>
                         ) : null}
                       </div>
+                      <div className="divergence-cell__note">
+                        {targetKind === "evidence"
+                          ? "Jump to surfaced evidence"
+                          : "Open full exact diff"}
+                      </div>
                     </button>
                   );
                 })}
@@ -99,6 +109,6 @@ export function DivergenceMap({ rows, onOpenEvidence }: DivergenceMapProps) {
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }

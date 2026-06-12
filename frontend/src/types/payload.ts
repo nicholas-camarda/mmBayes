@@ -25,7 +25,12 @@ export interface DecisionSheetRow {
   slot_key: string;
   region?: string;
   round?: string;
+  matchup_number?: number;
+  teamA_seed?: number;
+  teamB_seed?: number;
+  inspection_level?: string;
   matchup_label?: string;
+  candidate_2_matchup?: string;
   posterior_favorite?: string;
   win_prob_favorite?: number;
   confidence_tier?: string;
@@ -115,7 +120,29 @@ export interface WatchlistRow extends Record<string, unknown> {
   matchup_label?: string;
   round?: string;
   region?: string;
+  teamA?: string;
+  teamB?: string;
+  teamA_seed?: number;
+  teamB_seed?: number;
   candidate_diff_flag?: boolean;
+  why_this_matters?: string;
+  candidate_usage?: string;
+  win_prob_favorite?: number;
+  ci_lower?: number;
+  ci_upper?: number;
+  confidence_tier?: string;
+  late_round_only?: boolean;
+}
+
+export interface CandidateSummaryRow {
+  candidate_id: number;
+  champion?: string;
+  final_four?: string;
+  championship_matchup?: string;
+  recommended_tiebreaker_points?: number;
+  predicted_total_median?: number;
+  predicted_total_80_lower?: number;
+  predicted_total_80_upper?: number;
 }
 
 export interface Candidate {
@@ -142,7 +169,7 @@ export interface BracketPayload extends PayloadBase {
   candidates: Candidate[];
   decision_sheet: DecisionSheetRow[];
   matchup_context?: MatchupContextRow[];
-  candidate_summaries?: Record<string, unknown>[];
+  candidate_summaries?: CandidateSummaryRow[];
   play_in_resolution?: Record<string, unknown>[];
   bracket_tree?: BracketTreePayload;
   divergence_map?: DivergenceMapRow[];

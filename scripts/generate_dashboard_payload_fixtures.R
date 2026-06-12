@@ -40,6 +40,7 @@ candidates <- generate_bracket_candidates(
     n_simulations = 8L,
     random_seed = 123
 )
+candidates <- prepare_bracket_tree_fixture_candidates(candidates)
 decision_sheet <- build_decision_sheet(candidates)
 play_in_resolution <- summarize_play_in_resolution(
     current_teams = loaded$current_teams,

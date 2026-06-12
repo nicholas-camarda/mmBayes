@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { BracketApp } from "./BracketApp";
 import bracketFixture from "../../../tests/fixtures/dashboard_payload_bracket.json";
 import type { BracketPayload } from "../types/payload";
@@ -7,13 +7,27 @@ import type { BracketPayload } from "../types/payload";
 const fixture = bracketFixture as unknown as BracketPayload;
 
 describe("BracketApp", () => {
-  it("renders candidate summaries and the decision sheet from a full payload", () => {
+  it("renders entry workspace, review queue, and decision sheet from a full payload", () => {
     render(<BracketApp payload={fixture} />);
-    expect(screen.getByRole("heading", { name: /bracket dashboard/i })).toBeInTheDocument();
-    expect(screen.getAllByTestId("candidate-card").length).toBe(fixture.candidates.length);
+    expect(screen.getByRole("heading", { name: /bracket entry workspace/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /review queue/i })).toBeInTheDocument();
     expect(screen.getByTestId("decision-sheet")).toBeInTheDocument();
-    expect(screen.getAllByTestId("candidate-card")[0]).toHaveTextContent(
-      new RegExp(fixture.candidates[0].champion),
+    expect(screen.getByLabelText("Candidate entry selector")).toBeInTheDocument();
+    expect(screen.getByLabelText("Review queue board")).toBeInTheDocument();
+    expect(screen.getByLabelText("Dashboard sections")).toBeInTheDocument();
+  });
+
+  it("toggles candidate entry panels", () => {
+    render(<BracketApp payload={fixture} />);
+    const entryControls = screen.getByLabelText("Candidate entry selector");
+    expect(entryControls.querySelector(".entry-toggle.is-active")).toHaveAttribute(
+      "data-entry-target",
+      "candidate-1",
+    );
+    fireEvent.click(entryControls.querySelector(".entry-toggle[data-entry-target='candidate-2']")!);
+    expect(entryControls.querySelector(".entry-toggle.is-active")).toHaveAttribute(
+      "data-entry-target",
+      "candidate-2",
     );
   });
 
@@ -45,5 +59,15 @@ describe("BracketApp", () => {
   it("shows build metadata when present", () => {
     render(<BracketApp payload={fixture} />);
     expect(screen.getByTestId("build-metadata")).toHaveTextContent(/fixture/);
+  });
+
+  it("opens evidence from a watchlist card", () => {
+    if (!fixture.watchlist?.length || !fixture.matchup_context?.length) {
+      return;
+    }
+    render(<BracketApp payload={fixture} />);
+    const jumpButton = screen.getAllByRole("button", { name: "Open evidence" })[0];
+    fireEvent.click(jumpButton);
+    expect(screen.getByTestId("evidence-card")).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FocusEvent, type MouseEvent } from "react";
 import type { BracketTreeEntry, BracketTreeNode } from "../../types/payload";
 import { tierColor, tierTextColor, truncateLabel } from "../../lib/tierColors";
 
@@ -17,12 +17,39 @@ function seedLabel(seed: number | undefined, team: string): string {
   return `${prefix}${truncateLabel(team)}`;
 }
 
+function tooltipLines(node: BracketTreeNode, candidateLabel: string): string[] {
+  const matchup = `${node.teamA} vs ${node.teamB}`;
+  const pick = node.candidate_pick ?? node.winner ?? "n/a";
+  const favorite = node.posterior_favorite ?? "n/a";
+  const prob =
+    typeof node.win_prob_favorite === "number"
+      ? `${(100 * node.win_prob_favorite).toFixed(0)}%`
+      : "n/a";
+  return [
+    matchup,
+    `${candidateLabel}: ${pick}`,
+    `Favorite: ${favorite} (${prob})`,
+    node.confidence_tier ? `Tier: ${node.confidence_tier}` : "",
+    node.rationale_short ? String(node.rationale_short) : "",
+  ].filter(Boolean);
+}
+
 function TreeNode({
   node,
+  candidateLabel,
   onOpenEvidence,
+  onHover,
+  onLeave,
 }: {
   node: BracketTreeNode;
+  candidateLabel: string;
   onOpenEvidence: (evidenceId: string) => void;
+  onHover: (
+    node: BracketTreeNode,
+    candidateLabel: string,
+    event: MouseEvent<SVGGElement> | FocusEvent<SVGGElement>,
+  ) => void;
+  onLeave: () => void;
 }) {
   const x = Math.round(node.node_x);
   const y = Math.round(node.node_y);
@@ -35,13 +62,20 @@ function TreeNode({
   const rx = x - NODE_W / 2;
   const ry = y - NODE_H / 2;
   const evidenceId = node.evidence_id ?? `evidence-${node.slot_key}`;
+  const tipMatchup = `${node.teamA} vs ${node.teamB}`;
 
   return (
     <g
       className={`btree-node${routeDiff ? " btree-node--route-diff" : ""}`}
       data-slot={node.slot_key}
       data-open-evidence={evidenceId}
+      data-tip-matchup={tipMatchup}
+      data-tip-candidate={candidateLabel}
       onClick={() => onOpenEvidence(evidenceId)}
+      onMouseEnter={(event) => onHover(node, candidateLabel, event)}
+      onMouseLeave={onLeave}
+      onFocus={(event) => onHover(node, candidateLabel, event)}
+      onBlur={onLeave}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
@@ -50,7 +84,7 @@ function TreeNode({
       }}
       role="button"
       tabIndex={0}
-      aria-label={`${node.teamA} vs ${node.teamB}`}
+      aria-label={tipMatchup}
     >
       <rect
         x={rx}
@@ -79,6 +113,8 @@ function TreeNode({
 
 export function BracketTree({ trees, onOpenEvidence }: BracketTreeProps) {
   const [activeCandidateId, setActiveCandidateId] = useState(trees[0]?.candidate_id ?? 1);
+  const [tooltip, setTooltip] = useState<{ lines: string[]; x: number; y: number } | null>(null);
+
   const activeTree = useMemo(
     () => trees.find((tree) => tree.candidate_id === activeCandidateId) ?? trees[0],
     [trees, activeCandidateId],
@@ -96,39 +132,79 @@ export function BracketTree({ trees, onOpenEvidence }: BracketTreeProps) {
             key={tree.candidate_id}
             type="button"
             className={`btree-toggle${tree.candidate_id === activeCandidateId ? " is-active" : ""}`}
-            data-entry-panel={`candidate-${tree.candidate_id}`}
+            data-btree-target={`candidate-${tree.candidate_id}`}
             onClick={() => setActiveCandidateId(tree.candidate_id)}
           >
             {tree.candidate_label}
           </button>
         ))}
       </div>
-      <div className="btree-scroll">
-        <svg
-          viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-          className="btree-svg"
-          data-btree-panel={`candidate-${activeTree.candidate_id}`}
-        >
-          {activeTree.edges.map((edge) => {
-            const sx = edge.x1 + NODE_W / 2;
-            const tx = edge.x2 - NODE_W / 2;
-            const mid = (sx + tx) / 2;
-            const routeDiff = Boolean(edge.route_diff);
-            return (
-              <path
-                key={`${edge.from_slot}-${edge.to_slot}`}
-                d={`M${sx},${edge.y1} L${mid},${edge.y1} L${mid},${edge.y2} L${tx},${edge.y2}`}
-                fill="none"
-                stroke={routeDiff ? "#f59e0b" : "#64748b"}
-                strokeWidth={routeDiff ? 2.6 : 1.4}
-                className={routeDiff ? "btree-edge btree-edge--route-diff" : "btree-edge"}
-              />
-            );
-          })}
-          {activeTree.nodes.map((node) => (
-            <TreeNode key={node.slot_key} node={node} onOpenEvidence={onOpenEvidence} />
-          ))}
-        </svg>
+      {trees.map((tree) => {
+        const isActive = tree.candidate_id === activeCandidateId;
+        return (
+          <div
+            key={tree.candidate_id}
+            className={`btree-panel${isActive ? " is-active" : ""}`}
+            data-btree-panel={`candidate-${tree.candidate_id}`}
+            hidden={!isActive}
+          >
+            <div className="bracket-tree-container">
+              <svg
+                id={`btree-svg-${tree.candidate_id}`}
+                viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
+                className="btree-svg"
+              >
+                {tree.edges.map((edge) => {
+                  const sx = edge.x1 + NODE_W / 2;
+                  const tx = edge.x2 - NODE_W / 2;
+                  const mid = (sx + tx) / 2;
+                  const routeDiff = Boolean(edge.route_diff);
+                  return (
+                    <path
+                      key={`${edge.from_slot}-${edge.to_slot}`}
+                      d={`M${sx},${edge.y1} L${mid},${edge.y1} L${mid},${edge.y2} L${tx},${edge.y2}`}
+                      fill="none"
+                      stroke={routeDiff ? "#f59e0b" : "#64748b"}
+                      strokeWidth={routeDiff ? 2.6 : 1.4}
+                      className={routeDiff ? "btree-edge btree-edge--route-diff" : "btree-edge"}
+                    />
+                  );
+                })}
+                {tree.nodes.map((node) => (
+                  <TreeNode
+                    key={node.slot_key}
+                    node={node}
+                    candidateLabel={tree.candidate_label}
+                    onOpenEvidence={onOpenEvidence}
+                    onHover={(hoveredNode, candidateLabel, event) => {
+                      if (!("clientX" in event)) return;
+                      setTooltip({
+                        lines: tooltipLines(hoveredNode, candidateLabel),
+                        x: event.clientX + 12,
+                        y: event.clientY + 12,
+                      });
+                    }}
+                    onLeave={() => setTooltip(null)}
+                  />
+                ))}
+              </svg>
+            </div>
+          </div>
+        );
+      })}
+      <div
+        id="btree-tooltip"
+        className={tooltip ? "is-visible" : ""}
+        style={
+          tooltip
+            ? {
+                left: tooltip.x,
+                top: tooltip.y,
+              }
+            : undefined
+        }
+      >
+        {tooltip?.lines.map((line) => <div key={line}>{line}</div>)}
       </div>
     </section>
   );
