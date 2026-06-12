@@ -6,6 +6,9 @@ module.exports = {
   fullyParallel: false,
   use: {
     headless: true,
+    launchOptions: {
+      args: ["--allow-file-access-from-files"],
+    },
   },
 };
 

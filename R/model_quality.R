@@ -304,8 +304,20 @@ summarize_model_metric_comparison <- function(comparison_table, current_label, a
 #' @return A tibble with one row per round and key metrics.
 #' @keywords internal
 summarize_prediction_round_performance <- function(predictions) {
-    if (!inherits(predictions, "data.frame") || nrow(predictions) == 0 || !all(c("round", "predicted_prob", "actual_outcome") %in% names(predictions))) {
+    if (!inherits(predictions, "data.frame") || nrow(predictions) == 0 || !all(c("round", "actual_outcome") %in% names(predictions))) {
         return(tibble::tibble())
+    }
+
+    if (!"predicted_prob" %in% names(predictions)) {
+        if ("learned_ensemble" %in% names(predictions)) {
+            predictions <- predictions %>%
+                dplyr::mutate(predicted_prob = learned_ensemble)
+        } else if ("stan_glm" %in% names(predictions)) {
+            predictions <- predictions %>%
+                dplyr::mutate(predicted_prob = stan_glm)
+        } else {
+            return(tibble::tibble())
+        }
     }
 
     predictions %>%
@@ -493,6 +505,12 @@ summarize_backtest_diagnostics <- function(backtest) {
 
     predictions <- backtest$predictions %||% tibble::tibble()
     round_summary <- summarize_prediction_round_performance(predictions)
+    if (nrow(round_summary) == 0) {
+        stored_round_summary <- backtest$round_summary %||% tibble::tibble()
+        if (nrow(stored_round_summary) > 0) {
+            round_summary <- stored_round_summary
+        }
+    }
 
     calibration <- backtest$calibration %||% tibble::tibble()
     calibration <- if (nrow(calibration) > 0 && all(c("mean_predicted", "empirical_rate") %in% names(calibration))) {

@@ -24,12 +24,18 @@ setwd(project_root)
 pkgload::load_all(project_root, export_all = TRUE, helpers = FALSE, quiet = TRUE)
 
 dashboard_files <- dashboard_html_manifest()
+dashboard_app_dir <- "app"
 runtime_output_root <- path.expand(Sys.getenv(
     "MMBAYES_PAGES_SOURCE",
     unset = default_runtime_output_root()
 ))
 
-if (!dir.exists(runtime_output_root) || !all(file.exists(file.path(runtime_output_root, dashboard_files)))) {
+required_paths <- c(
+    file.path(runtime_output_root, dashboard_files),
+    file.path(runtime_output_root, dashboard_app_dir, "index.html"),
+    file.path(runtime_output_root, dashboard_app_dir, "technical.html")
+)
+if (!dir.exists(runtime_output_root) || !all(file.exists(required_paths))) {
     stop_with_message(
         sprintf(
             paste(
@@ -51,6 +57,18 @@ synced_paths <- sync_dashboard_html_files(
 )
 for (filename in dashboard_files) {
     cat(sprintf("Synced %s -> %s\n", file.path(runtime_output_root, filename), synced_paths[[filename]]))
+}
+synced_app <- sync_dashboard_html_files(
+    source_dir = file.path(runtime_output_root, dashboard_app_dir),
+    destination_dir = file.path(project_root, "output", dashboard_app_dir),
+    dashboard_files = list.files(file.path(runtime_output_root, dashboard_app_dir), full.names = FALSE)
+)
+for (filename in names(synced_app)) {
+    cat(sprintf(
+        "Synced %s -> %s\n",
+        file.path(runtime_output_root, dashboard_app_dir, filename),
+        synced_app[[filename]]
+    ))
 }
 
 cat("\nGitHub Pages dashboard files are now synced into the repo.\n")

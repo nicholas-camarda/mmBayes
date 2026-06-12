@@ -25,7 +25,14 @@ test_that("publish_release_bundle copies only approved deliverables", {
     candidate_files <- c("bracket_candidate_1.csv", "bracket_candidate_2.csv", "bracket_candidate_3.csv")
 
     for (filename in release_deliverable_manifest()) {
-        writeLines(sprintf("fixture:%s", filename), file.path(output_dir, filename))
+        target_path <- file.path(output_dir, filename)
+        if (identical(filename, "app")) {
+            dir.create(target_path, recursive = TRUE, showWarnings = FALSE)
+            writeLines("<html></html>", file.path(target_path, "index.html"))
+            writeLines("<html></html>", file.path(target_path, "technical.html"))
+        } else {
+            writeLines(sprintf("fixture:%s", filename), target_path)
+        }
     }
     for (filename in candidate_files) {
         writeLines(sprintf("fixture:%s", filename), file.path(output_dir, filename))
@@ -51,7 +58,12 @@ test_that("publish_release_bundle copies only approved deliverables", {
     expect_true(file.exists(result$manifest_path))
     expect_equal(
         sort(list.files(result$deliverables_dir, recursive = TRUE)),
-        sort(c(release_deliverable_manifest(), candidate_files))
+        sort(c(
+            "app/index.html",
+            "app/technical.html",
+            setdiff(release_deliverable_manifest(), "app"),
+            candidate_files
+        ))
     )
     expect_false(file.exists(file.path(result$deliverables_dir, "tournament_sim.rds")))
     expect_false(file.exists(file.path(result$deliverables_dir, "simulation_results.rds")))
@@ -73,7 +85,14 @@ test_that("publish_release_bundle defaults to the runtime output contract and fa
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
     for (filename in release_deliverable_manifest()) {
-        writeLines(sprintf("fixture:%s", filename), file.path(output_dir, filename))
+        target_path <- file.path(output_dir, filename)
+        if (identical(filename, "app")) {
+            dir.create(target_path, recursive = TRUE, showWarnings = FALSE)
+            writeLines("<html></html>", file.path(target_path, "index.html"))
+            writeLines("<html></html>", file.path(target_path, "technical.html"))
+        } else {
+            writeLines(sprintf("fixture:%s", filename), target_path)
+        }
     }
 
     config <- default_project_config()

@@ -10,6 +10,7 @@
 #' @keywords internal
 release_deliverable_manifest <- function(output_dir = NULL) {
     manifest <- c(
+        "app",
         "bracket_dashboard.html",
         "technical_dashboard.html",
         "bracket_decision_sheet.csv",

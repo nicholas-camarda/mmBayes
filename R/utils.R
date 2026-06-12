@@ -62,6 +62,51 @@ sync_dashboard_html_files <- function(source_dir,
     synced_paths
 }
 
+#' Sync the built static dashboard frontend into output directories
+#'
+#' Copies frontend/dist plus the runtime dashboard_payloads.js shim into
+#' an app/ directory under the runtime output dir and, optionally, the
+#' tracked repo output dir. Soft-skips when the frontend has not been
+#' built so R-only workflows never require Node.
+#'
+#' @param project_root The repository root containing frontend/.
+#' @param runtime_output_dir Runtime output directory holding payload artifacts.
+#' @param repo_output_dir Optional tracked repo output directory.
+#'
+#' @return Invisibly, the synced app directories, or NULL when skipped.
+#' @keywords internal
+sync_frontend_app <- function(project_root, runtime_output_dir, repo_output_dir = NULL) {
+    dist_dir <- file.path(project_root, "frontend", "dist")
+    if (!dir.exists(dist_dir)) {
+        message(
+            "Frontend app build not found at frontend/dist; skipping app sync. ",
+            "Run `npm install && npm run build` inside frontend/ to enable the ",
+            "TypeScript dashboards. Legacy R-rendered dashboards are unaffected."
+        )
+        return(invisible(NULL))
+    }
+
+    payload_js <- file.path(runtime_output_dir, "dashboard_payloads.js")
+    targets <- c(
+        file.path(runtime_output_dir, "app"),
+        if (!is.null(repo_output_dir)) file.path(repo_output_dir, "app")
+    )
+    for (target in targets) {
+        unlink(target, recursive = TRUE)
+        dir.create(target, recursive = TRUE, showWarnings = FALSE)
+        file.copy(
+            list.files(dist_dir, full.names = TRUE),
+            target,
+            recursive = TRUE,
+            overwrite = TRUE
+        )
+        if (file.exists(payload_js)) {
+            file.copy(payload_js, file.path(target, "dashboard_payloads.js"), overwrite = TRUE)
+        }
+    }
+    invisible(targets)
+}
+
 #' Provide a default for `NULL`
 #'
 #' @param x A value to test.
@@ -2989,10 +3034,37 @@ write_dashboard_outputs <- function(bracket_year,
         technical_dashboard_path
     )
 
+    payload_paths <- write_dashboard_payloads(
+        bracket_payload = build_bracket_dashboard_payload(
+            bracket_year = bracket_year,
+            candidates = candidates,
+            decision_sheet = decision_sheet,
+            dashboard_context = dashboard_context,
+            total_points_predictions = total_points_predictions,
+            play_in_resolution = play_in_resolution
+        ),
+        technical_payload = build_technical_dashboard_payload(
+            bracket_year = bracket_year,
+            decision_sheet = decision_sheet,
+            candidates = candidates,
+            model_quality_context = model_quality_context,
+            build_metadata = dashboard_context$build_metadata %||% list(),
+            model_overview = model_overview,
+            total_points_predictions = total_points_predictions,
+            play_in_resolution = play_in_resolution,
+            backtest = backtest,
+            live_performance = live_performance
+        ),
+        output_dir = output_dir
+    )
+
     list(
         dashboard = dashboard_path,
         technical_dashboard = technical_dashboard_path,
         model_comparison_dashboard = NULL,
+        bracket_payload = payload_paths$bracket,
+        technical_payload = payload_paths$technical,
+        payload_js = payload_paths$js,
         model_quality_source_label = model_quality_context$source_label %||% NULL,
         model_quality_source_path = model_quality_context$source_path %||% NULL,
         model_quality_used_cached_quality = isTRUE(model_quality_context$used_cached_quality %||% model_quality_context$used_fallback %||% FALSE),

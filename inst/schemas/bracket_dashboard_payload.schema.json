@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mmBayes/bracket_dashboard_payload",
+  "title": "mmBayes bracket dashboard payload",
+  "type": "object",
+  "required": ["dashboard_schema_version", "dashboard", "bracket_year", "generated_at", "build_metadata", "candidates", "decision_sheet"],
+  "properties": {
+    "dashboard_schema_version": {"type": "string", "const": "1.1.0"},
+    "dashboard": {"type": "string", "const": "bracket"},
+    "bracket_year": {"type": "integer"},
+    "generated_at": {"type": "string"},
+    "build_metadata": {"type": "object"},
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "type", "champion"],
+        "properties": {
+          "candidate_id": {"type": "integer"},
+          "type": {"type": "string"},
+          "champion": {"type": "string"},
+          "final_four": {"type": "array"},
+          "bracket_log_prob": {"type": ["number", "null"]},
+          "mean_game_prob": {"type": ["number", "null"]},
+          "title_path_mean_prob": {"type": ["number", "null"]},
+          "path_support_label": {"type": ["string", "null"]},
+          "matchups": {"type": "array"}
+        }
+      }
+    },
+    "decision_sheet": {"type": "array"},
+    "matchup_context": {"type": "array"},
+    "candidate_summaries": {"type": "array"},
+    "play_in_resolution": {"type": "array"},
+    "bracket_tree": {"type": "object"},
+    "divergence_map": {"type": "array"},
+    "watchlist": {"type": "array"}
+  }
+}
