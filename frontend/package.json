@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && npm run build:index && npm run build:technical && node scripts/patch-dist-html.mjs",
+    "build:index": "VITE_BUILD_PAGE=index vite build --emptyOutDir",
+    "build:technical": "VITE_BUILD_PAGE=technical vite build --emptyOutDir false",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src && prettier --check src",
     "format": "prettier --write src",
