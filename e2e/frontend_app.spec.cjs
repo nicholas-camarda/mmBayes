@@ -261,6 +261,7 @@ test.describe("static frontend dashboards", () => {
     expect(evidenceId).toBeTruthy();
     await reviewJump.click();
     await expect(page.locator(`details[id="${evidenceId}"] .evidence-panel__lede`)).toBeVisible();
+    await expect(page.getByTestId("advantage-chart")).toBeVisible();
 
     await page.locator(".jump-nav a[href='#bracket-tree']").click();
     const visibleTreeContainer = page.locator(".bracket-tree-container").first();

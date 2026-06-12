@@ -3,6 +3,7 @@
 @import "./styles/components/prob-track.css";
 @import "./styles/components/comparison-board.css";
 @import "./styles/components/explain.css";
+@import "./styles/components/evidence.css";
 
 body {
   margin: 0;
@@ -446,30 +447,6 @@ a:hover {
   opacity: 1;
 }
 
-.evidence-section {
-  margin: 18px 0;
-}
-
-.evidence-panel {
-  background: var(--panel);
-  border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #334155;
-}
-
-.evidence-panel__summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.evidence-panel__lede {
-  border: 1px solid #334155;
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: #0f172a;
-}
-
 .dashboard-disclosure {
   background: var(--panel);
   border: 1px solid #334155;
@@ -887,7 +864,6 @@ a:hover {
   .hero,
   .section,
   .watchlist-card,
-  .evidence-panel,
   .status-panel,
   .diagnostic-callout {
     padding: 14px;
@@ -937,8 +913,7 @@ a:hover {
     white-space: nowrap;
   }
 
-  .watchlist-card__head,
-  .evidence-panel__summary {
+  .watchlist-card__head {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -1003,8 +978,7 @@ a:hover {
 }
 
 .bracket-tree-panel,
-.divergence-map-panel,
-.evidence-panel {
+.divergence-map-panel {
   background: var(--panel);
   border-radius: 12px;
   padding: 16px;
@@ -1109,182 +1083,6 @@ a:hover {
   display: inline-block;
   margin-right: 6px;
   font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.evidence-panel__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.evidence-card {
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 10px;
-  padding: 16px;
-}
-
-.evidence-summary {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 8px 12px;
-}
-
-.evidence-callout {
-  border-left: 4px solid var(--accent);
-  padding-left: 12px;
-  color: var(--muted);
-}
-
-.evidence-close {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid #334155;
-  border-radius: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
-}
-
-.evidence-team-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-  margin: 18px 0;
-}
-
-.team-card {
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 14px;
-  padding: 14px;
-}
-
-.team-card__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-  margin-bottom: 10px;
-}
-
-.team-card__eyebrow {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-.team-card__seed {
-  border-radius: 999px;
-  border: 1px solid #334155;
-  padding: 4px 8px;
-  font-size: 0.85rem;
-}
-
-.team-card__stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  margin: 0;
-}
-
-.team-card__stat dt {
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.team-card__stat dd {
-  margin: 0;
-  font-weight: 600;
-}
-
-.matchup-context-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 14px 0;
-}
-
-.context-flag {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid #334155;
-  background: rgba(15, 23, 42, 0.8);
-}
-
-.context-flag span {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-.advantage-chart {
-  display: grid;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.advantage-chart__header,
-.advantage-row__values {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 12px;
-  align-items: center;
-  font-size: 0.85rem;
-}
-
-.advantage-row__feature {
-  color: var(--muted);
-  text-align: center;
-}
-
-.advantage-row__values span:first-child,
-.advantage-row__values span:last-child {
-  font-weight: 600;
-}
-
-.advantage-row__lane {
-  position: relative;
-  height: 10px;
-  border-radius: 999px;
-  background: #1e293b;
-  overflow: hidden;
-}
-
-.advantage-row__center {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  transform: translateX(-50%);
-  background: #64748b;
-}
-
-.advantage-row__bar {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: var(--accent);
-  opacity: 0.85;
-}
-
-.advantage-row__bar--left {
-  right: 50%;
-}
-
-.advantage-row__bar--right {
-  left: 50%;
-}
-
-.advantage-row__favor {
-  font-size: 0.8rem;
   color: var(--muted);
 }
 

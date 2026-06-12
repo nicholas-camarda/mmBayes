@@ -45,7 +45,7 @@ function teamName(row: Record<string, unknown>, side: "A" | "B"): string {
 }
 
 function teamStats(row: Record<string, unknown>, side: "A" | "B") {
-  return MATCHUP_FEATURE_SPECS.slice(0, 6).map((spec) => ({
+  return MATCHUP_FEATURE_SPECS.slice(0, 3).map((spec) => ({
     label: spec.label,
     value: formatFeatureValue(
       row[side === "A" ? spec.teamAColumn : spec.teamBColumn],
@@ -108,33 +108,35 @@ export function EvidencePanel({
               </div>
             </summary>
             <div className="evidence-panel__body">
-              <p className="evidence-panel__lede">
-                <strong>{String(row.posterior_favorite ?? "n/a")}</strong> is the posterior favorite
-                at{" "}
-                {typeof row.win_prob_favorite === "number"
-                  ? `${(100 * row.win_prob_favorite).toFixed(1)}%`
-                  : "n/a"}
-                .
-              </p>
-              <dl className="evidence-summary">
-                <dt>Round</dt>
-                <dd>{String(row.round ?? "n/a")}</dd>
-                <dt>Region</dt>
-                <dd>{String(row.region ?? "n/a")}</dd>
-                <dt>Confidence</dt>
-                <dd>{String(row.confidence_tier ?? "n/a")}</dd>
-                <dt>Candidate usage</dt>
-                <dd>{String(row.candidate_usage ?? "n/a")}</dd>
-              </dl>
-              {row.why_this_matters ? (
-                <p className="evidence-callout">{String(row.why_this_matters)}</p>
-              ) : null}
-              {row.downstream_implication_text ? (
-                <p className="evidence-callout evidence-callout--implication">
-                  {String(row.downstream_implication_text)}
+              <div className="evidence-panel__summary-block">
+                <p className="evidence-panel__lede">
+                  <strong>{String(row.posterior_favorite ?? "n/a")}</strong> is the posterior favorite
+                  at{" "}
+                  {typeof row.win_prob_favorite === "number"
+                    ? `${(100 * row.win_prob_favorite).toFixed(1)}%`
+                    : "n/a"}
+                  .
                 </p>
-              ) : null}
-              {row.rationale_short ? <p>{String(row.rationale_short)}</p> : null}
+                <dl className="evidence-summary">
+                  <dt>Round</dt>
+                  <dd>{String(row.round ?? "n/a")}</dd>
+                  <dt>Region</dt>
+                  <dd>{String(row.region ?? "n/a")}</dd>
+                  <dt>Confidence</dt>
+                  <dd>{String(row.confidence_tier ?? "n/a")}</dd>
+                  <dt>Candidate usage</dt>
+                  <dd>{String(row.candidate_usage ?? "n/a")}</dd>
+                </dl>
+                {row.why_this_matters ? (
+                  <p className="evidence-callout">{String(row.why_this_matters)}</p>
+                ) : null}
+                {row.downstream_implication_text ? (
+                  <p className="evidence-callout evidence-callout--implication">
+                    {String(row.downstream_implication_text)}
+                  </p>
+                ) : null}
+                {row.rationale_short ? <p>{String(row.rationale_short)}</p> : null}
+              </div>
 
               <div className="matchup-context-flags" aria-label="Model context flags">
                 <span className="context-flag context-flag--conference">
