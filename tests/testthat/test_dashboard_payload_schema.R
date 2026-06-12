@@ -180,3 +180,38 @@ test_that("write_dashboard_outputs writes validated payload artifacts beside the
     js_first_line <- readLines(file.path(output_dir, "dashboard_payloads.js"), n = 1L)
     expect_match(js_first_line, "^window\\.__MMBAYES_PAYLOADS__ = \\{")
 })
+
+test_that("sync_frontend_app skips with an actionable message when dist is missing", {
+    project_root <- file.path(tempdir(), paste0("no_dist_", as.integer(Sys.time())))
+    runtime_dir <- file.path(project_root, "runtime_output")
+    dir.create(runtime_dir, recursive = TRUE, showWarnings = FALSE)
+    on.exit(unlink(project_root, recursive = TRUE), add = TRUE)
+    expect_message(
+        result <- sync_frontend_app(project_root, runtime_output_dir = runtime_dir),
+        "npm install"
+    )
+    expect_null(result)
+})
+
+test_that("sync_frontend_app copies the built app and payload shim to both targets", {
+    project_root <- file.path(tempdir(), paste0("with_dist_", as.integer(Sys.time())))
+    dist_dir <- file.path(project_root, "frontend", "dist", "assets")
+    runtime_dir <- file.path(project_root, "runtime_output")
+    repo_dir <- file.path(project_root, "repo_output")
+    dir.create(dist_dir, recursive = TRUE, showWarnings = FALSE)
+    dir.create(runtime_dir, recursive = TRUE, showWarnings = FALSE)
+    dir.create(repo_dir, recursive = TRUE, showWarnings = FALSE)
+    on.exit(unlink(project_root, recursive = TRUE), add = TRUE)
+    writeLines("<html></html>", file.path(project_root, "frontend", "dist", "index.html"))
+    writeLines("console.log(1)", file.path(dist_dir, "index.js"))
+    writeLines("window.__MMBAYES_PAYLOADS__ = {};", file.path(runtime_dir, "dashboard_payloads.js"))
+
+    synced <- sync_frontend_app(project_root, runtime_output_dir = runtime_dir, repo_output_dir = repo_dir)
+
+    expect_equal(sort(synced), sort(c(file.path(runtime_dir, "app"), file.path(repo_dir, "app"))))
+    for (target in synced) {
+        expect_true(file.exists(file.path(target, "index.html")))
+        expect_true(file.exists(file.path(target, "assets", "index.js")))
+        expect_true(file.exists(file.path(target, "dashboard_payloads.js")))
+    }
+})

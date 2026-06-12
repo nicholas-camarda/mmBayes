@@ -62,6 +62,51 @@ sync_dashboard_html_files <- function(source_dir,
     synced_paths
 }
 
+#' Sync the built static dashboard frontend into output directories
+#'
+#' Copies frontend/dist plus the runtime dashboard_payloads.js shim into
+#' an app/ directory under the runtime output dir and, optionally, the
+#' tracked repo output dir. Soft-skips when the frontend has not been
+#' built so R-only workflows never require Node.
+#'
+#' @param project_root The repository root containing frontend/.
+#' @param runtime_output_dir Runtime output directory holding payload artifacts.
+#' @param repo_output_dir Optional tracked repo output directory.
+#'
+#' @return Invisibly, the synced app directories, or NULL when skipped.
+#' @keywords internal
+sync_frontend_app <- function(project_root, runtime_output_dir, repo_output_dir = NULL) {
+    dist_dir <- file.path(project_root, "frontend", "dist")
+    if (!dir.exists(dist_dir)) {
+        message(
+            "Frontend app build not found at frontend/dist; skipping app sync. ",
+            "Run `npm install && npm run build` inside frontend/ to enable the ",
+            "TypeScript dashboards. Legacy R-rendered dashboards are unaffected."
+        )
+        return(invisible(NULL))
+    }
+
+    payload_js <- file.path(runtime_output_dir, "dashboard_payloads.js")
+    targets <- c(
+        file.path(runtime_output_dir, "app"),
+        if (!is.null(repo_output_dir)) file.path(repo_output_dir, "app")
+    )
+    for (target in targets) {
+        unlink(target, recursive = TRUE)
+        dir.create(target, recursive = TRUE, showWarnings = FALSE)
+        file.copy(
+            list.files(dist_dir, full.names = TRUE),
+            target,
+            recursive = TRUE,
+            overwrite = TRUE
+        )
+        if (file.exists(payload_js)) {
+            file.copy(payload_js, file.path(target, "dashboard_payloads.js"), overwrite = TRUE)
+        }
+    }
+    invisible(targets)
+}
+
 #' Provide a default for `NULL`
 #'
 #' @param x A value to test.

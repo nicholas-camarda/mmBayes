@@ -37,6 +37,11 @@ rendered_dashboards <- regenerate_dashboard_outputs_from_results(
     repo_output_dir = repo_output_dir,
     dashboard_build_metadata = dashboard_build_metadata
 )
+synced_app_dirs <- sync_frontend_app(
+    project_root = project_root,
+    runtime_output_dir = runtime_dashboard_dir,
+    repo_output_dir = repo_output_dir
+)
 
 champion <- results$final_four$champion
 cat("\n=============================================\n")
@@ -80,6 +85,11 @@ if (!is.null(rendered_dashboards$dashboard)) {
 cat(sprintf("- Repo dashboard snapshot dir: %s\n", repo_output_dir))
 for (path in rendered_dashboards$repo_output_files) {
     cat(sprintf("- Synced snapshot: %s\n", path))
+}
+if (!is.null(synced_app_dirs)) {
+    for (app_dir in synced_app_dirs) {
+        cat(sprintf("- Frontend app synced: %s\n", app_dir))
+    }
 }
 if (!is.null(rendered_dashboards$technical_dashboard)) {
     cat(sprintf("- Technical dashboard: %s\n", rendered_dashboards$technical_dashboard))

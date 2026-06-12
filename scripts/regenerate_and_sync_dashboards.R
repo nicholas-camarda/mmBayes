@@ -30,6 +30,11 @@ rendered <- regenerate_dashboards_from_saved_results(
     repo_output_dir = repo_output_dir,
     dashboard_build_metadata = dashboard_build_metadata
 )
+synced_app_dirs <- sync_frontend_app(
+    project_root = project_root,
+    runtime_output_dir = dirname(rendered$dashboard),
+    repo_output_dir = repo_output_dir
+)
 
 cat(sprintf("Loaded cached results bundle: %s\n", rendered$results_bundle_path))
 cat("Regenerated runtime dashboards:\n")
@@ -38,4 +43,10 @@ cat(sprintf("- %s\n", rendered$technical_dashboard))
 cat("Synced tracked repo dashboards:\n")
 for (path in rendered$repo_output_files) {
     cat(sprintf("- %s\n", path))
+}
+if (!is.null(synced_app_dirs)) {
+    cat("Synced frontend app directories:\n")
+    for (app_dir in synced_app_dirs) {
+        cat(sprintf("- %s\n", app_dir))
+    }
 }
