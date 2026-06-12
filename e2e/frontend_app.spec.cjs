@@ -80,6 +80,7 @@ test.describe("static frontend dashboards", () => {
     await expect(page.getByTestId("calibration-chart")).toBeVisible();
     await expect(page.getByTestId("ranked-decisions-board")).toBeVisible();
     const boardBox = await page.getByTestId("ranked-decisions-board").boundingBox();
+    expect(boardBox).toBeTruthy();
     expect(boardBox.height).toBeGreaterThan(280);
     await expect(page.getByTestId("live-performance-panel")).toBeVisible();
   });

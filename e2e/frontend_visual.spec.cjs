@@ -24,6 +24,10 @@ function stageApp() {
   return stageDir;
 }
 
+async function waitForFonts(page) {
+  await page.evaluate(() => document.fonts.ready);
+}
+
 test.describe("frontend visual regression", () => {
   test.skip(!fs.existsSync(distDir), "frontend/dist missing; run `npm run build` in frontend/ first");
 
@@ -32,6 +36,7 @@ test.describe("frontend visual regression", () => {
     await page.setViewportSize({ width: 1320, height: 960 });
     await page.goto(`file://${path.join(stageDir, "index.html")}`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /bracket entry workspace/i })).toBeVisible();
+    await waitForFonts(page);
     await expect(page).toHaveScreenshot("bracket-desktop.png", {
       maxDiffPixelRatio: 0.02,
     });
@@ -42,6 +47,7 @@ test.describe("frontend visual regression", () => {
     await page.setViewportSize({ width: 390, height: 900 });
     await page.goto(`file://${path.join(stageDir, "index.html")}`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /bracket entry workspace/i })).toBeVisible();
+    await waitForFonts(page);
     await expect(page).toHaveScreenshot("bracket-mobile.png", {
       maxDiffPixelRatio: 0.02,
     });
@@ -52,6 +58,7 @@ test.describe("frontend visual regression", () => {
     await page.setViewportSize({ width: 1320, height: 960 });
     await page.goto(`file://${path.join(stageDir, "technical.html")}`, { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: /technical bracket dashboard/i })).toBeVisible();
+    await waitForFonts(page);
     await expect(page).toHaveScreenshot("technical-desktop.png", {
       maxDiffPixelRatio: 0.02,
     });
