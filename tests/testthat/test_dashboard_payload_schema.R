@@ -242,6 +242,15 @@ test_that("write_dashboard_outputs writes validated payload artifacts beside the
     expect_match(js_first_line, "^window\\.__MMBAYES_PAYLOADS__ = \\{")
 })
 
+test_that("tracked output app payload is not the Vitest fixture shim", {
+    repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
+    payload_js <- file.path(repo_root, "output", "app", "dashboard_payloads.js")
+    skip_if_not(file.exists(payload_js), "output/app payload not synced in this checkout")
+    payload_line <- readLines(payload_js, n = 1L, warn = FALSE)
+    expect_no_match(payload_line, '"git_commit":"fixture"', fixed = TRUE)
+    expect_no_match(payload_line, "West_01_2025", fixed = TRUE)
+})
+
 test_that("sync_frontend_app skips with an actionable message when dist is missing", {
     project_root <- file.path(tempdir(), paste0("no_dist_", as.integer(Sys.time())))
     runtime_dir <- file.path(project_root, "runtime_output")

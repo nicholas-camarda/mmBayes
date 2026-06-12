@@ -23,7 +23,7 @@ If you want the published dashboard entrypoint, start at the GitHub Pages hub:
 
 [Open the GitHub Pages dashboard hub](https://nicholas-camarda.github.io/mmBayes/)
 
-The hub links to the React bracket app (`output/app/index.html`) plus the technical diagnostics page (`output/app/technical.html`). Legacy R-rendered HTML snapshots remain available for backward compatibility.
+From the hub, use **Open bracket dashboard** for the React entry workspace. The published app loads the last synced payload snapshot from `output/app/` (real tournament data after `regenerate_and_sync_dashboards.R` or a full simulation run—not the Vitest fixture payload).
 
 The authoritative full run now refreshes the tracked repo dashboard snapshot automatically, so a successful `Rscript scripts/run_simulation.R` updates both the runtime HTML bundle and the GitHub Pages source files under `output/`.
 

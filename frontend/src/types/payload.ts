@@ -3,7 +3,12 @@ export const SUPPORTED_SCHEMA_VERSION = "1.1.0";
 export interface BuildMetadata {
   git_commit?: string;
   render_timestamp?: string;
+  rendered_at?: string;
+  rendered_at_label?: string;
+  commit_short?: string;
+  commit_full?: string;
   repo_snapshot_synced?: boolean;
+  repo_snapshot_label?: string;
   [key: string]: unknown;
 }
 
