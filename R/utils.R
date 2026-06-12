@@ -2989,10 +2989,32 @@ write_dashboard_outputs <- function(bracket_year,
         technical_dashboard_path
     )
 
+    payload_paths <- write_dashboard_payloads(
+        bracket_payload = build_bracket_dashboard_payload(
+            bracket_year = bracket_year,
+            candidates = candidates,
+            decision_sheet = decision_sheet,
+            dashboard_context = dashboard_context,
+            total_points_predictions = total_points_predictions,
+            play_in_resolution = play_in_resolution
+        ),
+        technical_payload = build_technical_dashboard_payload(
+            bracket_year = bracket_year,
+            decision_sheet = decision_sheet,
+            candidates = candidates,
+            model_quality_context = model_quality_context,
+            build_metadata = dashboard_context$build_metadata %||% list()
+        ),
+        output_dir = output_dir
+    )
+
     list(
         dashboard = dashboard_path,
         technical_dashboard = technical_dashboard_path,
         model_comparison_dashboard = NULL,
+        bracket_payload = payload_paths$bracket,
+        technical_payload = payload_paths$technical,
+        payload_js = payload_paths$js,
         model_quality_source_label = model_quality_context$source_label %||% NULL,
         model_quality_source_path = model_quality_context$source_path %||% NULL,
         model_quality_used_cached_quality = isTRUE(model_quality_context$used_cached_quality %||% model_quality_context$used_fallback %||% FALSE),

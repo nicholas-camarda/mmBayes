@@ -60,7 +60,6 @@ test_that("validate_dashboard_payload tolerates absent optional sections", {
 
 make_payload_test_candidates <- function() {
     matchups <- tibble::tibble(
-        slot_key = c("East|Round of 64|1", "East|Round of 64|2"),
         region = "East",
         round = "Round of 64",
         matchup_number = c(1L, 2L),
@@ -69,8 +68,12 @@ make_payload_test_candidates <- function() {
         teamA_seed = c(1L, 4L),
         teamB_seed = c(16L, 13L),
         winner = c("Duke", "Kansas"),
-        win_prob_A = c(0.97, 0.81)
-    )
+        win_prob_A = c(0.97, 0.81),
+        ci_lower = c(0.90, 0.68),
+        ci_upper = c(0.99, 0.90),
+        prediction_sd = c(0.04, 0.08)
+    ) %>%
+        augment_matchup_decisions()
     list(
         list(
             candidate_id = 1L, type = "primary", champion = "Duke",
@@ -141,4 +144,39 @@ test_that("dashboard payload JSON round-trips with rows orientation", {
     parsed <- jsonlite::fromJSON(json, simplifyVector = FALSE)
     expect_equal(parsed$dashboard_schema_version, "1.0.0")
     expect_equal(parsed$candidates[[1]]$matchups[[1]]$teamA, "Duke")
+})
+
+test_that("write_dashboard_outputs writes validated payload artifacts beside the HTML", {
+    output_dir <- file.path(tempdir(), paste0("payload_test_", as.integer(Sys.time())))
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+    on.exit(unlink(output_dir, recursive = TRUE), add = TRUE)
+    candidates <- make_payload_test_candidates()
+    result <- write_dashboard_outputs(
+        bracket_year = 2026L,
+        candidates = candidates,
+        output_dir = output_dir,
+        backtest = list(
+            summary = tibble::tibble(
+                mean_log_loss = 0.401,
+                mean_brier = 0.188,
+                mean_accuracy = 0.713,
+                mean_bracket_score = 85.4,
+                mean_correct_picks = 42.7
+            )
+        )
+    )
+    expect_true(file.exists(file.path(output_dir, "bracket_dashboard_payload.json")))
+    expect_true(file.exists(file.path(output_dir, "technical_dashboard_payload.json")))
+    expect_true(file.exists(file.path(output_dir, "dashboard_payloads.js")))
+    expect_equal(result$bracket_payload, file.path(output_dir, "bracket_dashboard_payload.json"))
+
+    parsed <- jsonlite::fromJSON(
+        file.path(output_dir, "bracket_dashboard_payload.json"),
+        simplifyVector = FALSE
+    )
+    expect_equal(parsed$dashboard_schema_version, "1.0.0")
+    expect_equal(parsed$dashboard, "bracket")
+
+    js_first_line <- readLines(file.path(output_dir, "dashboard_payloads.js"), n = 1L)
+    expect_match(js_first_line, "^window\\.__MMBAYES_PAYLOADS__ = \\{")
 })
