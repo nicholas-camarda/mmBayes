@@ -1,6 +1,6 @@
 # Dashboard Frontend Architecture
 
-Design document for the mmBayes dashboard frontend refactor. This document records the baseline audit, framework evaluation, target architecture, and migration/testing/compatibility/rollback plans. Legacy R-rendered dashboards remain the production surface until feature parity is validated.
+Design document for the mmBayes dashboard frontend refactor. This document records the baseline audit, framework evaluation, target architecture, and migration/testing/compatibility/rollback plans. The beautified React app in `output/app/` is the primary dashboard surface; legacy R-rendered HTML snapshots remain generated for backward compatibility.
 
 ---
 
@@ -99,9 +99,11 @@ Path resolution is centralized in `R/configuration.R` (`default_runtime_root()`,
 
 GitHub Pages serves the repository root:
 
-- **Hub:** `index.html` — primary CTA links to `output/bracket_dashboard.html`
-- **Bracket dashboard:** `output/bracket_dashboard.html` — bracket-entry decision workspace
-- **Technical dashboard:** `output/technical_dashboard.html` — linked from README and the bracket dashboard appendix (not from the hub primary CTA)
+- **Hub:** `index.html` — primary CTA links to `output/app/index.html`
+- **Bracket dashboard (primary):** `output/app/index.html` — React bracket-entry workspace
+- **Bracket dashboard (legacy):** `output/bracket_dashboard.html` — R-rendered snapshot
+- **Technical dashboard (primary):** `output/app/technical.html` — React compare boards and diagnostics
+- **Technical dashboard (legacy):** `output/technical_dashboard.html` — R-rendered snapshot
 
 `.gitignore` ignores `output/*` except `!output/*.html` (and `!output/.gitkeep`), so only HTML snapshots are tracked in the repo output directory.
 
@@ -122,7 +124,7 @@ Root `package.json` contains only `@playwright/test`. `npm test` runs `e2e/brack
 | `test_pipeline_smoke.R` | Both HTML files written by full pipeline; regeneration path re-renders without re-fitting; repo sync copies exactly the two manifest files |
 | `test_model_and_simulation.R` | Hundreds of HTML substring assertions against `create_bracket_dashboard_html()` and `create_technical_dashboard_html()` output (review queue, divergence map, confidence tiers, technical panels, etc.) |
 | `test_project_layout.R` | `release_deliverable_manifest()` contents; `regenerate_dashboards_from_saved_results()` error when bundle missing |
-| `test_documentation_links.R` | `index.html` links to `output/bracket_dashboard.html`; README documents bracket dashboard as entry point |
+| `test_documentation_links.R` | `index.html` links to `output/app/`; README documents React app as primary dashboard entry |
 
 Additional Playwright coverage exists in `e2e/bracket_tree.spec.cjs` (bracket tree interactions against fixture HTML). None of the existing suites forbid adding `frontend/`, new output files, or new R modules — they constrain legacy HTML behavior and sync semantics.
 
@@ -165,9 +167,9 @@ Evaluation criteria reflect mmBayes deployment constraints: static GitHub Pages 
 
 R remains the **source of truth**. The frontend never recomputes model outputs — it renders what the pipeline emits.
 
-### 4.2 Payload contract v1.0.0
+### 4.2 Payload contract v1.1.0
 
-- Each payload carries a required `dashboard_schema_version` field (const `"1.0.0"`).
+- Each payload carries a required `dashboard_schema_version` field (const `"1.1.0"`).
 - Two schemas: `bracket_dashboard_payload` and `technical_dashboard_payload`.
 - R validation is **fail-closed**: missing required fields or version mismatches abort emission.
 - TypeScript types in `frontend/src/types/payload.ts` mirror the schemas and guard on `dashboard_schema_version` at load time.
@@ -230,7 +232,8 @@ frontend/                          # Vite + React + TypeScript source
 output/app/                        # Tracked repo snapshot (publishable)
 ```
 
-- `sync_frontend_app()` (planned in `R/utils.R`) copies `frontend/dist/` into runtime `output/app/` and tracked `output/app/` when a build exists.
+- `sync_frontend_app()` (`R/utils.R`) copies `frontend/dist/` into runtime `output/app/` and tracked `output/app/` when a build exists.
+- Primary dashboard URLs: `output/app/index.html`, `output/app/technical.html`.
 - Legacy dashboards remain at their existing URLs: `output/bracket_dashboard.html`, `output/technical_dashboard.html`.
 
 ### 4.8 What stays untouched in this phase
@@ -238,7 +241,7 @@ output/app/                        # Tracked repo snapshot (publishable)
 - `create_bracket_dashboard_html()` and `create_technical_dashboard_html()` — no removal or modification.
 - `dashboard_html_manifest()` — still exactly two HTML filenames.
 - `release_deliverable_manifest()` — unchanged in this phase.
-- GitHub Pages hub — still points at legacy HTML until cutover.
+- GitHub Pages hub — points at `output/app/` as the primary surface; legacy HTML links retained for backward compatibility.
 
 ---
 
@@ -277,15 +280,29 @@ Priority panels for technical dashboard:
 - Ensemble/component diagnostics
 - Live tournament performance
 
-### Phase 3 — Cutover
+### Phase 3 — Cutover (COMPLETE)
 
-Cutover happens **only after** parity validation:
+Cutover is complete after parity validation and beautification:
 
-1. Hub `index.html` primary CTA points at `output/app/` (or `output/app/index.html`)
-2. Legacy renderers retired from the pipeline (separate change, not automatic)
-3. `dashboard_html_manifest()` and release manifest updated to reflect new primary surface
+1. Hub `index.html` primary CTA points at `output/app/index.html`
+2. Legacy renderers continue to be generated for backward compatibility (not yet retired)
+3. Release manifest includes synced `output/app/` alongside legacy HTML snapshots
 
-Until Phase 3 completes, legacy dashboards are the production surface and the frontend is an opt-in preview.
+The React app is the recommended production surface. Legacy HTML dashboards remain available as secondary snapshots.
+
+#### CSS module structure (beautification complete)
+
+Styling is organized under `frontend/src/styles/`:
+
+| File | Responsibility |
+|------|----------------|
+| `tokens.css` | Color, spacing, radius, typography CSS variables |
+| `layout.css` | Panel shells, section rhythm, grid utilities |
+| `components/comparison-board.css` | Ranked/upset/divergence board polish |
+| `components/prob-track.css` | Probability track lane styling |
+| `components/evidence.css` | Evidence drawer, team cards, advantage chart |
+| `components/explain.css` | Compare board explainer cards |
+| `styles.css` | Imports only; component rules shrink over time |
 
 ---
 
@@ -297,10 +314,10 @@ New file: `tests/testthat/test_dashboard_payload_schema.R`
 
 | Test | Assertion |
 |------|-----------|
-| Schema files exist | Both schemas declare `dashboard_schema_version` const `"1.0.0"` |
+| Schema files exist | Both schemas declare `dashboard_schema_version` const `"1.1.0"` |
 | Minimal valid payload | `validate_dashboard_payload()` accepts required fields only |
 | Fail-closed on missing fields | Error names the missing required field |
-| Version mismatch | Rejects `dashboard_schema_version` other than `"1.0.0"` |
+| Version mismatch | Rejects `dashboard_schema_version` other than `"1.1.0"` |
 | Optional sections | Absent optional fields do not fail validation |
 | Emission integration | `write_dashboard_outputs()` writes JSON + JS shim alongside HTML |
 
@@ -315,8 +332,16 @@ Fixture generation script: `scripts/generate_dashboard_payload_fixtures.R` produ
 
 ### 6.3 End-to-end — Playwright
 
-- New: `e2e/frontend_app.spec.cjs` — loads built `frontend/dist/` over `file://` with fixture `dashboard_payloads.js`
-- Existing: `e2e/bracket_tree.spec.cjs` — continues against legacy fixture HTML (unchanged)
+- `e2e/frontend_app.spec.cjs` — loads built `frontend/dist/` over `file://` with fixture `dashboard_payloads.js`
+- `e2e/frontend_visual.spec.cjs` — screenshot regression at 1320×960 desktop and 390×900 mobile (`maxDiffPixelRatio: 0.02`)
+- `e2e/bracket_tree.spec.cjs` — continues against legacy fixture HTML (unchanged)
+
+**Visual regression commands:**
+
+```sh
+npm run test:visual    # compare against checked-in baselines
+npm test -- e2e/frontend_visual.spec.cjs --update-snapshots  # refresh baselines after intentional UI changes
+```
 
 ### 6.4 Regression — existing suites stay green
 
@@ -351,9 +376,11 @@ Payload emission and frontend sync are **additive** steps — they do not replac
 
 | URL | Status |
 |-----|--------|
-| `output/bracket_dashboard.html` | Continues to be generated and synced |
-| `output/technical_dashboard.html` | Continues to be generated and synced |
-| `index.html` → `output/bracket_dashboard.html` | Unchanged until Phase 3 cutover |
+| `output/app/index.html` | Primary bracket-entry surface (React app) |
+| `output/app/technical.html` | Primary technical diagnostics surface (React app) |
+| `output/bracket_dashboard.html` | Legacy snapshot; continues to be generated and synced |
+| `output/technical_dashboard.html` | Legacy snapshot; continues to be generated and synced |
+| `index.html` → `output/app/index.html` | Primary CTA (Phase 3 cutover complete) |
 
 ### 7.3 Manifests unchanged in foundation phase
 
@@ -391,8 +418,8 @@ Legacy HTML generation, sync, GitHub Pages links, and release publishing continu
 |----------|----------|
 | Frontend not built | Legacy HTML dashboards work as today |
 | Payload validation fails | Pipeline aborts (fail-closed) — legacy HTML is not written with invalid data |
-| Frontend built but incomplete | Legacy HTML remains the recommended entry point; `output/app/` is preview-only |
-| Parity not yet validated | Hub, README, and release manifest point to legacy HTML |
+| Frontend built but incomplete | Legacy HTML remains available; `output/app/` is primary when built |
+| Parity validated (current state) | Hub, README, and release manifest point to `output/app/` as primary |
 
 ### Cutover guardrails
 
