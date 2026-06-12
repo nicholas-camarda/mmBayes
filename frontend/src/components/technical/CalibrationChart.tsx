@@ -51,6 +51,7 @@ export function CalibrationChart({ rows }: { rows: CalibrationRow[] }) {
         rx={12}
         fill="#0b1220"
         stroke="#334155"
+        strokeWidth={1}
       />
       {tickValues.map((tick) => {
         const x = toX(tick, plotWidth);
@@ -63,6 +64,7 @@ export function CalibrationChart({ rows }: { rows: CalibrationRow[] }) {
               x2={x}
               y2={MARGIN_TOP + plotHeight}
               stroke="#223047"
+              strokeWidth={1}
             />
             <line
               x1={MARGIN_LEFT}
@@ -70,6 +72,7 @@ export function CalibrationChart({ rows }: { rows: CalibrationRow[] }) {
               x2={MARGIN_LEFT + plotWidth}
               y2={y}
               stroke="#223047"
+              strokeWidth={1}
             />
             <text
               x={x}
@@ -104,6 +107,22 @@ export function CalibrationChart({ rows }: { rows: CalibrationRow[] }) {
         strokeWidth={2}
         opacity={0.85}
       />
+      <line
+        x1={MARGIN_LEFT}
+        y1={MARGIN_TOP}
+        x2={MARGIN_LEFT}
+        y2={MARGIN_TOP + plotHeight}
+        stroke="#94a3b8"
+        strokeWidth={2}
+      />
+      <line
+        x1={MARGIN_LEFT}
+        y1={MARGIN_TOP + plotHeight}
+        x2={MARGIN_LEFT + plotWidth}
+        y2={MARGIN_TOP + plotHeight}
+        stroke="#94a3b8"
+        strokeWidth={2}
+      />
       <polyline
         points={polyline}
         fill="none"
@@ -130,18 +149,41 @@ export function CalibrationChart({ rows }: { rows: CalibrationRow[] }) {
           </circle>
         );
       })}
-      <text x={MARGIN_LEFT + plotWidth / 2} y={24} textAnchor="middle" fill="#cbd5e1" fontSize={14}>
-        Predicted probability
+      <text
+        x={MARGIN_LEFT + plotWidth / 2}
+        y={HEIGHT - 2}
+        textAnchor="middle"
+        fontSize={14}
+        fontWeight={700}
+        fill="#cbd5e1"
+      >
+        Average predicted win probability
       </text>
       <text
-        x={18}
+        x={24}
         y={MARGIN_TOP + plotHeight / 2}
         textAnchor="middle"
-        fill="#cbd5e1"
         fontSize={14}
-        transform={`rotate(-90 18 ${MARGIN_TOP + plotHeight / 2})`}
+        fontWeight={700}
+        fill="#cbd5e1"
+        transform={`rotate(-90 24 ${MARGIN_TOP + plotHeight / 2})`}
       >
-        Observed rate
+        Observed win rate
+      </text>
+      <text x={MARGIN_LEFT} y={26} fontSize={13} fontWeight={700} fill="#38bdf8">
+        Observed bucket rate
+      </text>
+      <line
+        x1={MARGIN_LEFT + 186}
+        y1={21}
+        x2={MARGIN_LEFT + 226}
+        y2={21}
+        stroke="#e5edf7"
+        strokeDasharray="6 6"
+        strokeWidth={2}
+      />
+      <text x={MARGIN_LEFT + 236} y={26} fontSize={13} fontWeight={700} fill="#cbd5e1">
+        Perfect calibration
       </text>
     </svg>
   );
