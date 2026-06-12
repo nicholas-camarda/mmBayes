@@ -42,3 +42,10 @@ test-results/
 
 .specs/
 plugins/
+
+# Frontend toolchain
+frontend/node_modules/
+frontend/dist/
+# Tracked static frontend snapshot for GitHub Pages
+!output/app/
+!output/app/**
