@@ -3052,7 +3052,8 @@ write_dashboard_outputs <- function(bracket_year,
             model_overview = model_overview,
             total_points_predictions = total_points_predictions,
             play_in_resolution = play_in_resolution,
-            backtest = backtest
+            backtest = backtest,
+            live_performance = live_performance
         ),
         output_dir = output_dir
     )

@@ -150,6 +150,7 @@ test_that("build_technical_dashboard_payload serializes backtest and decision ta
         rationale_short = c("r1", "r2"),
         upset_leverage = c(0.1, 0.4),
         underdog = c("B", "D"),
+        win_prob_underdog = c(0.3, 0.45),
         alternate_rationale = c(NA_character_, "swap")
     )
     backtest <- list(
@@ -183,8 +184,13 @@ test_that("build_technical_dashboard_payload serializes backtest and decision ta
     expect_equal(payload$dashboard_schema_version, "1.1.0")
     expect_true(is.data.frame(payload$ranked_decisions))
     expect_true(is.data.frame(payload$candidate_differences))
-    expect_equal(payload$backtest$summary$mean_log_loss[[1]], 0.401)
+    expect_equal(payload$backtest$summary$mean_log_loss, 0.401)
+    expect_true(is.data.frame(payload$backtest$round_performance))
+    expect_gt(nrow(payload$backtest$round_performance), 0L)
     expect_true(length(payload$key_warnings) >= 1L)
+    expect_true(is.data.frame(payload$upset_opportunities))
+    expect_true(is.list(payload$candidate_profiles))
+    expect_gt(length(payload$candidate_profiles), 0L)
 })
 
 test_that("dashboard payload JSON round-trips with rows orientation", {

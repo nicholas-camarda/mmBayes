@@ -21,6 +21,9 @@
     "model_overview": {"type": "object"},
     "ensemble_diagnostics": {"type": "object"},
     "championship_totals": {"type": "object"},
-    "play_in_resolution": {"type": "array"}
+    "play_in_resolution": {"type": "array"},
+    "upset_opportunities": {"type": "array"},
+    "candidate_profiles": {"type": "array"},
+    "live_performance": {"type": "object"}
   }
 }

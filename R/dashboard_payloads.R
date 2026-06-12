@@ -144,10 +144,21 @@ serialize_backtest_payload <- function(quality_backtest, quality_source_label = 
     summary_row <- quality_backtest$summary %>% dplyr::slice_head(n = 1)
     calibration <- quality_backtest$calibration %||% tibble::tibble()
     round_summary <- diagnostics$round_summary %||% tibble::tibble()
+    if (nrow(round_summary) == 0) {
+        stored_round_summary <- quality_backtest$round_summary %||% tibble::tibble()
+        if (nrow(stored_round_summary) > 0) {
+            round_summary <- stored_round_summary
+        }
+    }
+    summary_payload <- if (nrow(summary_row) > 0) {
+        as.list(summary_row[1, , drop = TRUE])
+    } else {
+        NULL
+    }
 
     compact_payload(list(
         source_label = quality_source_label,
-        summary = if (nrow(summary_row) > 0) as.data.frame(summary_row) else NULL,
+        summary = summary_payload,
         calibration = if (nrow(calibration) > 0) as.data.frame(calibration) else NULL,
         round_performance = if (nrow(round_summary) > 0) as.data.frame(round_summary) else NULL,
         strengths = as.list(diagnostics$strengths %||% character()),
@@ -254,7 +265,29 @@ serialize_technical_decision_tables <- function(decision_sheet) {
             } else {
                 "none"
             },
-            rationale = if ("rationale_short" %in% names(.)) rationale_short else NA_character_
+            rationale = if ("rationale_short" %in% names(.)) rationale_short else NA_character_,
+            candidate_diff_flag = if ("candidate_diff_flag" %in% names(.)) {
+                candidate_diff_flag
+            } else {
+                FALSE
+            },
+            alternate_note = if (all(c("candidate_diff_flag", "candidate_1_pick", "candidate_2_pick") %in% names(.))) {
+                dplyr::case_when(
+                    candidate_diff_flag & candidate_1_pick == candidate_2_pick ~ "Same winner, different path",
+                    candidate_diff_flag ~ "Different winner on the alternate path",
+                    TRUE ~ "No alternate path divergence"
+                )
+            } else {
+                NA_character_
+            },
+            usage_note = if (all(c("candidate_diff_flag", "confidence_tier", "round") %in% names(.))) {
+                purrr::pmap_chr(
+                    list(candidate_diff_flag, confidence_tier, as.character(round)),
+                    build_ranked_decision_note
+                )
+            } else {
+                NA_character_
+            }
         ) %>%
         dplyr::slice_head(n = 25L)
 
@@ -422,6 +455,168 @@ serialize_championship_totals_payload <- function(total_points_predictions) {
     ))
 }
 
+#' Serialize upset opportunity rows for the technical payload
+#'
+#' @param decision_sheet Decision sheet from [build_decision_sheet()].
+#' @param top_n Maximum number of upset rows to include.
+#'
+#' @return A data frame suitable for JSON serialization, or NULL when empty.
+#' @keywords internal
+serialize_upset_opportunities_payload <- function(decision_sheet, top_n = 10L) {
+    if (!is.data.frame(decision_sheet) || nrow(decision_sheet) == 0 ||
+        !all(c("upset_leverage", "underdog", "posterior_favorite", "win_prob_underdog") %in% names(decision_sheet))) {
+        return(NULL)
+    }
+
+    upset_rows <- decision_sheet %>%
+        dplyr::arrange(dplyr::desc(upset_leverage), dplyr::desc(decision_score), round, matchup_number) %>%
+        dplyr::slice_head(n = top_n) %>%
+        dplyr::mutate(
+            underdog_interval = purrr::map2(ci_lower, ci_upper, derive_underdog_interval),
+            underdog_ci_lower = purrr::map_dbl(underdog_interval, "lower"),
+            underdog_ci_upper = purrr::map_dbl(underdog_interval, "upper"),
+            pivot_note = purrr::pmap_chr(
+                list(candidate_1_pick, candidate_2_pick, underdog, as.character(round)),
+                build_upset_pivot_note
+            )
+        ) %>%
+        dplyr::transmute(
+            matchup = if ("matchup_label" %in% names(.)) matchup_label else NA_character_,
+            round = if ("round" %in% names(.)) as.character(round) else NA_character_,
+            region = if ("region" %in% names(.)) as.character(region) else NA_character_,
+            tier = if ("confidence_tier" %in% names(.)) confidence_tier else NA_character_,
+            underdog = underdog,
+            favorite = posterior_favorite,
+            underdog_prob = win_prob_underdog,
+            underdog_ci_lower = underdog_ci_lower,
+            underdog_ci_upper = underdog_ci_upper,
+            leverage = upset_leverage,
+            candidate_1_pick = if ("candidate_1_pick" %in% names(.)) candidate_1_pick else NA_character_,
+            candidate_2_pick = if ("candidate_2_pick" %in% names(.)) candidate_2_pick else NA_character_,
+            candidate_diff_flag = if ("candidate_diff_flag" %in% names(.)) candidate_diff_flag else FALSE,
+            pivot_note = pivot_note
+        )
+
+    if (nrow(upset_rows) == 0) {
+        return(NULL)
+    }
+
+    as.data.frame(upset_rows)
+}
+
+#' Serialize candidate profile and fragility rows for the technical payload
+#'
+#' @param candidates Candidate bracket objects from the active run.
+#'
+#' @return A list of candidate profile objects, or NULL when empty.
+#' @keywords internal
+serialize_candidate_profiles_payload <- function(candidates = list()) {
+    if (length(candidates) == 0) {
+        return(NULL)
+    }
+
+    profiles <- lapply(candidates, function(candidate) {
+        matchups <- candidate$matchups %||% tibble::tibble()
+        fragile_picks <- tibble::tibble()
+        if (is.data.frame(matchups) && nrow(matchups) > 0 &&
+            all(c("winner", "teamA", "teamB", "win_prob_A", "decision_score") %in% names(matchups))) {
+            fragile_picks <- matchups %>%
+                dplyr::mutate(
+                    chosen_prob = ifelse(winner == teamA, win_prob_A, 1 - win_prob_A),
+                    chosen_ci_lower = ifelse(
+                        winner == teamA,
+                        if ("ci_lower" %in% names(.)) ci_lower else NA_real_,
+                        if ("ci_upper" %in% names(.)) 1 - ci_upper else NA_real_
+                    ),
+                    chosen_ci_upper = ifelse(
+                        winner == teamA,
+                        if ("ci_upper" %in% names(.)) ci_upper else NA_real_,
+                        if ("ci_lower" %in% names(.)) 1 - ci_lower else NA_real_
+                    ),
+                    matchup_label = sprintf("%s vs %s", teamA, teamB)
+                ) %>%
+                {
+                    arranged <- .
+                    if ("interval_width" %in% names(arranged)) {
+                        arranged <- arranged %>%
+                            dplyr::arrange(
+                                dplyr::desc(decision_score),
+                                dplyr::desc(interval_width),
+                                round,
+                                matchup_number
+                            )
+                    } else {
+                        arranged <- arranged %>%
+                            dplyr::arrange(dplyr::desc(decision_score), round, matchup_number)
+                    }
+                    arranged
+                } %>%
+                dplyr::slice_head(n = 8L) %>%
+                dplyr::transmute(
+                    round = if ("round" %in% names(.)) as.character(round) else NA_character_,
+                    matchup_label = matchup_label,
+                    winner = winner,
+                    chosen_prob = chosen_prob,
+                    chosen_ci_lower = chosen_ci_lower,
+                    chosen_ci_upper = chosen_ci_upper,
+                    confidence_tier = if ("confidence_tier" %in% names(.)) confidence_tier else NA_character_,
+                    decision_score = decision_score
+                )
+        }
+
+        compact_payload(list(
+            candidate_id = as.integer(candidate$candidate_id),
+            type = as.character(candidate$type %||% ""),
+            champion = as.character(candidate$champion %||% ""),
+            final_four = as.character(candidate$final_four %||% ""),
+            bracket_log_prob = candidate$bracket_log_prob %||% NULL,
+            mean_game_prob = candidate$mean_game_prob %||% NULL,
+            diff_summary = as.character(candidate$diff_summary %||% ""),
+            fragile_picks = if (nrow(fragile_picks) > 0) as.data.frame(fragile_picks) else NULL
+        ))
+    })
+
+    compact_payload(profiles)
+}
+
+#' Serialize live tournament performance for the technical payload
+#'
+#' @param live_performance Live performance bundle from
+#'   [summarize_live_tournament_performance()].
+#' @param model_label Optional model label for the monitoring panel.
+#'
+#' @return A named list suitable for JSON serialization, or NULL when empty.
+#' @keywords internal
+serialize_live_performance_payload <- function(live_performance, model_label = NULL) {
+    if (is.null(live_performance) || length(live_performance) == 0) {
+        return(NULL)
+    }
+
+    summary_tbl <- live_performance$summary %||% tibble::tibble()
+    main_bracket_tbl <- live_performance$main_bracket_summary %||% tibble::tibble()
+    round_tbl <- live_performance$round_summary %||% tibble::tibble()
+    recent_games <- live_performance$games %||% tibble::tibble()
+
+    compact_payload(list(
+        model_label = model_label,
+        status = live_performance$status %||% NULL,
+        monitoring_note = live_performance$monitoring_note %||% NULL,
+        interpretive_status = live_performance$interpretive_status %||% NULL,
+        summary = if (nrow(summary_tbl) > 0) as.list(summary_tbl[1, , drop = FALSE]) else NULL,
+        main_bracket_summary = if (nrow(main_bracket_tbl) > 0) {
+            as.list(main_bracket_tbl[1, , drop = FALSE])
+        } else {
+            NULL
+        },
+        round_summary = if (nrow(round_tbl) > 0) as.data.frame(round_tbl) else NULL,
+        recent_games = if (nrow(recent_games) > 0) as.data.frame(recent_games) else NULL,
+        recent_games_title = live_performance$recent_games_title %||% NULL,
+        recent_games_note = live_performance$recent_games_note %||% NULL,
+        games_played = live_performance$games_played %||% NULL,
+        main_bracket_games_played = live_performance$main_bracket_games_played %||% NULL
+    ))
+}
+
 #' Build the versioned technical dashboard payload
 #'
 #' @param bracket_year The active bracket year.
@@ -433,6 +628,7 @@ serialize_championship_totals_payload <- function(total_points_predictions) {
 #' @param total_points_predictions Optional championship totals bundle.
 #' @param play_in_resolution Optional play-in resolution tibble.
 #' @param backtest Optional direct backtest bundle from the active run.
+#' @param live_performance Optional live tournament performance bundle.
 #'
 #' @return A named list satisfying inst/schemas/technical_dashboard_payload.schema.json.
 #' @keywords internal
@@ -444,7 +640,8 @@ build_technical_dashboard_payload <- function(bracket_year,
                                               model_overview = NULL,
                                               total_points_predictions = NULL,
                                               play_in_resolution = NULL,
-                                              backtest = NULL) {
+                                              backtest = NULL,
+                                              live_performance = NULL) {
     decision_summary <- NULL
     if (is.data.frame(decision_sheet) && nrow(decision_sheet) > 0) {
         decision_summary <- list(
@@ -466,6 +663,8 @@ build_technical_dashboard_payload <- function(bracket_year,
     quality_backtest <- resolve_technical_backtest(model_quality_context, backtest)
     diagnostics_summary <- summarize_backtest_diagnostics(quality_backtest)
     decision_tables <- serialize_technical_decision_tables(decision_sheet)
+    overview_bundle <- normalize_model_overview(model_overview)
+    live_model_label <- overview_bundle$engine_label %||% overview_bundle$engine %||% NULL
 
     model_quality <- NULL
     if (!is.null(model_quality_context)) {
@@ -498,6 +697,12 @@ build_technical_dashboard_payload <- function(bracket_year,
         )),
         ranked_decisions = decision_tables$ranked_decisions,
         candidate_differences = decision_tables$candidate_differences,
+        upset_opportunities = serialize_upset_opportunities_payload(decision_sheet),
+        candidate_profiles = serialize_candidate_profiles_payload(candidates),
+        live_performance = serialize_live_performance_payload(
+            live_performance,
+            model_label = live_model_label
+        ),
         backtest = serialize_backtest_payload(quality_backtest, quality_source_label),
         model_overview = serialize_model_overview_payload(model_overview),
         ensemble_diagnostics = serialize_ensemble_diagnostics_payload(model_overview),
