@@ -164,6 +164,23 @@ Notes:
 - Dated releases contain a `deliverables/` folder and a plain-text manifest; non-deliverable runtime artifacts are not part of the release contract.
 - `Rscript tests/testthat.R` is the authoritative branch-health check for `master`.
 
+### TypeScript dashboard frontend (preview)
+
+The R pipeline now also emits versioned JSON payloads
+(`bracket_dashboard_payload.json`, `technical_dashboard_payload.json`,
+schema v1.0.0, contracts in `inst/schemas/`) alongside the legacy HTML
+dashboards. A static React + Vite frontend in `frontend/` renders them:
+
+```sh
+cd frontend && npm install && npm run build
+Rscript scripts/regenerate_and_sync_dashboards.R
+open output/app/index.html
+```
+
+If the frontend is not built, all R commands work unchanged and only the
+legacy dashboards are produced. The legacy dashboards remain the primary
+surface until the frontend reaches feature parity.
+
 ---
 
 ## How It Works
