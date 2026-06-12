@@ -1,5 +1,6 @@
 @import "./styles/tokens.css";
 @import "./styles/layout.css";
+@import "./styles/components/prob-track.css";
 
 body {
   margin: 0;
@@ -414,59 +415,6 @@ a:hover {
   text-transform: uppercase;
   color: var(--muted);
   margin-bottom: 4px;
-}
-
-.prob-track {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.prob-track__summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.prob-track__stat {
-  border: 1px solid #334155;
-  border-radius: 12px;
-  padding: 8px 10px;
-  background: #0f172a;
-}
-
-.prob-track__stat span {
-  display: block;
-  font-size: 10px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 3px;
-}
-
-.prob-track__lane {
-  position: relative;
-  height: 16px;
-  border-radius: 999px;
-  border: 1px solid #334155;
-  background: #020617;
-}
-
-.prob-track__range {
-  position: absolute;
-  top: 50%;
-  height: 8px;
-  transform: translateY(-50%);
-  border-radius: 999px;
-}
-
-.prob-track__point {
-  position: absolute;
-  top: 50%;
-  width: 14px;
-  height: 14px;
-  transform: translate(-50%, -50%);
-  border-radius: 999px;
-  border: 2px solid #0f172a;
 }
 
 .bracket-tree-container {
