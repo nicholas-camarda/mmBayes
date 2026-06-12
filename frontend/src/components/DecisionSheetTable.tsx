@@ -6,8 +6,8 @@ export function DecisionSheetTable({ rows }: { rows: DecisionSheetRow[] }) {
       (a.decision_rank ?? Number.MAX_SAFE_INTEGER) - (b.decision_rank ?? Number.MAX_SAFE_INTEGER),
   );
   return (
-    <section aria-label="Decision sheet">
-      <table data-testid="decision-sheet" className="decision-sheet">
+    <section aria-label="Decision sheet" className="table-shell">
+      <table data-testid="decision-sheet" className="decision-sheet dashboard-table">
         <thead>
           <tr>
             <th>Rank</th>

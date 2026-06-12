@@ -16,6 +16,7 @@ export function CandidatePathsPanel({ candidates }: CandidatePathsPanelProps) {
             you have decided what to enter.
           </div>
         </div>
+        <span className="dashboard-disclosure__chevron" aria-hidden />
       </summary>
       <div className="dashboard-disclosure__body">
         {candidates.map((candidate) => (

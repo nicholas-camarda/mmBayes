@@ -1,4 +1,5 @@
 const NAV_ITEMS = [
+  { href: "#how-to-read", label: "How to read" },
   { href: "#build", label: "Enter bracket" },
   { href: "#review-queue", label: "Review picks" },
   { href: "#bracket-tree", label: "Tree" },

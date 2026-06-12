@@ -14,6 +14,8 @@ import { CandidateComparisonPanel } from "../components/bracket/CandidateCompari
 import { EntryWorkspace } from "../components/bracket/EntryWorkspace";
 import { WatchlistPanel } from "../components/bracket/WatchlistPanel";
 import { CandidatePathsPanel } from "../components/bracket/CandidatePathsPanel";
+import { ReadingGuidePanel } from "../components/bracket/ReadingGuidePanel";
+import { ConfidenceLegend } from "../components/bracket/ConfidenceLegend";
 
 export function BracketApp({ payload }: { payload: BracketPayload }) {
   const [openEvidenceId, setOpenEvidenceId] = useState<string | null>(null);
@@ -52,6 +54,8 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
 
       <StatusPanel playInResolution={payload.play_in_resolution} />
 
+      <ReadingGuidePanel />
+
       <section className="section section--entry" id="build">
         <div className="role-kicker role-kicker--act">Enter bracket</div>
         <h2>Candidate Recommendations</h2>
@@ -88,6 +92,7 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
           actually splits, then work the queue for bracket-changing disagreements, upset pivots, and
           fragile favorites that deserve manual attention.
         </p>
+        <ConfidenceLegend />
         {payload.divergence_map && payload.divergence_map.length > 0 ? (
           <DivergenceMap
             rows={payload.divergence_map}
@@ -126,6 +131,7 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
 
       <EvidencePanel
         rows={payload.matchup_context ?? []}
+        watchlist={payload.watchlist}
         openEvidenceId={openEvidenceId}
         onClose={() => {
           setOpenEvidenceId(null);

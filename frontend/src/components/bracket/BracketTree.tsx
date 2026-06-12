@@ -1,6 +1,7 @@
 import { useMemo, useState, type FocusEvent, type MouseEvent } from "react";
 import type { BracketTreeEntry, BracketTreeNode } from "../../types/payload";
 import { tierColor, tierTextColor, truncateLabel } from "../../lib/tierColors";
+import { BracketTreeLegend } from "./BracketTreeLegend";
 
 const SVG_WIDTH = 1400;
 const SVG_HEIGHT = 1070;
@@ -126,6 +127,7 @@ export function BracketTree({ trees, onOpenEvidence }: BracketTreeProps) {
 
   return (
     <section id="bracket-tree" aria-label="Bracket tree" className="bracket-tree-panel">
+      <BracketTreeLegend />
       <div className="bracket-tree-controls">
         {trees.map((tree) => (
           <button
