@@ -73,6 +73,7 @@ test.describe("static frontend dashboards", () => {
     const stageDir = stageApp();
     await page.goto(`file://${path.join(stageDir, "technical.html")}`);
     await expect(page.getByRole("heading", { name: /technical bracket dashboard/i })).toBeVisible();
+    await page.locator("details.collapsible-panel summary", { hasText: "Decision summary" }).click();
     await expect(page.getByTestId("decision-summary")).toBeVisible();
     await expect(page.getByTestId("compare-workspace")).toBeVisible();
     await expect(page.getByTestId("backtest-panel")).toBeVisible();
