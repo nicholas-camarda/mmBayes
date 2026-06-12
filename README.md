@@ -69,12 +69,12 @@ Rscript scripts/run_simulation.R
 
 # This writes the live dashboard bundle to the configured runtime output directory
 # and syncs the tracked repo dashboard HTML snapshot under `output/`.
-# Open `bracket_dashboard.html` in that directory first.
+# Open `app/index.html` in that directory first.
 # Expect this step to take longer than the refresh step because it fits/loads models,
 # runs the backtest workflow, and then renders the dashboard bundle.
 ```
 
-Then open `bracket_dashboard.html` from the configured runtime output directory in your browser.
+Then open `app/index.html` from the configured runtime output directory in your browser.
 
 For dashboard or CSS/layout iteration after the full results bundle already exists:
 
@@ -97,17 +97,19 @@ The pipeline writes its live outputs under the configured runtime output directo
 
 After a pipeline run the following artifacts are generated in the configured runtime output directory. The repository tracks only the dashboard HTML snapshots under `output/` for GitHub Pages. CSV, TXT, RDS, cache, and log artifacts should be read from the runtime output directory or from a dated release bundle.
 
-### Primary Dashboard (HTML)
+### Primary Dashboard (React app)
 
 | File | Description |
 |------|-------------|
-| [bracket_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/bracket_dashboard.html) | Primary dashboard for building and reviewing the two entries |
+| [output/app/index.html](https://nicholas-camarda.github.io/mmBayes/output/app/index.html) | Primary bracket entry workspace |
+| [output/app/technical.html](https://nicholas-camarda.github.io/mmBayes/output/app/technical.html) | Compare boards, live monitoring, calibration, and backtest detail |
 
-### Optional Diagnostics (HTML)
+### Legacy HTML snapshots
 
 | File | Description |
 |------|-------------|
-| [technical_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) | Ensemble diagnostics, calibration, and simulation detail |
+| [bracket_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/bracket_dashboard.html) | R-rendered bracket dashboard kept for backward compatibility |
+| [technical_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) | R-rendered technical dashboard kept for backward compatibility |
 
 ### Decision Artifacts (CSV)
 
@@ -164,12 +166,12 @@ Notes:
 - Dated releases contain a `deliverables/` folder and a plain-text manifest; non-deliverable runtime artifacts are not part of the release contract.
 - `Rscript tests/testthat.R` is the authoritative branch-health check for `master`.
 
-### TypeScript dashboard frontend (preview)
+### TypeScript dashboard frontend
 
-The R pipeline now also emits versioned JSON payloads
+The R pipeline emits versioned JSON payloads
 (`bracket_dashboard_payload.json`, `technical_dashboard_payload.json`,
-schema v1.0.0, contracts in `inst/schemas/`) alongside the legacy HTML
-dashboards. A static React + Vite frontend in `frontend/` renders them:
+schema v1.1.0, contracts in `inst/schemas/`) and syncs a static React + Vite
+frontend in `frontend/` to `output/app/`:
 
 ```sh
 cd frontend && npm install && npm run build
@@ -177,9 +179,9 @@ Rscript scripts/regenerate_and_sync_dashboards.R
 open output/app/index.html
 ```
 
-If the frontend is not built, all R commands work unchanged and only the
-legacy dashboards are produced. The legacy dashboards remain the primary
-surface until the frontend reaches feature parity.
+If the frontend is not built, all R commands work unchanged and the legacy
+HTML dashboards are still produced. Build the frontend before publishing so
+`output/app/` stays aligned with the runtime payload bundle.
 
 ---
 

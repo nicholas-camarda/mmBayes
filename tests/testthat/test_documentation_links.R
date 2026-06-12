@@ -34,8 +34,9 @@ test_that("GitHub Pages landing page links to the public dashboards", {
     expect_true(file.exists(file.path(repo_root, ".nojekyll")))
 
     index_text <- paste(readLines(index_path, warn = FALSE), collapse = "\n")
+    expect_match(index_text, "output/app/index\\.html")
+    expect_match(index_text, "output/app/technical\\.html")
     expect_match(index_text, "output/bracket_dashboard\\.html")
-    expect_no_match(index_text, "output/technical_dashboard\\.html")
     expect_no_match(index_text, "output/model_comparison_dashboard\\.html")
     expect_match(index_text, "color-scheme: dark")
     expect_no_match(index_text, "color-scheme: light")
@@ -68,9 +69,9 @@ test_that("README quick start explains the runtime output bundle and browser lau
     repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
     readme_text <- paste(readLines(file.path(repo_root, "README.md"), warn = FALSE), collapse = "\n")
 
-    expect_match(readme_text, "Open `bracket_dashboard\\.html` in that directory first")
+    expect_match(readme_text, "Open `app/index\\.html` in that directory first")
     expect_match(readme_text, "Expect this step to take longer than the refresh step")
-    expect_match(readme_text, "Then open `bracket_dashboard\\.html` from the configured runtime output directory in your browser")
+    expect_match(readme_text, "Then open `app/index\\.html` from the configured runtime output directory in your browser")
 })
 
 test_that("README explains update_data refresh status outcomes", {

@@ -130,25 +130,27 @@
       <p class="eyebrow">mmBayes GitHub Pages</p>
       <h1>Bracket-building decision workspace</h1>
       <p class="lede">
-        Start here for the generated bracket bundle. The bracket dashboard is the
-        entry point. Technical and model-comparison pages are optional diagnostics.
+        Start here for the generated bracket bundle. The React app under
+        <code>output/app/</code> is the primary entry point. Legacy R-rendered HTML
+        dashboards remain available for reference.
       </p>
       <div class="actions">
-        <a class="button primary" href="output/bracket_dashboard.html">Open bracket dashboard</a>
+        <a class="button primary" href="output/app/index.html">Open bracket dashboard</a>
+        <a class="button" href="output/app/technical.html">Open technical dashboard</a>
         <a class="button" href="README.md">Read the repository guide</a>
       </div>
       <div class="grid">
         <div class="card">
           <h2>Build</h2>
-          <p>Use <code>bracket_dashboard.html</code> to review Candidate 1, Candidate 2, and the evidence for the slots that matter.</p>
+          <p>Use the bracket app to review Candidate 1, Candidate 2, and the evidence for the slots that matter.</p>
         </div>
         <div class="card">
           <h2>Diagnostics</h2>
-          <p>The technical dashboard keeps calibration, backtest, and engine detail separate from the entry workflow.</p>
+          <p>The technical app keeps compare boards, live monitoring, calibration, and backtest detail separate from the entry workflow.</p>
         </div>
         <div class="card">
-          <h2>Appendix</h2>
-          <p>The model-comparison page stays available as a secondary calibration and engine-comparison reference.</p>
+          <h2>Legacy HTML</h2>
+          <p><code>output/bracket_dashboard.html</code> and <code>output/technical_dashboard.html</code> remain synced for backward compatibility.</p>
         </div>
       </div>
       <p class="footer">

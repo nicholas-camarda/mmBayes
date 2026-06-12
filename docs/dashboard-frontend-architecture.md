@@ -358,7 +358,7 @@ Payload emission and frontend sync are **additive** steps — they do not replac
 ### 7.3 Manifests unchanged in foundation phase
 
 - `dashboard_html_manifest()` — still `bracket_dashboard.html`, `technical_dashboard.html`
-- `release_deliverable_manifest()` — same deliverable list; frontend `app/` is not yet a release artifact
+- `release_deliverable_manifest()` — now includes the synced `app/` directory alongside legacy HTML snapshots
 
 ### 7.4 Frontend sync soft-skip
 
