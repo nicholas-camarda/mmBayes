@@ -456,9 +456,10 @@ a:hover {
 .review-board {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 16px;
-  margin-top: 16px;
+  padding: 18px 20px;
+  margin-top: 14px;
   background: var(--panel-strong);
+  box-shadow: var(--shadow-panel);
 }
 
 .summary-strip {
@@ -500,10 +501,11 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--panel-soft);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
 
 .watchlist-card__head {
@@ -580,8 +582,9 @@ a:hover {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  margin: 18px 0;
+  margin: 14px 0;
   overflow: hidden;
+  box-shadow: var(--shadow-panel);
 }
 
 .dashboard-disclosure > summary {
@@ -641,7 +644,8 @@ a:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--panel-strong);
-  padding: 16px 18px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow-panel);
 }
 
 .reading-guide__eyebrow {
@@ -780,8 +784,9 @@ a:hover {
   background: var(--panel-strong);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 16px 18px;
   margin: 14px 0;
+  box-shadow: var(--shadow-panel);
 }
 
 .technical-dashboard .technical-panel,
@@ -1085,8 +1090,10 @@ a:hover {
 }
 .candidate-card {
   background: var(--panel);
-  border-radius: 10px;
-  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-panel);
 }
 .decision-sheet {
   width: 100%;
@@ -1110,9 +1117,11 @@ a:hover {
 .bracket-tree-panel,
 .divergence-map-panel {
   background: var(--panel);
-  border-radius: 12px;
-  padding: 16px;
-  margin: 20px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  margin: 14px 0;
+  box-shadow: var(--shadow-panel);
 }
 
 .bracket-tree-controls {
