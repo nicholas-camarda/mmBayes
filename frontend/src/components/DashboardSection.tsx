@@ -11,6 +11,10 @@ interface DashboardSectionProps {
   children: ReactNode;
 }
 
+function roleKickerClass(roleTone: RoleTone): string {
+  return roleTone === "action" ? "act" : roleTone;
+}
+
 export function DashboardSection({
   id,
   roleTone = "technical",
@@ -22,11 +26,13 @@ export function DashboardSection({
   return (
     <section
       id={id}
-      className={`dashboard-section dashboard-section--${roleTone}`}
+      className={`section dashboard-section dashboard-section--${roleTone}`}
       aria-labelledby={id ? `${id}-title` : undefined}
       aria-label={id ? undefined : title}
     >
-      {kicker ? <div className={`role-kicker role-kicker--${roleTone}`}>{kicker}</div> : null}
+      {kicker ? (
+        <div className={`role-kicker role-kicker--${roleKickerClass(roleTone)}`}>{kicker}</div>
+      ) : null}
       <h2 id={id ? `${id}-title` : undefined}>{title}</h2>
       {note ? <p className="section-note">{note}</p> : null}
       {children}

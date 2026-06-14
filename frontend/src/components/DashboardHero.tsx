@@ -12,7 +12,7 @@ interface DashboardHeroProps {
 
 export function DashboardHero({ eyebrow, title, lede, metadata, nav }: DashboardHeroProps) {
   return (
-    <header className="dashboard-hero" role="banner">
+    <header className="hero dashboard-hero">
       <div className="dashboard-hero__copy">
         <div className="eyebrow">{eyebrow}</div>
         <h1>{title}</h1>

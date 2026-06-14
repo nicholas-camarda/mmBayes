@@ -17,9 +17,11 @@ describe("DashboardSection", () => {
     );
 
     const section = screen.getByRole("region", { name: "Candidate Recommendations" });
+    expect(section).toHaveClass("section");
     expect(section).toHaveClass("dashboard-section");
     expect(section).toHaveClass("dashboard-section--action");
     expect(screen.getByText("Enter bracket")).toHaveClass("role-kicker");
+    expect(screen.getByText("Enter bracket")).toHaveClass("role-kicker--act");
     expect(screen.getByText("Copy winners by region and round.")).toHaveClass("section-note");
     expect(screen.getByText("section body")).toBeInTheDocument();
   });

@@ -19,7 +19,9 @@ describe("DashboardHero", () => {
       />,
     );
 
-    expect(screen.getByRole("banner")).toHaveClass("dashboard-hero");
+    const hero = screen.getByRole("heading", { name: "Bracket entry workspace" }).closest("header");
+    expect(hero).toHaveClass("hero");
+    expect(hero).toHaveClass("dashboard-hero");
     expect(screen.getByText("2026 mmBayes bracket dashboard")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Bracket entry workspace" })).toBeInTheDocument();
     expect(screen.getByText("Enter Candidate 1, then inspect review picks.")).toBeInTheDocument();
