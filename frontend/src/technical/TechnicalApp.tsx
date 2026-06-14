@@ -1,5 +1,6 @@
 import type { TechnicalPayload } from "../types/payload";
-import { BuildMetadataBanner } from "../components/BuildMetadataBanner";
+import { DashboardHero } from "../components/DashboardHero";
+import { DashboardSection } from "../components/DashboardSection";
 import { MissingSection } from "../components/MissingSection";
 import { StatusPanel } from "../components/bracket/StatusPanel";
 import { TechnicalActionSummary } from "../components/technical/TechnicalActionSummary";
@@ -14,21 +15,22 @@ import { LivePerformancePanel } from "../components/technical/LivePerformancePan
 export function TechnicalApp({ payload }: { payload: TechnicalPayload }) {
   return (
     <main className="dashboard page technical-dashboard">
-      <header className="hero">
-        <div className="eyebrow">{payload.bracket_year} mmBayes technical dashboard</div>
-        <h1>Technical Bracket Dashboard</h1>
-        <p className="lede">
-          Start in Compare to decide which games deserve attention, then open backtest and ensemble
-          diagnostics when you want the evidence behind the recommendation.
-        </p>
-        <BuildMetadataBanner metadata={payload.build_metadata} />
-      </header>
+      <DashboardHero
+        eyebrow={`${payload.bracket_year} mmBayes technical dashboard`}
+        title="Technical Bracket Dashboard"
+        lede="Start in Compare to decide which games deserve attention, then open backtest and ensemble diagnostics when you want the evidence behind the recommendation."
+        metadata={payload.build_metadata}
+      />
 
       <StatusPanel playInResolution={payload.play_in_resolution} />
 
-      <section className="technical-panel">
-        <div className="role-kicker role-kicker--act">Orientation</div>
-        <h2>How to use this dashboard</h2>
+      <TechnicalActionSummary summary={payload.action_summary} />
+
+      <DashboardSection
+        roleTone="orientation"
+        kicker="Orientation"
+        title="How to use this dashboard"
+      >
         <div className="guide-grid">
           <div className="guide-card">
             <div className="guide-label">Workflow</div>
@@ -45,9 +47,7 @@ export function TechnicalApp({ payload }: { payload: TechnicalPayload }) {
             </p>
           </div>
         </div>
-      </section>
-
-      <TechnicalActionSummary summary={payload.action_summary} />
+      </DashboardSection>
 
       {payload.key_warnings && payload.key_warnings.length > 0 ? (
         <section className="technical-panel warning-callout" aria-label="Key warnings">
