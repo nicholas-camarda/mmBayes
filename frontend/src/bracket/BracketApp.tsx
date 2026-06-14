@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { BracketPayload, DivergenceMapRow } from "../types/payload";
-import { BuildMetadataBanner } from "../components/BuildMetadataBanner";
 import { CandidateSummaryPanel } from "../components/CandidateSummaryPanel";
+import { DashboardHero } from "../components/DashboardHero";
+import { DashboardSection } from "../components/DashboardSection";
 import { DecisionSheetTable } from "../components/DecisionSheetTable";
 import { MissingSection } from "../components/MissingSection";
 import { BracketTree } from "../components/bracket/BracketTree";
@@ -42,29 +43,25 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
 
   return (
     <main className="dashboard page">
-      <header className="hero">
-        <div className="eyebrow">{payload.bracket_year} mmBayes bracket dashboard</div>
-        <h1>Bracket entry workspace</h1>
-        <p className="lede">
-          Enter Candidate 1 like a bracket sheet, pause on review picks, then inspect the alternate
-          route and evidence before you lock in your {payload.bracket_year} entry.
-        </p>
-        <BuildMetadataBanner metadata={payload.build_metadata} />
-        <JumpNav />
-      </header>
+      <DashboardHero
+        eyebrow={`${payload.bracket_year} mmBayes bracket dashboard`}
+        title="Bracket entry workspace"
+        lede={`Enter Candidate 1 like a bracket sheet, pause on review picks, then inspect the alternate route and evidence before you lock in your ${payload.bracket_year} entry.`}
+        metadata={payload.build_metadata}
+        nav={<JumpNav />}
+      />
 
       <StatusPanel playInResolution={payload.play_in_resolution} />
 
       <ReadingGuidePanel />
 
-      <section className="section section--entry" id="build">
-        <div className="role-kicker role-kicker--act">Enter bracket</div>
-        <h2>Candidate Recommendations</h2>
-        <p className="section-note">
-          Use this section like a bracket sheet: choose Candidate 1 or Candidate 2, copy winners by
-          region and round, then enter the champion and tiebreaker. Review markers show the picks
-          worth pausing on.
-        </p>
+      <DashboardSection
+        id="build"
+        roleTone="action"
+        kicker="Enter bracket"
+        title="Candidate Recommendations"
+        note="Use this section like a bracket sheet: choose Candidate 1 or Candidate 2, copy winners by region and round, then enter the champion and tiebreaker. Review markers show the picks worth pausing on."
+      >
         <NextActionPanel
           candidates={payload.candidates}
           candidateSummaries={payload.candidate_summaries}
@@ -83,16 +80,15 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
         <div className="candidate-grid candidate-grid--detail">
           <CandidateSummaryPanel candidates={payload.candidates} />
         </div>
-      </section>
+      </DashboardSection>
 
-      <section className="section" id="review-queue">
-        <div className="role-kicker role-kicker--act">Decide now</div>
-        <h2>Review Queue</h2>
-        <p className="section-note">
-          Use this after the fill-in view. Read the divergence route map to see where Candidate 2
-          actually splits, then work the queue for bracket-changing disagreements, upset pivots, and
-          fragile favorites that deserve manual attention.
-        </p>
+      <DashboardSection
+        id="review-queue"
+        roleTone="action"
+        kicker="Decide now"
+        title="Review Queue"
+        note="Use this after the fill-in view. Read the divergence route map to see where Candidate 2 actually splits, then work the queue for bracket-changing disagreements, upset pivots, and fragile favorites that deserve manual attention."
+      >
         <ConfidenceLegend />
         {payload.divergence_map && payload.divergence_map.length > 0 ? (
           <DivergenceMap
@@ -114,18 +110,17 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
         ) : (
           <MissingSection label="Review queue" />
         )}
-      </section>
+      </DashboardSection>
 
       {payload.bracket_tree?.trees?.length ? (
-        <section className="section">
-          <div className="role-kicker role-kicker--evidence">Understand why</div>
-          <h2>Bracket Tree</h2>
-          <p className="section-note">
-            Each node is a game in the selected candidate path. Color shows confidence tier. Click or
-            hover for context, then open the evidence drawer for the full matchup summary.
-          </p>
+        <DashboardSection
+          roleTone="evidence"
+          kicker="Understand why"
+          title="Bracket Tree"
+          note="Each node is a game in the selected candidate path. Color shows confidence tier. Click or hover for context, then open the evidence drawer for the full matchup summary."
+        >
           <BracketTree trees={payload.bracket_tree.trees} onOpenEvidence={openEvidence} />
-        </section>
+        </DashboardSection>
       ) : (
         <MissingSection label="Bracket tree" />
       )}
@@ -142,12 +137,13 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
 
       <CandidatePathsPanel candidates={payload.candidates} />
 
-      <section className="section" id="technical-appendix">
-        <div className="role-kicker role-kicker--reference">Reference</div>
-        <h2>Technical appendix</h2>
-        <p className="section-note">
-          Decision sheet, play-in resolution, and candidate summaries for offline reference.
-        </p>
+      <DashboardSection
+        id="technical-appendix"
+        roleTone="reference"
+        kicker="Reference"
+        title="Technical appendix"
+        note="Decision sheet, play-in resolution, and candidate summaries for offline reference."
+      >
         <div className="diagnostic-callout">
           <strong>Need more diagnostics?</strong>
           <p>
@@ -166,7 +162,7 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
         ) : (
           <MissingSection label="Play-in resolution" />
         )}
-      </section>
+      </DashboardSection>
     </main>
   );
 }

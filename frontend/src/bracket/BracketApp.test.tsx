@@ -7,6 +7,23 @@ import type { BracketPayload } from "../types/payload";
 const fixture = bracketFixture as unknown as BracketPayload;
 
 describe("BracketApp", () => {
+  it("keeps the bracket dashboard workflow order compact and entry-first", () => {
+    render(<BracketApp payload={fixture} />);
+
+    const hero = screen
+      .getByRole("heading", { name: /bracket entry workspace/i })
+      .closest("header");
+    const build = screen.getByRole("region", { name: "Candidate Recommendations" });
+    const review = screen.getByRole("region", { name: "Review Queue" });
+
+    expect(hero).toHaveClass("hero");
+    expect(hero).toHaveClass("dashboard-hero");
+    expect(build).toHaveClass("dashboard-section--action");
+    expect(review).toHaveClass("dashboard-section--action");
+    expect(hero!.compareDocumentPosition(build) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(build.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("renders entry workspace, review queue, and decision sheet from a full payload", () => {
     render(<BracketApp payload={fixture} />);
     expect(screen.getByRole("heading", { name: /bracket entry workspace/i })).toBeInTheDocument();
