@@ -1092,8 +1092,73 @@ a:hover {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 18px 20px;
+  padding: 20px 22px;
   box-shadow: var(--shadow-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.candidate-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink-strong);
+  letter-spacing: -0.01em;
+}
+
+.candidate-card h3::after {
+  content: "";
+  display: block;
+  width: 32px;
+  height: 2px;
+  margin-top: 8px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+.candidate-card p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.candidate-card p strong {
+  color: var(--accent-warm);
+  font-weight: 700;
+}
+
+.candidate-card dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 16px;
+  margin: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.candidate-card dt {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.candidate-card dd {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-align: right;
+}
+
+.support-note {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--muted-2);
+  font-style: italic;
+  line-height: 1.4;
 }
 .decision-sheet {
   width: 100%;
