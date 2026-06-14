@@ -22,5 +22,6 @@ The React app is accepted only when all four first-viewport comparisons and both
 - Functional tests passed:
 - Visual tests passed:
 - R package tests passed:
-- Manual screenshot review passed:
+- Agent screenshot review passed:
+- User screenshot review passed:
 - Intentional deviations:

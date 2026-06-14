@@ -160,7 +160,8 @@ The React app is accepted only when all four first-viewport comparisons and both
 - Functional tests passed:
 - Visual tests passed:
 - R package tests passed:
-- Manual screenshot review passed:
+- Agent screenshot review passed:
+- User screenshot review passed:
 - Intentional deviations:
 ```
 
@@ -1379,10 +1380,10 @@ Expected: commit succeeds if snapshots or built app files changed. If no files c
 Run:
 
 ```sh
-rg -n "Fail|Pending visual repair" docs/dashboard-cutover-reference/visual-acceptance-ledger.md docs/dashboard-cutover-reference/parity-matrix.md
+rg -n "\| Pending \||Fail|Pending visual repair" docs/dashboard-cutover-reference/visual-acceptance-ledger.md docs/dashboard-cutover-reference/parity-matrix.md
 ```
 
-Expected: no `Fail` rows in the ledger and no `Pending visual repair` rows in the parity matrix. If this command finds either, stop and return to Task 5 or Task 6.
+Expected: no ledger rows still contain `| Pending |`, no `Fail` rows are present, and no `Pending visual repair` rows remain in the parity matrix. If this command finds any match, stop and return to Task 5, Task 6, or Task 7.
 
 - [ ] **Step 2: Confirm root monolith outputs are not required by tests**
 
@@ -1464,7 +1465,8 @@ In `docs/dashboard-cutover-reference/visual-acceptance-ledger.md`, fill:
 - Functional tests passed: `npm test`
 - Visual tests passed: `npm run test:visual`
 - R package tests passed: `Rscript tests/testthat.R`
-- Manual screenshot review passed: bracket desktop, bracket mobile, technical desktop, technical mobile
+- Agent screenshot review passed: bracket desktop, bracket mobile, technical desktop, technical mobile
+- User screenshot review passed: bracket desktop, bracket mobile, technical desktop, technical mobile
 - Intentional deviations: none
 ```
 
