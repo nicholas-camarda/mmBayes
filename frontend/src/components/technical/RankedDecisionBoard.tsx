@@ -70,7 +70,7 @@ export function RankedDecisionBoard({ rows }: RankedDecisionBoardProps) {
             },
             {
               label: "How to use this",
-              value: "How to use this",
+              value: row.tier ? `${row.tier} action` : "Review",
               note: row.usage_note ?? row.rationale ?? "Review this slot before locking the bracket.",
             },
           ]}

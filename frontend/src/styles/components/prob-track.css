@@ -64,21 +64,17 @@
 .prob-track__lane {
   position: relative;
   width: 100%;
-  height: 44px;
-  border-radius: var(--radius-md);
+  height: 40px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.96)),
-    linear-gradient(90deg, rgba(56, 189, 248, 0.06), rgba(245, 158, 11, 0.06));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 6px 14px rgba(0, 0, 0, 0.20);
+  background: var(--panel-soft);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.18);
   overflow: visible;
 }
 
 .prob-track__grid {
   position: absolute;
-  inset: 6px 0 18px;
+  inset: 0;
   pointer-events: none;
 }
 
@@ -88,41 +84,42 @@
   bottom: 0;
   width: 1px;
   transform: translateX(-50%);
-  background: rgba(148, 163, 184, 0.28);
+  background: rgba(148, 163, 184, 0.22);
+  z-index: 0;
 }
 
 .prob-track__range {
   position: absolute;
   top: 50%;
-  height: 16px;
+  height: 12px;
   transform: translateY(-50%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--track-color) 45%, transparent);
-  border: 1px solid color-mix(in srgb, var(--track-color) 75%, white);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--track-color) 35%, transparent);
+  background: color-mix(in srgb, var(--track-color) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--track-color) 50%, white);
+  z-index: 1;
 }
 
 .prob-track__bound {
   position: absolute;
   top: 4px;
   bottom: 20px;
-  width: 3px;
+  width: 2px;
   transform: translateX(-50%);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--track-color) 88%, white);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--track-color) 50%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--track-color) 75%, white);
+  z-index: 2;
 }
 
 .prob-track__bound em {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 3px);
   left: 50%;
   transform: translateX(-50%);
   font-style: normal;
-  font-size: 0.65rem;
-  font-weight: 700;
+  font-size: 0.62rem;
+  font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--muted);
+  color: var(--muted-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -130,32 +127,30 @@
 .prob-track__point {
   position: absolute;
   top: 50%;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   transform: translate(-50%, -50%);
   border-radius: 999px;
   background: var(--track-color);
-  border: 2.5px solid #f8fafc;
-  box-shadow:
-    0 0 0 1px rgba(15, 23, 42, 0.75),
-    0 0 14px color-mix(in srgb, var(--track-color) 60%, transparent);
-  z-index: 1;
+  border: 2px solid #f8fafc;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.6), 0 0 10px color-mix(in srgb, var(--track-color) 55%, transparent);
+  z-index: 3;
 }
 
 .prob-track__scale {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   width: 100%;
   padding: 0 2px;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .prob-track__scale-label {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 600;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   color: var(--muted-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -181,7 +176,7 @@
 }
 
 .watchlist-card__probability .prob-track__lane {
-  height: 44px;
+  height: 40px;
 }
 
 .watchlist-card__probability .prob-track__stat {
