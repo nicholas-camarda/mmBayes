@@ -19,20 +19,30 @@ function clampPosition(value: number, min: number, max: number): number {
   return Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
 }
 
-function axisTickValues(axisMin: number, axisMax: number, tickCount = 3): number[] {
-  if (tickCount < 2 || axisMax <= axisMin) {
-    return [axisMin, axisMax];
-  }
-  const step = (axisMax - axisMin) / (tickCount - 1);
-  return Array.from({ length: tickCount }, (_, index) => axisMin + step * index);
+function niceRange(lo: number, hi: number): [number, number] {
+  if (hi <= lo) return [0, 1];
+  const pad = (hi - lo) * 0.15;
+  const rawMin = lo - pad;
+  const rawMax = hi + pad;
+  // Round to nice 5% boundaries
+  const step = 0.05;
+  const niceMin = Math.max(0, Math.floor(rawMin / step) * step);
+  const niceMax = Math.min(1, Math.ceil(rawMax / step) * step);
+  return [niceMin, niceMax === niceMin ? niceMin + step : niceMax];
+}
+
+function axisTicks(lo: number, hi: number): number[] {
+  if (hi <= lo) return [lo, lo + 0.25, lo + 0.5];
+  const mid = (lo + hi) / 2;
+  return [lo, mid, hi];
 }
 
 export function ProbabilityTrack({
   meanProbability,
   lowerProbability,
   upperProbability,
-  axisMin = 0.5,
-  axisMax = 1,
+  axisMin,
+  axisMax,
   color,
   confidenceTier,
   valueLabel = "Favorite probability",
@@ -42,10 +52,18 @@ export function ProbabilityTrack({
   const mean = meanProbability ?? 0.5;
   const lower = lowerProbability ?? mean;
   const upper = upperProbability ?? mean;
-  const meanPosition = clampPosition(mean, axisMin, axisMax);
-  const lowerPosition = clampPosition(lower, axisMin, axisMax);
-  const upperPosition = clampPosition(upper, axisMin, axisMax);
-  const ticks = axisTickValues(axisMin, axisMax, 3);
+
+  // Auto-scale unless explicit bounds provided
+  const [visMin, visMax] =
+    axisMin != null && axisMax != null
+      ? [axisMin, axisMax]
+      : niceRange(Math.min(lower, mean), Math.max(upper, mean));
+
+  const meanPos = clampPosition(mean, visMin, visMax);
+  const lowerPos = clampPosition(lower, visMin, visMax);
+  const upperPos = clampPosition(upper, visMin, visMax);
+  const ticks = axisTicks(visMin, visMax);
+
   const laneLabel = `${valueLabel} ${formatProbability(meanProbability)} with ${intervalLabel.toLowerCase()} ${formatProbabilityInterval(lowerProbability, upperProbability)}`;
 
   return (
@@ -61,55 +79,30 @@ export function ProbabilityTrack({
         </div>
         <div className="prob-track__stat">
           <span>{intervalLabel}</span>
-          <strong>{formatProbabilityInterval(lowerProbability, upperProbability)}</strong>
+          <strong>
+            {formatProbability(lowerProbability)} – {formatProbability(upperProbability)}
+          </strong>
         </div>
       </div>
 
       <div className="prob-track__chart">
         <div className="prob-track__lane" role="img" aria-label={laneLabel}>
-          <div className="prob-track__grid" aria-hidden="true">
-            {ticks.map((tick) => (
-              <span
-                key={tick}
-                className="prob-track__grid-line"
-                style={{ left: `${clampPosition(tick, axisMin, axisMax)}%` }}
-              />
-            ))}
-          </div>
           <div
             className="prob-track__range"
             style={{
-              left: `${lowerPosition}%`,
-              width: `${Math.max(upperPosition - lowerPosition, 2)}%`,
+              left: `${lowerPos}%`,
+              width: `${Math.max(upperPos - lowerPos, 1)}%`,
             }}
           />
-          <span
-            className="prob-track__bound prob-track__bound--lower"
-            style={{ left: `${lowerPosition}%` }}
-            aria-hidden="true"
-          >
-            <em>{formatProbability(lower)}</em>
-          </span>
-          <span
-            className="prob-track__bound prob-track__bound--upper"
-            style={{ left: `${upperPosition}%` }}
-            aria-hidden="true"
-          >
-            <em>{formatProbability(upper)}</em>
-          </span>
-          <span className="prob-track__point" style={{ left: `${meanPosition}%` }} aria-hidden="true" />
+          <span className="prob-track__point" style={{ left: `${meanPos}%` }} aria-hidden="true" />
         </div>
         <div className="prob-track__scale" aria-hidden="true">
           {ticks.map((tick, index) => (
             <span
-              key={`label-${tick}`}
-              className={[
-                "prob-track__scale-label",
-                index === 0 ? "prob-track__scale-label--start" : "",
-                index === ticks.length - 1 ? "prob-track__scale-label--end" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              key={`t-${tick}`}
+              className={`prob-track__scale-label${
+                index === 0 ? " prob-track__scale-label--start" : ""
+              }${index === ticks.length - 1 ? " prob-track__scale-label--end" : ""}`}
             >
               {formatProbability(tick)}
             </span>
