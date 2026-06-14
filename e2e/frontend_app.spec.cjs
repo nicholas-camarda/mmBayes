@@ -17,9 +17,49 @@ function stageApp() {
     path.join(repoRoot, "tests", "fixtures", "dashboard_payload_technical.json"),
     "utf8",
   );
+  const technicalPayload = JSON.parse(technical);
+  technicalPayload.ensemble_diagnostics = technicalPayload.ensemble_diagnostics ?? {
+    weight_stan_glm: 0.62,
+    weight_bart: 0.38,
+    intercept: -0.04,
+    gate_passed: true,
+    validation_summary: [
+      {
+        metric: "Bracket score",
+        ensemble: 85.4,
+        stan_glm: 82.1,
+        bart: 83.2,
+      },
+    ],
+    gate_conditions: [
+      {
+        condition: "Calibration guardrail",
+        passed: true,
+      },
+    ],
+  };
+  technicalPayload.championship_totals = technicalPayload.championship_totals ?? {
+    candidate_summaries: [
+      {
+        candidate_id: 1,
+        championship_matchup: "West_01_2025 vs Midwest_01_2025",
+        recommended_tiebreaker_points: 143,
+        predicted_total_median: 142.5,
+      },
+    ],
+    championship_distribution: [
+      { candidate_id: 1, total_points: 140, probability: 0.24 },
+      { candidate_id: 1, total_points: 145, probability: 0.31 },
+    ],
+    scale: {
+      min_total: 130,
+      max_total: 155,
+      max_probability: 0.31,
+    },
+  };
   fs.writeFileSync(
     path.join(stageDir, "dashboard_payloads.js"),
-    `window.__MMBAYES_PAYLOADS__ = {"bracket": ${bracket}, "technical": ${technical}};`,
+    `window.__MMBAYES_PAYLOADS__ = {"bracket": ${bracket}, "technical": ${JSON.stringify(technicalPayload)}};`,
   );
   return stageDir;
 }
@@ -30,6 +70,13 @@ async function expectElementBox(locator, minimumWidth = 20, minimumHeight = 20) 
   expect(box).toBeTruthy();
   expect(box.width).toBeGreaterThan(minimumWidth);
   expect(box.height).toBeGreaterThan(minimumHeight);
+}
+
+async function expectInFirstViewport(locator, maxBottom = 960) {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box).toBeTruthy();
+  expect(box.y + box.height).toBeLessThanOrEqual(maxBottom);
 }
 
 async function expectSvgHasVisibleContent(locator) {
@@ -83,6 +130,118 @@ test.describe("static frontend dashboards", () => {
     expect(boardBox).toBeTruthy();
     expect(boardBox.height).toBeGreaterThan(280);
     await expect(page.getByTestId("live-performance-panel")).toBeVisible();
+  });
+
+  test("bracket React app covers the legacy entry and evidence workflow jobs", async ({ page }) => {
+    const errors = collectBrowserErrors(page);
+    await page.setViewportSize({ width: 1320, height: 960 });
+    const stageDir = stageApp();
+    await page.goto(`file://${path.join(stageDir, "index.html")}`, { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByRole("heading", { name: /bracket entry workspace/i })).toBeVisible();
+    await expect(page.locator("#build .entry-workspace")).toBeVisible();
+    await expect(page.locator("#review-queue")).toBeVisible();
+    await expect(page.locator("#bracket-tree svg.btree-svg").first()).toBeVisible();
+    await expect(page.locator("#evidence")).toBeVisible();
+    await expect(page.locator("#paths")).toBeVisible();
+    await expect(page.locator("#technical-appendix")).toBeVisible();
+
+    await expect(page.getByText(/Candidate 2 changes/i)).toBeVisible();
+    await expect(page.getByText(/Favorite probability/i).first()).toBeVisible();
+    await expect(page.locator(".watchlist-card").first()).toBeVisible();
+
+    const evidenceJump = page.locator("[data-open-evidence]").first();
+    const evidenceId = await evidenceJump.getAttribute("data-open-evidence");
+    expect(evidenceId).toBeTruthy();
+    await evidenceJump.click();
+    await expect(page.locator(`details[id="${evidenceId}"]`)).toBeVisible();
+    await expect(page.getByTestId("evidence-card")).toBeVisible();
+    await expect(page.getByText(/Overall strength/i).first()).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+
+  test("technical React app covers compare, calibration, backtest, and ensemble diagnostics", async ({
+    page,
+  }) => {
+    const errors = collectBrowserErrors(page);
+    await page.setViewportSize({ width: 1320, height: 960 });
+    const stageDir = stageApp();
+    await page.goto(`file://${path.join(stageDir, "technical.html")}`, { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByRole("heading", { name: /technical bracket dashboard/i })).toBeVisible();
+    await expect(page.getByTestId("compare-workspace")).toBeVisible();
+    await expect(page.getByTestId("ranked-decisions-board")).toBeVisible();
+    await expect(page.getByTestId("candidate-differences-board")).toBeVisible();
+    await expect(page.getByTestId("candidate-differences-table")).toHaveCount(1);
+    await expect(page.getByTestId("live-performance-panel")).toBeVisible();
+    await expect(page.getByTestId("backtest-panel")).toBeVisible();
+    await expect(page.getByTestId("calibration-chart")).toBeVisible();
+    await expect(page.getByTestId("ensemble-diagnostics")).toBeVisible();
+    await page
+      .locator("details.collapsible-panel summary", { hasText: "Championship tiebreaker comparison" })
+      .click();
+    await expect(page.getByTestId("championship-totals")).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+
+  test("synced output app renders the real checked-in payload bundle", async ({ page }) => {
+    const outputAppDir = path.join(repoRoot, "output", "app");
+    for (const requiredFile of ["index.html", "technical.html", "dashboard_payloads.js"]) {
+      expect(fs.existsSync(path.join(outputAppDir, requiredFile))).toBeTruthy();
+    }
+
+    const errors = collectBrowserErrors(page);
+    await page.goto(`file://${path.join(outputAppDir, "index.html")}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /bracket entry workspace/i })).toBeVisible();
+    await expect(page.locator("#build .entry-workspace")).toBeVisible();
+    await expect(page.locator("#review-queue")).toBeVisible();
+
+    await page.goto(`file://${path.join(outputAppDir, "technical.html")}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /technical bracket dashboard/i })).toBeVisible();
+    await expect(page.getByTestId("compare-workspace")).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
+
+  test("payload load failures render visible errors instead of a blank app", async ({ page }) => {
+    const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), "mmbayes-bad-payload-"));
+    fs.cpSync(distDir, stageDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(stageDir, "dashboard_payloads.js"),
+      'window.__MMBAYES_PAYLOADS__ = {"bracket":{"dashboard_schema_version":"9.0.0"},"technical":{"dashboard_schema_version":"9.0.0"}};',
+    );
+
+    await page.goto(`file://${path.join(stageDir, "index.html")}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("alert")).toContainText(/Failed to load dashboard payload/i);
+    await expect(page.getByRole("heading", { name: /bracket dashboard/i })).toBeVisible();
+
+    await page.goto(`file://${path.join(stageDir, "technical.html")}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("alert")).toContainText(/Failed to load dashboard payload/i);
+    await expect(page.getByRole("heading", { name: /technical dashboard/i })).toBeVisible();
+  });
+
+  test("primary bracket controls are keyboard-operable and keep visible focus", async ({ page }) => {
+    const stageDir = stageApp();
+    await page.setViewportSize({ width: 1320, height: 960 });
+    await page.goto(`file://${path.join(stageDir, "index.html")}`, { waitUntil: "domcontentloaded" });
+
+    const candidateTwoToggle = page.locator(".entry-toggle[data-entry-target='candidate-2']");
+    await candidateTwoToggle.focus();
+    await expect(candidateTwoToggle).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-entry-panel='candidate-2']")).toBeVisible();
+
+    const firstEvidenceJump = page
+      .locator(".watchlist-card:not(.is-hidden-by-bucket) .jump-button[data-open-evidence]")
+      .first();
+    await firstEvidenceJump.focus();
+    await expect(firstEvidenceJump).toBeFocused();
+    await page.keyboard.press("Enter");
+    const evidenceId = await firstEvidenceJump.getAttribute("data-open-evidence");
+    expect(evidenceId).toBeTruthy();
+    await expect(page.locator(`details[id="${evidenceId}"]`)).toBeVisible();
   });
 
   test("bracket entry toggles and review markers work without console errors", async ({ page }) => {
@@ -162,7 +321,7 @@ test.describe("static frontend dashboards", () => {
     await expectElementBox(
       page.locator(".watchlist-card__probability .prob-track__lane").first(),
       100,
-      8,
+      28,
     );
 
     const divergenceCell = page.locator("[data-divergence-target-kind='evidence']").first();
@@ -280,5 +439,23 @@ test.describe("static frontend dashboards", () => {
     });
     expectUsefulScreenshot(screenshot);
     expect(errors).toEqual([]);
+  });
+
+  test("first desktop viewport keeps primary workflow visible", async ({ page }) => {
+    const stageDir = stageApp();
+    await page.setViewportSize({ width: 1320, height: 960 });
+
+    await page.goto(`file://${path.join(stageDir, "index.html")}`, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("#build")).toBeVisible();
+    await expectInFirstViewport(page.locator("#build > h2"));
+    await expectInFirstViewport(page.locator(".next-action-panel"));
+
+    await page.goto(`file://${path.join(stageDir, "technical.html")}`, { waitUntil: "domcontentloaded" });
+    await expectInFirstViewport(page.getByTestId("technical-action-summary"));
+    await expect(page.getByTestId("compare-workspace")).toBeVisible();
+    await expectInFirstViewport(
+      page.getByTestId("compare-workspace").getByRole("heading", { name: /compare workspace/i }),
+      1200,
+    );
   });
 });
