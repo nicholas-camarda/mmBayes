@@ -23,9 +23,7 @@ load_dotenv_file(".env", override = FALSE)
 
 config <- load_project_config("config.yml")
 results <- run_tournament_simulation(config)
-runtime_dashboard_dir <- dirname(results$output$dashboard %||% stop_with_message(
-    "run_tournament_simulation() did not return a dashboard path to sync."
-))
+runtime_dashboard_dir <- path.expand(normalize_project_paths(config)$output$path)
 repo_output_dir <- file.path(project_root, "output")
 dashboard_build_metadata <- build_dashboard_build_metadata(
     project_root = project_root,
@@ -79,21 +77,17 @@ if (!is.null(results$output$backtest_summary)) {
 if (!is.null(results$output$candidate_summary)) {
     cat(sprintf("- Candidate brackets: %s\n", results$output$candidate_summary))
 }
-if (!is.null(rendered_dashboards$dashboard)) {
-    cat(sprintf("- Dashboard: %s\n", rendered_dashboards$dashboard))
-}
-cat(sprintf("- Repo dashboard snapshot dir: %s\n", repo_output_dir))
+cat(sprintf("- Dashboard app: %s\n", file.path(runtime_dashboard_dir, "app", "index.html")))
+cat(sprintf("- Repo dashboard app dir: %s\n", file.path(repo_output_dir, "app")))
 for (path in rendered_dashboards$repo_output_files) {
-    cat(sprintf("- Synced snapshot: %s\n", path))
+    cat(sprintf("- Synced app entry: %s\n", path))
 }
 if (!is.null(synced_app_dirs)) {
     for (app_dir in synced_app_dirs) {
         cat(sprintf("- Frontend app synced: %s\n", app_dir))
     }
 }
-if (!is.null(rendered_dashboards$technical_dashboard)) {
-    cat(sprintf("- Technical dashboard: %s\n", rendered_dashboards$technical_dashboard))
-}
+cat(sprintf("- Technical dashboard app: %s\n", file.path(runtime_dashboard_dir, "app", "technical.html")))
 if (!is.null(results$output$model_quality_latest)) {
     cat(sprintf("- Model quality latest: %s\n", results$output$model_quality_latest))
 }

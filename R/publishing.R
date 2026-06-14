@@ -11,8 +11,6 @@
 release_deliverable_manifest <- function(output_dir = NULL) {
     manifest <- c(
         "app",
-        "bracket_dashboard.html",
-        "technical_dashboard.html",
         "bracket_decision_sheet.csv",
         "bracket_matchup_context.csv",
         "candidate_matchup_total_points.csv",
@@ -39,6 +37,25 @@ release_deliverable_manifest <- function(output_dir = NULL) {
     }
 
     c(manifest, candidate_files)
+}
+
+#' Verify that the React dashboard app deliverable is complete
+#'
+#' @param app_dir Path to the app directory.
+#'
+#' @return Invisibly TRUE.
+#' @keywords internal
+assert_dashboard_app_deliverable <- function(app_dir) {
+    required_files <- c("index.html", "technical.html", "dashboard_payloads.js")
+    missing_files <- required_files[!file.exists(file.path(app_dir, required_files))]
+    if (length(missing_files) > 0L) {
+        stop_with_message(sprintf(
+            "React dashboard app deliverable is incomplete at %s. Missing: %s",
+            app_dir,
+            paste(missing_files, collapse = ", ")
+        ))
+    }
+    invisible(TRUE)
 }
 
 #' Copy a file or directory into a destination directory
@@ -93,6 +110,9 @@ publish_release_bundle <- function(config = NULL,
         source <- file.path(output_dir, filename)
         if (!file.exists(source)) {
             stop_with_message(sprintf("Missing deliverable file: %s", source))
+        }
+        if (identical(filename, "app")) {
+            assert_dashboard_app_deliverable(source)
         }
         copy_release_artifact(source, deliverables_dir)
     }, character(1))

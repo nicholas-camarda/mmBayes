@@ -378,16 +378,58 @@ render_probability_track_html <- function(mean_probability, lower_probability, u
     mean_position <- to_percent(mean_probability)
     lower_position <- to_percent(lower_probability)
     upper_position <- to_percent(upper_probability)
+    axis_ticks <- seq(axis_min, axis_max, length.out = 3)
+    tick_lines <- paste(
+        vapply(axis_ticks, function(tick) {
+            tick_position <- to_percent(tick)
+            sprintf(
+                "<span class='prob-track__grid-line' style='left:%.2f%%;'></span>",
+                tick_position
+            )
+        }, character(1)),
+        collapse = ""
+    )
+    scale_labels <- paste(
+        vapply(seq_along(axis_ticks), function(index) {
+            tick <- axis_ticks[[index]]
+            edge_class <- if (index == 1L) {
+                " prob-track__scale-label--start"
+            } else if (index == length(axis_ticks)) {
+                " prob-track__scale-label--end"
+            } else {
+                ""
+            }
+            sprintf(
+                "<span class='prob-track__scale-label%s'>%s</span>",
+                edge_class,
+                html_escape(format_probability(tick))
+            )
+        }, character(1)),
+        collapse = ""
+    )
+    lane_label <- paste0(
+        value_label, " ",
+        format_probability(mean_probability),
+        " with ",
+        tolower(interval_label), " ",
+        format_probability_interval(lower_probability, upper_probability)
+    )
 
     paste0(
-        "<div class='prob-track'>",
+        "<div class='prob-track' style='--track-color:", html_escape(color), ";'>",
         "<div class='prob-track__summary'>",
-        "<div class='prob-track__stat'><span>", html_escape(value_label), "</span><strong>", html_escape(format_probability(mean_probability)), "</strong></div>",
+        "<div class='prob-track__stat prob-track__stat-hero'><span>", html_escape(value_label), "</span><strong>", html_escape(format_probability(mean_probability)), "</strong></div>",
         "<div class='prob-track__stat'><span>", html_escape(interval_label), "</span><strong>", html_escape(format_probability_interval(lower_probability, upper_probability)), "</strong></div>",
         "</div>",
-        "<div class='prob-track__lane'>",
-        "<div class='prob-track__range' style='left:", sprintf("%.2f", lower_position), "%;width:", sprintf("%.2f", max(upper_position - lower_position, 1)), "%;background:", html_escape(color), ";'></div>",
-        "<div class='prob-track__point' style='left:", sprintf("%.2f", mean_position), "%;background:", html_escape(color), ";'></div>",
+        "<div class='prob-track__chart'>",
+        "<div class='prob-track__lane' role='img' aria-label='", html_escape(lane_label), "'>",
+        "<div class='prob-track__grid' aria-hidden='true'>", tick_lines, "</div>",
+        "<div class='prob-track__range' style='left:", sprintf("%.2f", lower_position), "%;width:", sprintf("%.2f", max(upper_position - lower_position, 1.5)), "%;'></div>",
+        "<span class='prob-track__bound prob-track__bound--lower' style='left:", sprintf("%.2f", lower_position), "%;' aria-hidden='true'><em>", html_escape(format_probability(lower_probability)), "</em></span>",
+        "<span class='prob-track__bound prob-track__bound--upper' style='left:", sprintf("%.2f", upper_position), "%;' aria-hidden='true'><em>", html_escape(format_probability(upper_probability)), "</em></span>",
+        "<span class='prob-track__point' style='left:", sprintf("%.2f", mean_position), "%;' aria-hidden='true'></span>",
+        "</div>",
+        "<div class='prob-track__scale' aria-hidden='true'>", scale_labels, "</div>",
         "</div>",
         "</div>"
     )
@@ -928,7 +970,7 @@ dashboard_dark_surface_css <- function() {
         ".toggle-button{background:var(--panel-3);border-color:var(--border);color:var(--text);}.toggle-button.is-active{background:var(--action);border-color:var(--action);color:#03131f;}",
         ".dashboard-table{background:var(--panel);color:var(--text);}.dashboard-table th{background:var(--panel-2);color:var(--text);}.dashboard-table th,.dashboard-table td{border-color:var(--border-soft);}.dashboard-table tr.inspection-primary td{background:rgba(245,158,11,0.12);}.dashboard-table tr.inspection-primary td:first-child{border-left-color:#f59e0b;}.dashboard-table tr.inspection-secondary td{background:rgba(251,113,133,0.1);}.dashboard-table tr.inspection-secondary td:first-child{border-left-color:#fb7185;}",
         ".comparison-board{gap:12px;padding:12px;overflow:visible;}.comparison-board__header{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;color:#cbd5e1;}.board-row{border:1px solid #40536a;border-radius:14px;background:linear-gradient(180deg,rgba(30,41,59,0.76),rgba(17,24,39,0.94));box-shadow:0 10px 24px rgba(0,0,0,0.16);}.board-row:first-of-type{border-top:1px solid #40536a;}",
-        ".prob-track__stat{background:rgba(30,41,59,0.82);border-color:var(--border-soft);}.prob-track__stat span{color:#cbd5e1;}.prob-track__lane{background:#0b1220;border-color:#334155;}.prob-track__point{border-color:#0f172a;}.prob-track__caption strong{color:var(--text);}",
+        ".prob-track__stat{background:rgba(30,41,59,0.82);border-color:var(--border-soft);}.prob-track__stat span{color:#cbd5e1;}.prob-track__stat--primary strong{color:var(--track-color);}.prob-track__lane{background:linear-gradient(180deg,rgba(15,23,42,0.95),rgba(30,41,59,0.92));border-color:#334155;}.prob-track__point{border-color:#f8fafc;}.prob-track__scale-label{color:#cbd5e1;}.prob-track__caption strong{color:var(--text);}",
         ".tech-svg{background:#0b1220;border-color:var(--border);}.tech-svg text[fill='#111827'],.tech-svg text[fill='#1f2937'],.tech-svg text[fill='#57534e'],.tech-svg text[fill='#6b7280']{fill:#cbd5e1 !important;}.tech-svg line,.tech-svg path{stroke-opacity:0.92;}.tech-svg rect[fill='#f8fafc'],.tech-svg rect[fill='#fcfbf7'],.tech-svg rect[fill='#ffffff']{fill:#172033 !important;}",
         ".legend-chip{background:var(--panel-2);border-color:var(--border-soft);color:var(--text);}.dashboard-disclosure__chevron{color:var(--muted);}"
     )
@@ -3726,14 +3768,25 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
         ".board-cell--plot{min-width:0;}",
         ".board-value{font-size:15px;font-weight:700;line-height:1.35;color:#0f172a;overflow-wrap:anywhere;}",
         ".board-note{margin-top:4px;font-size:14px;line-height:1.45;color:#475569;overflow-wrap:anywhere;}",
-        ".prob-track{display:flex;flex-direction:column;gap:10px;min-width:0;}",
-        ".prob-track__summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}",
-        ".prob-track__stat{border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;padding:8px 10px;min-width:0;}",
-        ".prob-track__stat span{display:block;font-size:10px;font-weight:800;line-height:1.2;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;margin-bottom:3px;}",
-        ".prob-track__stat strong{display:block;font-size:15px;line-height:1.25;color:#0f172a;overflow-wrap:anywhere;}",
-        ".prob-track__lane{position:relative;height:22px;border-radius:999px;border:1px solid #dbe4ef;background:linear-gradient(90deg,#f8fafc 0%,#f1f5f9 100%);overflow:visible;}",
-        ".prob-track__range{position:absolute;top:50%;height:6px;transform:translateY(-50%);border-radius:999px;opacity:0.95;}",
-        ".prob-track__point{position:absolute;top:50%;width:16px;height:16px;transform:translate(-50%,-50%);border-radius:999px;border:3px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,0.2);}",
+        ".prob-track{display:flex;flex-direction:column;gap:12px;min-width:0;--track-color:#457b9d;}",
+        ".prob-track__summary{display:grid;grid-template-columns:minmax(0,0.95fr) minmax(0,1.05fr);gap:8px;align-items:stretch;}",
+        ".prob-track__stat{display:flex;flex-direction:column;justify-content:center;gap:4px;min-width:0;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;padding:10px 12px;}",
+        ".prob-track__stat span{display:block;font-size:10px;font-weight:800;line-height:1.2;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;}",
+        ".prob-track__stat strong{display:block;font-size:15px;line-height:1.15;color:#0f172a;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}",
+        ".prob-track__stat--primary strong{font-size:28px;font-weight:800;color:var(--track-color);letter-spacing:-0.02em;}",
+        ".prob-track__stat-hero strong{font-size:28px;font-weight:800;color:var(--track-color);letter-spacing:-0.02em;text-shadow:0 0 18px color-mix(in srgb,var(--track-color) 35%,transparent);}",
+        ".prob-track__chart{display:flex;flex-direction:column;gap:8px;width:100%;}",
+        ".prob-track__lane{position:relative;width:100%;height:42px;border-radius:14px;border:1px solid #dbe4ef;background:linear-gradient(180deg,#f8fafc 0%,#eef2f7 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.65),0 8px 18px rgba(15,23,42,0.08);overflow:visible;}",
+        ".prob-track__grid{position:absolute;inset:6px 0 18px;pointer-events:none;}",
+        ".prob-track__grid-line{position:absolute;top:0;bottom:0;width:1px;transform:translateX(-50%);background:rgba(148,163,184,0.35);}",
+        ".prob-track__range{position:absolute;top:50%;height:18px;transform:translateY(-50%);border-radius:999px;background:color-mix(in srgb,var(--track-color) 52%,transparent);border:1px solid color-mix(in srgb,var(--track-color) 82%,white);box-shadow:0 0 0 1px rgba(15,23,42,0.08),0 0 20px color-mix(in srgb,var(--track-color) 30%,transparent);}",
+        ".prob-track__bound{position:absolute;top:4px;bottom:20px;width:3px;transform:translateX(-50%);border-radius:999px;background:color-mix(in srgb,var(--track-color) 92%,white);box-shadow:0 0 10px color-mix(in srgb,var(--track-color) 40%,transparent);}",
+        ".prob-track__bound em{position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);font-style:normal;font-size:10px;font-weight:700;letter-spacing:0.03em;color:color-mix(in srgb,var(--track-color) 80%,#0f172a);font-variant-numeric:tabular-nums;white-space:nowrap;}",
+        ".prob-track__point{position:absolute;top:50%;width:20px;height:20px;transform:translate(-50%,-50%);border-radius:999px;background:var(--track-color);border:3px solid #fff;box-shadow:0 0 0 1px rgba(15,23,42,0.18),0 0 18px color-mix(in srgb,var(--track-color) 50%,transparent);z-index:1;}",
+        ".prob-track__scale{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;padding:0 2px;}",
+        ".prob-track__scale-label{font-size:10px;font-weight:700;letter-spacing:0.04em;color:#64748b;font-variant-numeric:tabular-nums;white-space:nowrap;}",
+        ".prob-track__scale-label--start{text-align:left;}",
+        ".prob-track__scale-label--end{text-align:right;}",
         ".prob-track__caption{font-size:13px;line-height:1.45;color:#334155;overflow-wrap:anywhere;}",
         ".prob-track__caption strong{color:#111827;}",
         ".prob-track-stack{display:flex;flex-direction:column;gap:12px;}",
@@ -4146,14 +4199,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     render_matchup_comparison <- function(row) {
         team_a_name <- row_value(row, "teamA", row_value(row, "teamA_Team", "Team A"))
         team_b_name <- row_value(row, "teamB", row_value(row, "teamB_Team", "Team B"))
-        feature_specs <- tibble::tibble(
-            Feature = c("Same conference", "Seed", "Barthag logit", "AdjOE", "AdjDE", "WAB", "TOR", "TORD", "ORB", "DRB", "3P%", "3P%D", "Adj T."),
-            team_a_column = c("same_conf", "teamA_Seed", "teamA_barthag_logit", "teamA_AdjOE", "teamA_AdjDE", "teamA_WAB", "teamA_TOR", "teamA_TORD", "teamA_ORB", "teamA_DRB", "teamA_3P%", "teamA_3P%D", "teamA_Adj T."),
-            team_b_column = c("same_conf", "teamB_Seed", "teamB_barthag_logit", "teamB_AdjOE", "teamB_AdjDE", "teamB_WAB", "teamB_TOR", "teamB_TORD", "teamB_ORB", "teamB_DRB", "teamB_3P%", "teamB_3P%D", "teamB_Adj T."),
-            diff_column = c("same_conf", "seed_diff", "barthag_logit_diff", "AdjOE_diff", "AdjDE_diff", "WAB_diff", "TOR_diff", "TORD_diff", "ORB_diff", "DRB_diff", "3P%_diff", "3P%D_diff", "Adj T._diff"),
-            digits = c(0L, 0L, 3L, 1L, 1L, 1L, 3L, 3L, 3L, 3L, 3L, 3L, 1L),
-            preferred_direction = c("neutral", "lower", "higher", "higher", "lower", "higher", "lower", "higher", "higher", "higher", "higher", "lower", "neutral")
-        )
+        feature_specs <- matchup_comparison_feature_specs()
 
         # Translate signed feature differences into a team-facing advantage label.
         favor_label <- function(diff_value, preferred_direction) {
@@ -4195,7 +4241,9 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         })
 
         metric_rows <- tibble::tibble(
-            Feature = feature_specs$Feature,
+            Feature = feature_specs$display_label,
+            Code = feature_specs$code,
+            Definition = feature_specs$definition,
             !!team_a_name := team_a_values,
             !!team_b_name := team_b_values,
             Diff = diff_values,
@@ -4269,9 +4317,17 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
                     ""
                 }
 
+                tooltip <- matchup_feature_tooltip(
+                    row_data$Definition[[1]],
+                    row_data$Code[[1]],
+                    row_data$Feature[[1]]
+                )
+
                 paste0(
                     "<div class='advantage-row advantage-row--", html_escape(direction), "'>",
-                    "<div class='advantage-row__metric'>", html_escape(row_data$Feature[[1]]), "</div>",
+                    "<div class='advantage-row__metric' title='", html_escape(tooltip), "'>",
+                    html_escape(row_data$Feature[[1]]),
+                    "</div>",
                     "<div class='advantage-row__value advantage-row__value--left'>", html_escape(row_data$team_a_display[[1]]), "</div>",
                     "<div class='advantage-track'>",
                     "<div class='advantage-track__center'></div>",
@@ -4287,7 +4343,8 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
 
         paste0(
             "<div class='mini-table-card matchup-comparison-card'>",
-            "<div class='mini-table-title'>Model-facing matchup comparison</div>",
+            "<div class='mini-table-title'>Matchup comparison</div>",
+            "<p class='mini-table-note'>Hover a metric name for the full definition.</p>",
             context_flags_html,
             "<div class='advantage-chart'>",
             "<div class='advantage-chart__header'>",
@@ -5087,7 +5144,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
 
     appendix_links <- paste0(
         "<div class='appendix-links'>",
-        "<a href='", dashboard_preview_url("technical_dashboard.html"), "'>Open technical_dashboard.html</a>",
+        "<a href='", dashboard_preview_url("app/technical.html"), "'>Open technical dashboard</a>",
         "</div>"
     )
 
@@ -5190,7 +5247,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         "<div class='diagnostic-callout'>",
         "<strong>Need more diagnostics?</strong>",
         "<p>The technical dashboard keeps ensemble validation, calibration, backtest, and component diagnostics separate from the bracket workflow.</p>",
-        "<p><a href='", dashboard_preview_url("technical_dashboard.html"), "'>Open technical_dashboard.html</a></p>",
+        "<p><a href='", dashboard_preview_url("app/technical.html"), "'>Open technical dashboard</a></p>",
         "</div>"
     )
 
@@ -5318,15 +5375,9 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".watchlist-card__callout{border:1px solid #e2e8f0;border-radius:14px;padding:10px 12px;background:#f8fafc;}",
         ".watchlist-card__callout span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;font-weight:800;margin-bottom:4px;}",
         ".watchlist-card__callout strong{display:block;font-size:14px;line-height:1.45;font-weight:700;color:#0f172a;}",
-        ".watchlist-card__probability{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#fff;}",
-        ".watchlist-card__probability .prob-track{gap:12px;}",
-        ".watchlist-card__probability .prob-track__summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}",
-        ".watchlist-card__probability .prob-track__stat{display:flex;flex-direction:column;gap:4px;min-width:0;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;padding:9px 10px;}",
-        ".watchlist-card__probability .prob-track__stat span{display:block;font-size:10px;font-weight:800;line-height:1.2;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;}",
-        ".watchlist-card__probability .prob-track__stat strong{display:block;font-size:15px;line-height:1.25;color:#0f172a;overflow-wrap:anywhere;}",
-        ".watchlist-card__probability .prob-track__lane{height:16px;background:#020617;border-color:#334155;}",
-        ".watchlist-card__probability .prob-track__range{height:8px;}",
-        ".watchlist-card__probability .prob-track__point{width:14px;height:14px;border-width:2px;}",
+        ".watchlist-card__probability{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);}",
+        ".watchlist-card__probability .prob-track{gap:10px;}",
+        ".watchlist-card__probability .prob-track__lane{height:36px;}",
         ".collapsed-row{display:none;}",
         ".watchlist-shell:not(.is-expanded) .collapsed-row{display:none;}",
         ".show-more-row{margin-top:12px;}",
@@ -5350,6 +5401,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".team-card__seed{font-weight:800;color:#0f172a;background:#fff;border:1px solid #e7e5e4;border-radius:999px;padding:6px 10px;}",
         ".team-card__meta{margin:8px 0 12px;color:#374151;}",
         ".mini-table-title{text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;}",
+        ".mini-table-note{margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.4;}",
         ".mini-table-card{margin-top:12px;}",
         ".mini-table-card .dashboard-table{min-width:0;}",
         ".matchup-context-flags{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px 0;}",
@@ -5360,7 +5412,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".advantage-chart__header,.advantage-row{display:grid;grid-template-columns:minmax(96px,1.1fr) minmax(70px,0.7fr) minmax(140px,1.2fr) minmax(70px,0.7fr) minmax(90px,0.9fr);gap:10px;align-items:center;}",
         ".advantage-chart__header{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;font-weight:700;padding:0 12px;}",
         ".advantage-row{padding:10px 12px;border:1px solid #e7e5e4;border-radius:14px;background:#fff;}",
-        ".advantage-row__metric{font-weight:700;color:#0f172a;}",
+        ".advantage-row__metric{font-weight:700;color:#0f172a;text-decoration:underline dotted #94a3b8;text-underline-offset:0.18em;cursor:help;}",
         ".advantage-row__value{font-variant-numeric:tabular-nums;color:#1f2937;}",
         ".advantage-row__value--left{text-align:right;}",
         ".advantage-row__value--right{text-align:left;}",
@@ -5428,7 +5480,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
         ".comparison-link-panel__head .panel-caption,.comparison-link-fact p{color:var(--muted);}.comparison-link-fact{background:rgba(15,23,42,0.72);border-color:var(--border-soft);}.comparison-link-fact span{color:#cbd5e1;}.comparison-link-fact strong{color:var(--text);}.comparison-link-button{background:var(--action);border-color:var(--action);color:#03131f;}",
         ".reading-guide__hero,.reading-guide__section,.term-legend{background:linear-gradient(180deg,rgba(17,24,39,0.88),rgba(15,23,42,0.88));border-color:var(--border-soft);box-shadow:none;}.reading-guide__hero{background:linear-gradient(135deg,rgba(14,116,144,0.18),rgba(15,23,42,0.88));}.reading-guide__eyebrow,.guide-label,.term-legend__label{color:#7dd3fc;}.reading-guide__title{color:var(--text);}.reading-guide__lede,.reading-guide__card span,.term-legend__intro,.term-chip span,.term-legend__note{color:#cbd5e1;}.reading-guide__card,.term-chip,.reading-guide__section--legend .legend-chip{background:rgba(15,23,42,0.72);border-color:var(--border-soft);}.reading-guide__card strong{color:var(--text);}.term-chip strong{background:rgba(56,189,248,0.14);border-color:rgba(56,189,248,0.42);color:#bae6fd;}",
         ".divergence-map--route{grid-template-columns:repeat(4,minmax(0,1fr));}.divergence-map-panel{background:linear-gradient(180deg,rgba(17,24,39,0.98),rgba(15,23,42,0.98));overflow:hidden;}.divergence-round{background:rgba(15,23,42,0.92);border-color:var(--border-soft);}.divergence-round--late{background:rgba(30,41,59,0.92);border-color:rgba(245,158,11,0.65);box-shadow:inset 0 0 0 1px rgba(245,158,11,0.16);}.divergence-round__title{color:var(--text);}.divergence-round__note{color:#cbd5e1;}.divergence-cell{background:#0f172a;border-color:var(--border-soft);color:var(--text);}.divergence-cell.is-active{background:rgba(14,116,144,0.28);border-color:#38bdf8;}.divergence-cell--late.is-active{background:rgba(68,64,60,0.74);border-color:#f59e0b;box-shadow:0 0 0 1px rgba(245,158,11,0.32);}.divergence-cell--empty{background:rgba(2,6,23,0.42);border-color:#334155;}.divergence-cell__region{color:#cbd5e1;}.divergence-cell__count{color:var(--text);}.divergence-cell__note{color:#dbeafe;}.divergence-cell--empty .divergence-cell__count{color:#94a3b8;}.divergence-cell--empty .divergence-cell__note{color:#cbd5e1;}.divergence-pill--winner{background:rgba(56,189,248,0.24);color:#e0f2fe;}.divergence-pill--path{background:rgba(245,158,11,0.22);color:#fde68a;}.divergence-pill--reference{background:rgba(167,139,250,0.24);color:#ede9fe;}.divergence-pill--quiet{background:rgba(100,116,139,0.34);color:#f8fafc;}",
-        ".dashboard-table th{background:#172033;color:var(--text);}.dashboard-table th,.dashboard-table td{border-color:var(--border-soft);}.table-shell{background:var(--panel);border-color:var(--border);}.prob-track__stat{background:rgba(30,41,59,0.82);border-color:var(--border-soft);}.prob-track__stat span{color:#cbd5e1;}.prob-track__stat strong{color:var(--text);}.prob-track__lane{background:#0b1220;border-color:#334155;}.prob-track__point{border-color:#0f172a;}.prob-track__caption{color:var(--muted);}.prob-track__caption strong{color:var(--text);}.evidence-panel__lede,.evidence-panel__implication{background:rgba(15,23,42,0.72);border-color:var(--border-soft);color:#cbd5e1;}.evidence-panel__lede strong,.evidence-panel__implication strong{color:var(--text);}.team-card__role--favorite{background:rgba(56,189,248,0.18);color:#bae6fd;}.team-card__role--underdog{background:rgba(245,158,11,0.18);color:#fde68a;}.team-card__seed{background:#0f172a;border-color:var(--border);color:var(--text);}.team-card__meta,.advantage-row__value,.advantage-row__favor,.btree-legend-item{color:var(--muted);}.advantage-row__metric,.context-flag strong{color:var(--text);}.context-flag span{color:var(--muted);}.advantage-track{background:#0b1220;}.advantage-track__center{background:#475569;}.comparison-details > summary{color:var(--text);}.btree-svg{background:#0b1220;border-radius:12px;}.btree-edge--route-diff{filter:drop-shadow(0 0 4px rgba(245,158,11,0.45));}.btree-node--route-diff rect{filter:drop-shadow(0 0 5px rgba(245,158,11,0.45));}.btree-legend-line{display:inline-block;width:22px;height:3px;border-radius:999px;background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.5);}#btree-tooltip{background:#020617;color:var(--text);border:1px solid var(--border);}",
+        ".dashboard-table th{background:#172033;color:var(--text);}.dashboard-table th,.dashboard-table td{border-color:var(--border-soft);}.table-shell{background:var(--panel);border-color:var(--border);}.prob-track__stat{background:rgba(30,41,59,0.82);border-color:var(--border-soft);}.prob-track__stat span{color:#cbd5e1;}.prob-track__stat strong{color:var(--text);}.prob-track__stat--primary strong{color:var(--track-color);}.prob-track__lane{background:linear-gradient(180deg,rgba(15,23,42,0.95),rgba(30,41,59,0.92));border-color:#334155;}.prob-track__point{border-color:#f8fafc;}.prob-track__scale-label{color:#cbd5e1;}.prob-track__caption{color:var(--muted);}.prob-track__caption strong{color:var(--text);}.evidence-panel__lede,.evidence-panel__implication{background:rgba(15,23,42,0.72);border-color:var(--border-soft);color:#cbd5e1;}.evidence-panel__lede strong,.evidence-panel__implication strong{color:var(--text);}.team-card__role--favorite{background:rgba(56,189,248,0.18);color:#bae6fd;}.team-card__role--underdog{background:rgba(245,158,11,0.18);color:#fde68a;}.team-card__seed{background:#0f172a;border-color:var(--border);color:var(--text);}.team-card__meta,.advantage-row__value,.advantage-row__favor,.btree-legend-item{color:var(--muted);}.advantage-row__metric,.context-flag strong{color:var(--text);}.context-flag span{color:var(--muted);}.advantage-track{background:#0b1220;}.advantage-track__center{background:#475569;}.comparison-details > summary{color:var(--text);}.btree-svg{background:#0b1220;border-radius:12px;}.btree-edge--route-diff{filter:drop-shadow(0 0 4px rgba(245,158,11,0.45));}.btree-node--route-diff rect{filter:drop-shadow(0 0 5px rgba(245,158,11,0.45));}.btree-legend-line{display:inline-block;width:22px;height:3px;border-radius:999px;background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,0.5);}#btree-tooltip{background:#020617;color:var(--text);border:1px solid var(--border);}",
         "@media (max-width: 1024px){.page{padding:20px 18px 40px;}.hero,.section{padding:18px;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary,.divergence-map-panel__head{flex-wrap:wrap;}.candidate-card__facts,.summary-strip,.entry-summary-strip,.comparison-link-facts{grid-template-columns:repeat(2,minmax(0,1fr));}.candidate-card__links,.appendix-links,.jump-nav,.watchlist-toolbar,.filter-toolbar,.bracket-tree-controls{gap:8px;}.table-shell .dashboard-table{min-width:680px;}}",
         "@media (max-width: 880px){.page{padding:16px 14px 36px;}.hero,.section{padding:16px;}.section-grid,.candidate-grid,.watchlist-shell,.team-grid,.evidence-summary-grid,.divergence-map{grid-template-columns:1fr;}.entry-grid{grid-template-columns:1fr;grid-template-areas:'east' 'west' 'south' 'midwest' 'national' 'unassigned';}.candidate-card__facts,.summary-strip,.entry-summary-strip,.comparison-link-facts{grid-template-columns:repeat(2,minmax(0,1fr));}.table-shell .dashboard-table{min-width:620px;}.btree-svg{min-width:900px;}.advantage-chart__header{display:none;}.advantage-row{grid-template-columns:repeat(2,minmax(0,1fr));}.advantage-row__metric,.advantage-track,.advantage-row__favor{grid-column:1 / -1;}.advantage-row__value--left{text-align:left;}.advantage-row__value--right{text-align:right;}}",
         "@media (max-width: 640px){.page{padding:14px 12px 28px;}h1{font-size:29px;}h2{font-size:21px;}h3{font-size:17px;}.hero,.section,.candidate-card,.watchlist-card,.evidence-panel,.path-panel,.mini-table-card,.status-panel,.diagnostic-callout{padding:14px;}.hero-meta{display:none;}.jump-nav{margin-left:-4px;margin-right:-4px;padding:8px 4px;}.jump-nav a{white-space:nowrap;flex:0 0 auto;}.next-action-panel p,.next-action-grid{display:none;}.watchlist-toolbar,.filter-toolbar,.candidate-card__links,.appendix-links,.bracket-tree-controls,.entry-controls{overflow-x:auto;flex-wrap:nowrap;align-items:center;}.filter-chip,.show-more-button,.jump-button,.btree-toggle,.entry-toggle{justify-content:center;white-space:nowrap;}.candidate-card__head,.watchlist-card__head,.evidence-panel__summary,.comparison-link-panel__head{flex-direction:column;align-items:flex-start;}.comparison-link-button{width:100%;}.comparison-link-facts,.candidate-card__facts,.summary-strip,.entry-summary-strip{grid-template-columns:1fr;}.entry-summary-item{border-right:0;border-bottom:1px solid var(--border-soft);padding:0 0 10px;}.entry-summary-item:last-child{border-bottom:0;padding-bottom:0;}.entry-grid{grid-template-columns:1fr;}.entry-pick{grid-template-columns:minmax(0,1fr) auto;align-items:center;}.table-shell .dashboard-table{min-width:560px;}.btree-svg{min-width:760px;}.candidate-card__mini{font-size:18px;}}"

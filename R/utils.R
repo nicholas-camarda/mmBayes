@@ -14,14 +14,14 @@ stop_with_message <- function(message) {
     stop(message, call. = FALSE)
 }
 
-#' Return the dashboard HTML file names used across runtime and repo sync flows
+#' Return the React dashboard app HTML paths used across sync flows
 #'
 #' @return A character vector of dashboard HTML file names.
 #' @keywords internal
 dashboard_html_manifest <- function() {
     c(
-        "bracket_dashboard.html",
-        "technical_dashboard.html"
+        file.path("app", "index.html"),
+        file.path("app", "technical.html")
     )
 }
 
@@ -51,6 +51,7 @@ sync_dashboard_html_files <- function(source_dir,
         if (!file.exists(source_path)) {
             stop_with_message(sprintf("Missing dashboard file: %s", source_path))
         }
+        dir.create(dirname(destination_path), recursive = TRUE, showWarnings = FALSE)
         copied <- file.copy(source_path, destination_path, overwrite = TRUE)
         if (!isTRUE(copied)) {
             stop_with_message(sprintf("Failed to sync dashboard file from %s to %s", source_path, destination_path))
@@ -122,17 +123,15 @@ patch_app_html_payload_cache_bust <- function(app_dir, token) {
 #' @param runtime_output_dir Runtime output directory holding payload artifacts.
 #' @param repo_output_dir Optional tracked repo output directory.
 #'
-#' @return Invisibly, the synced app directories, or NULL when skipped.
+#' @return Invisibly, the synced app directories.
 #' @keywords internal
 sync_frontend_app <- function(project_root, runtime_output_dir, repo_output_dir = NULL) {
     dist_dir <- file.path(project_root, "frontend", "dist")
     if (!dir.exists(dist_dir)) {
-        message(
-            "Frontend app build not found at frontend/dist; skipping app sync. ",
-            "Run `npm install && npm run build` inside frontend/ to enable the ",
-            "TypeScript dashboards. Legacy R-rendered dashboards are unaffected."
-        )
-        return(invisible(NULL))
+        stop_with_message(paste0(
+            "Frontend app build not found at frontend/dist. ",
+            "Run `cd frontend && npm install && npm run build` before dashboard publication."
+        ))
     }
 
     payload_js <- file.path(runtime_output_dir, "dashboard_payloads.js")
@@ -680,6 +679,93 @@ build_divergence_map_rows <- function(matchup_context_rows, candidate_delta_rows
 #' @keywords internal
 pre_tournament_feature_columns <- function() {
     c("barthag_logit", "AdjOE", "AdjDE", "WAB", "TOR", "TORD", "ORB", "DRB", "3P%", "3P%D", "Adj T.")
+}
+
+#' Feature metadata for matchup comparison charts in dashboards
+#'
+#' @return A tibble with display labels, Torvik column codes, definitions, and
+#'   column mappings used by the evidence drawer comparison chart.
+#' @keywords internal
+matchup_comparison_feature_specs <- function() {
+    tibble::tibble(
+        display_label = c(
+            "Same conference",
+            "Seed",
+            "Overall strength",
+            "Adj. offense",
+            "Adj. defense",
+            "Wins above bubble",
+            "Turnover rate",
+            "Forced turnovers",
+            "Off. rebounding",
+            "Def. rebounding",
+            "3P shooting",
+            "3P defense",
+            "Adj. tempo"
+        ),
+        code = c(
+            "same_conf",
+            "Seed",
+            "Barthag logit",
+            "AdjOE",
+            "AdjDE",
+            "WAB",
+            "TOR",
+            "TORD",
+            "ORB",
+            "DRB",
+            "3P%",
+            "3P%D",
+            "Adj T."
+        ),
+        definition = c(
+            "Whether both teams share a conference this season.",
+            "Tournament seed. Lower numbers are stronger on paper.",
+            "Logit-transformed Barthag rating summarizing overall team strength.",
+            "Adjusted offensive efficiency (points scored per 100 possessions).",
+            "Adjusted defensive efficiency allowed. Lower is better.",
+            "Torvik wins above bubble — resume quality vs the tournament field.",
+            "Team turnover rate. Lower is better on offense.",
+            "Opponent turnover rate forced by this defense.",
+            "Offensive rebounding rate.",
+            "Defensive rebounding rate.",
+            "Three-point make rate.",
+            "Opponent three-point percentage allowed. Lower is better.",
+            "Adjusted pace (possessions per 40 minutes)."
+        ),
+        team_a_column = c(
+            "same_conf", "teamA_Seed", "teamA_barthag_logit", "teamA_AdjOE", "teamA_AdjDE", "teamA_WAB",
+            "teamA_TOR", "teamA_TORD", "teamA_ORB", "teamA_DRB", "teamA_3P%", "teamA_3P%D", "teamA_Adj T."
+        ),
+        team_b_column = c(
+            "same_conf", "teamB_Seed", "teamB_barthag_logit", "teamB_AdjOE", "teamB_AdjDE", "teamB_WAB",
+            "teamB_TOR", "teamB_TORD", "teamB_ORB", "teamB_DRB", "teamB_3P%", "teamB_3P%D", "teamB_Adj T."
+        ),
+        diff_column = c(
+            "same_conf", "seed_diff", "barthag_logit_diff", "AdjOE_diff", "AdjDE_diff", "WAB_diff",
+            "TOR_diff", "TORD_diff", "ORB_diff", "DRB_diff", "3P%_diff", "3P%D_diff", "Adj T._diff"
+        ),
+        digits = c(0L, 0L, 3L, 1L, 1L, 1L, 3L, 3L, 3L, 3L, 3L, 3L, 1L),
+        preferred_direction = c(
+            "neutral", "lower", "higher", "higher", "lower", "higher",
+            "lower", "higher", "higher", "higher", "higher", "lower", "neutral"
+        )
+    )
+}
+
+#' Build hover text for a matchup comparison metric
+#'
+#' @param definition Plain-language metric definition.
+#' @param code Torvik / model column name.
+#' @param display_label Label shown in the comparison chart.
+#'
+#' @return Tooltip text.
+#' @keywords internal
+matchup_feature_tooltip <- function(definition, code, display_label) {
+    if (identical(code, display_label)) {
+        return(definition)
+    }
+    paste0(definition, " Torvik column: ", code, ".")
 }
 
 #' List betting-derived matchup predictor columns
@@ -2987,6 +3073,9 @@ save_decision_outputs <- function(bracket_year, candidates, output_dir = default
         championship_tiebreaker_summary = if (!is.null(total_points_predictions)) tiebreaker_summary_path else NULL,
         championship_tiebreaker_distribution = if (!is.null(total_points_predictions)) championship_distribution_path else NULL,
         matchup_total_points = if (!is.null(total_points_predictions)) matchup_totals_path else NULL,
+        bracket_payload = dashboard_outputs$bracket_payload,
+        technical_payload = dashboard_outputs$technical_payload,
+        payload_js = dashboard_outputs$payload_js,
         model_quality_source_label = dashboard_outputs$model_quality_source_label %||% NULL,
         model_quality_source_path = dashboard_outputs$model_quality_source_path %||% NULL,
         model_quality_used_cached_quality = isTRUE(dashboard_outputs$model_quality_used_cached_quality),
@@ -3049,44 +3138,15 @@ write_dashboard_outputs <- function(bracket_year,
         require_exact_match = TRUE
     )
 
-    dashboard_path <- file.path(output_dir, "bracket_dashboard.html")
-    technical_dashboard_path <- file.path(output_dir, "technical_dashboard.html")
-    retired_comparison_dashboard_path <- file.path(output_dir, "model_comparison_dashboard.html")
-    if (file.exists(retired_comparison_dashboard_path)) {
-        unlink(retired_comparison_dashboard_path)
+    retired_dashboard_paths <- file.path(output_dir, c(
+        "bracket_dashboard.html",
+        "technical_dashboard.html",
+        "model_comparison_dashboard.html"
+    ))
+    existing_retired_paths <- retired_dashboard_paths[file.exists(retired_dashboard_paths)]
+    if (length(existing_retired_paths) > 0L) {
+        unlink(existing_retired_paths)
     }
-
-    writeLines(
-        create_bracket_dashboard_html(
-            bracket_year = bracket_year,
-            decision_sheet = decision_sheet,
-            candidates = candidates,
-            current_teams = current_teams,
-            dashboard_context = dashboard_context,
-            backtest = backtest,
-            play_in_resolution = play_in_resolution,
-            total_points_predictions = total_points_predictions,
-            model_quality_context = model_quality_context,
-            model_overview = model_overview,
-            model_comparison = model_comparison
-        ),
-        dashboard_path
-    )
-    writeLines(
-        create_technical_dashboard_html(
-            bracket_year = bracket_year,
-            decision_sheet = decision_sheet,
-            candidates = candidates,
-            backtest = backtest,
-            total_points_predictions = total_points_predictions,
-            play_in_resolution = play_in_resolution,
-            model_quality_context = model_quality_context,
-            live_performance = live_performance,
-            model_overview = model_overview,
-            model_comparison = model_comparison
-        ),
-        technical_dashboard_path
-    )
 
     payload_paths <- write_dashboard_payloads(
         bracket_payload = build_bracket_dashboard_payload(
@@ -3113,8 +3173,8 @@ write_dashboard_outputs <- function(bracket_year,
     )
 
     list(
-        dashboard = dashboard_path,
-        technical_dashboard = technical_dashboard_path,
+        dashboard = NULL,
+        technical_dashboard = NULL,
         model_comparison_dashboard = NULL,
         bracket_payload = payload_paths$bracket,
         technical_payload = payload_paths$technical,
@@ -3129,10 +3189,10 @@ write_dashboard_outputs <- function(bracket_year,
 #' Regenerate dashboard HTML files from a saved full results bundle
 #'
 #' @param results A result bundle returned by [run_tournament_simulation()].
-#' @param output_dir Directory used for runtime dashboard HTML files.
-#' @param repo_output_dir Optional repo `output/` directory for synced HTML copies.
+#' @param output_dir Directory used for runtime dashboard payload files.
+#' @param repo_output_dir Deprecated; app syncing is handled by `sync_frontend_app()`.
 #'
-#' @return A list describing the runtime dashboard paths and any synced repo files.
+#' @return A list describing the runtime dashboard payload paths.
 #' @keywords internal
 regenerate_dashboard_outputs_from_results <- function(results,
                                                       output_dir = default_runtime_output_root(),
@@ -3180,16 +3240,7 @@ regenerate_dashboard_outputs_from_results <- function(results,
         dashboard_build_metadata = dashboard_build_metadata
     )
 
-    synced_repo_files <- if (!is.null(repo_output_dir)) {
-        sync_dashboard_html_files(
-            source_dir = output_dir,
-            destination_dir = repo_output_dir
-        )
-    } else {
-        character(0)
-    }
-
-    c(runtime_outputs, list(repo_output_files = unname(synced_repo_files)))
+    c(runtime_outputs, list(repo_output_files = character(0)))
 }
 
 #' Regenerate dashboard HTML files from the saved full results bundle on disk

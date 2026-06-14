@@ -32,15 +32,16 @@ rendered <- regenerate_dashboards_from_saved_results(
 )
 synced_app_dirs <- sync_frontend_app(
     project_root = project_root,
-    runtime_output_dir = dirname(rendered$dashboard),
+    runtime_output_dir = path.expand(normalize_project_paths(config)$output$path),
     repo_output_dir = repo_output_dir
 )
 
 cat(sprintf("Loaded cached results bundle: %s\n", rendered$results_bundle_path))
-cat("Regenerated runtime dashboards:\n")
-cat(sprintf("- %s\n", rendered$dashboard))
-cat(sprintf("- %s\n", rendered$technical_dashboard))
-cat("Synced tracked repo dashboards:\n")
+cat("Regenerated runtime dashboard payloads:\n")
+cat(sprintf("- %s\n", rendered$bracket_payload))
+cat(sprintf("- %s\n", rendered$technical_payload))
+cat(sprintf("- %s\n", rendered$payload_js))
+cat("Synced tracked repo dashboard app entries:\n")
 for (path in rendered$repo_output_files) {
     cat(sprintf("- %s\n", path))
 }

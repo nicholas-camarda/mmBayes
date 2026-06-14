@@ -409,7 +409,7 @@ write_report <- function(report_path, summary_tbl, yearly_tbl, gate_tbl, paramet
         "",
         sprintf("Gate result: **%s**", if (isTRUE(gate_passed)) "PASS" else "FAIL"),
         "",
-        "This evaluator is isolated from production configuration, primary simulation routing, dashboard generation, saved-result schemas, publishing, release manifests, product-facing documentation, and tracked HTML snapshots.",
+        "This evaluator is isolated from production configuration, primary simulation routing, dashboard generation, saved-result schemas, publishing, release manifests, product-facing documentation, and tracked React dashboard app outputs.",
         "",
         "The learned ensemble is evaluated with leave-one-holdout-year-out combiner fitting over real rolling holdout predictions. The component models are fit on historical years preceding each holdout year; the combiner for a given holdout year is fit only on other holdout years' out-of-fold component predictions.",
         "",
