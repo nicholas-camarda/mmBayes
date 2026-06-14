@@ -24,10 +24,22 @@ describe("BracketApp", () => {
     expect(build.compareDocumentPosition(review) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("renders bracket entry picks with visible review and ready states", () => {
+    render(<BracketApp payload={fixture} />);
+
+    expect(document.querySelectorAll(".entry-pick").length).toBeGreaterThan(20);
+    expect(document.querySelectorAll(".entry-pick--review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ready to enter").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Review" }).length).toBeGreaterThan(0);
+  });
+
   it("renders entry workspace, review queue, and decision sheet from a full payload", () => {
     render(<BracketApp payload={fixture} />);
     expect(screen.getByRole("heading", { name: /bracket entry workspace/i })).toBeInTheDocument();
+    expect(screen.getByText(/Candidate Recommendations/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /review queue/i })).toBeInTheDocument();
+    expect(screen.getByText(/Matchup Evidence/i)).toBeInTheDocument();
+    expect(screen.getByText(/Full candidate paths/i)).toBeInTheDocument();
     expect(screen.getByTestId("decision-sheet")).toBeInTheDocument();
     expect(screen.getByLabelText("Candidate entry selector")).toBeInTheDocument();
     expect(screen.getByLabelText("Review queue board")).toBeInTheDocument();
