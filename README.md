@@ -1,138 +1,81 @@
 # mmBayes
 
-An R-based NCAA tournament bracket lab. Turns pre-tournament team data and historical results into Bayesian win probabilities, ranked bracket candidates, and review artifacts for manual entry.
+Bayesian NCAA tournament bracket prediction and decision-support toolkit.
 
-## Table of Contents
-
-- [Preview](#preview)
-- [Quick Start](#quick-start)
-- [Outputs](#outputs)
-- [Commands](#commands)
-- [How It Works](#how-it-works)
-- [Model Details](#model-details)
-- [Repository Layout](#repository-layout)
-- [Documentation](#documentation)
+Turns pre-tournament team data and historical game results into win probabilities, ranked bracket candidates, and an interactive dashboard for reviewing the hardest decisions before you lock in your entry.
 
 ---
 
 ## Preview
 
-This repo is meant to produce bracket-entry materials you can review quickly in a browser or spreadsheet.
+**[Open the bracket dashboard](https://nicholas-camarda.github.io/mmBayes/output/app/index.html)**
+&nbsp;·&nbsp;
+**[Technical diagnostics](https://nicholas-camarda.github.io/mmBayes/output/app/technical.html)**
 
-Open the published bracket dashboard directly:
+The dashboard answers three questions fast:
+1. What are Candidate 1 and Candidate 2?
+2. Which evidence drives the key decisions?
+3. Which matchups deserve another look before you trust the entries?
 
-[Open the bracket dashboard](https://nicholas-camarda.github.io/mmBayes/output/app/index.html)
-
-The [dashboard hub](https://nicholas-camarda.github.io/mmBayes/) links to the bracket and technical apps. The published app loads the last synced payload snapshot from `output/app/` (real tournament data after `regenerate_and_sync_dashboards.R` or a full simulation run—not the Vitest fixture payload).
-
-The authoritative full run now refreshes the tracked repo dashboard snapshot automatically, so a successful `Rscript scripts/run_simulation.R` updates both the runtime HTML bundle and the GitHub Pages source files under `output/`.
-
-If you changed only dashboard rendering code and want a fast refresh from the cached full results bundle, run:
-
-`Rscript scripts/regenerate_and_sync_dashboards.R`
-
-The main review loop usually looks like this:
-
-1. open the checked-in main dashboard snapshot under `output/` to build the two entries and review the evidence trail
-2. scan `bracket_decision_sheet.csv` in the configured runtime output directory for the hardest decisions first
-3. use the generated `bracket_candidate_{id}.csv` files in the configured runtime output directory if you want the underlying pick paths; the default workflow currently writes Candidate 1 and Candidate 2
-4. check the status banner to see whether First Four slots are still simulated or already final
-
-The main dashboard is designed to answer three jobs fast: what Candidate 1 and Candidate 2 are, which evidence drives the key decisions, and which matchups deserve another look before you trust the entries.
-Live tournament commentary is separate from the prediction-time inputs: First Four results can resolve the bracket path, while completed Round of 64+ games are tracked for monitoring and dashboard commentary only.
-
-Optional diagnostics:
-
-- [Technical dashboard](https://nicholas-camarda.github.io/mmBayes/output/app/technical.html) - compare boards, calibration, and backtest detail
-
-## Working Roots
-
-- Local source checkout
-- Configured runtime output directory for live runs, logs, caches, and generated artifacts
-- Configured synced project home for canonical input data and dated published releases
-
-The checkout is the working tree. The synced project home holds the canonical input data and published release bundles. The runtime output directory stays available for live generated outputs and scratch artifacts. Maintainer-specific absolute paths belong in internal docs such as `AGENTS.md`, not in the public README.
+---
 
 ## Quick Start
 
 ```sh
-# 1. Refresh the canonical data files
+# 1. Refresh canonical data
 Rscript scripts/update_data.R
 
-# If the script ends with "Refresh status: Success", continue normally.
-# If it ends with "Refresh status: Degraded success", you can still continue,
-# but review the listed warnings and the refresh log first.
-# If it fails, do not continue to simulation until the refresh error is fixed.
-
-# 2. Run the full simulation and generate all outputs
+# 2. Run the full pipeline (fit models, backtest, simulate, export)
 Rscript scripts/run_simulation.R
-
-# This writes the live dashboard bundle to the configured runtime output directory
-# and syncs the React app under `output/app/`.
-# Open `app/index.html` in that directory first.
-# Expect this step to take longer than the refresh step because it fits/loads models,
-# runs the backtest workflow, and then renders the dashboard bundle.
 ```
 
-Then open `app/index.html` from the configured runtime output directory in your browser.
+Open `output/app/index.html` in your browser. The dashboard loads the latest simulation payload automatically.
 
-For dashboard or CSS/layout iteration after the full results bundle already exists:
+For dashboard-only iteration when models haven't changed:
 
 ```sh
-# 1. Run the authoritative full simulation when model/data inputs change
-Rscript scripts/run_simulation.R
-
-# 2. Edit the dashboard rendering code
-
-# 3. Regenerate only the dashboard HTML from the cached results bundle
 Rscript scripts/regenerate_and_sync_dashboards.R
 ```
 
-Then scan `bracket_decision_sheet.csv` in the configured runtime output directory to identify the highest-leverage picks before filling out your entry.
-The pipeline writes its live outputs under the configured runtime output directory. The tracked dashboard app under `output/app/` is the GitHub Pages surface, not the live run directory and not the CSV/TXT source of truth. `scripts/run_simulation.R` syncs the React app under `output/app/` after a successful full run. Publish scripts can copy approved runtime deliverables into the configured synced project home when you want a shared release bundle.
+Then review `bracket_decision_sheet.csv` in your runtime output directory — it ranks picks by leverage so you can focus on the highest-impact decisions first.
 
 ---
 
 ## Outputs
 
-After a pipeline run the following artifacts are generated in the configured runtime output directory. The repository tracks the React dashboard app under `output/app/` for GitHub Pages. CSV, TXT, RDS, cache, and log artifacts should be read from the runtime output directory or from a dated release bundle.
+All artifacts are written to your configured runtime output directory. The repository tracks the dashboard app under `output/app/` for GitHub Pages.
 
-### Primary Dashboard (React app)
+### Dashboard
 
 | File | Description |
 |------|-------------|
-| [output/app/index.html](https://nicholas-camarda.github.io/mmBayes/output/app/index.html) | Primary bracket entry workspace |
-| [output/app/technical.html](https://nicholas-camarda.github.io/mmBayes/output/app/technical.html) | Compare boards, live monitoring, calibration, and backtest detail |
+| [`output/app/index.html`](https://nicholas-camarda.github.io/mmBayes/output/app/index.html) | Bracket entry workspace |
+| [`output/app/technical.html`](https://nicholas-camarda.github.io/mmBayes/output/app/technical.html) | Compare boards, calibration, backtest, and ensemble diagnostics |
 
 ### Decision Artifacts (CSV)
 
 | File | Description |
 |------|-------------|
-| `bracket_decision_sheet.csv` | Ranked picks sorted by leverage - start here |
-| `bracket_matchup_context.csv` | Enriched matchup evidence used by the dashboard |
-| `bracket_candidate_{id}.csv` | One CSV per retained bracket candidate |
+| `bracket_decision_sheet.csv` | Ranked picks by leverage — start here |
+| `bracket_matchup_context.csv` | Enriched matchup evidence |
+| `bracket_candidate_{id}.csv` | One CSV per bracket candidate |
 | `candidate_matchup_total_points.csv` | Matchup-level total-points support |
 | `championship_tiebreaker_summary.csv` | Championship tiebreaker summary |
 | `championship_tiebreaker_distribution.csv` | Full tiebreaker score distribution |
-
-Release publishing includes every generated `bracket_candidate_{id}.csv` file found in the runtime output directory for that run. The exact deliverable contract is defined by `save_decision_outputs()` and `release_deliverable_manifest()`.
 
 ### Summaries (TXT)
 
 | File | Description |
 |------|-------------|
-| `tournament_sim_candidate_brackets.txt` | Text summary of all candidate brackets |
-| `tournament_sim_model_summary.txt` | Fitted model coefficient summary |
-| `tournament_sim_backtest_summary.txt` | Rolling backtest accuracy report |
-| `bracket_candidates.txt` | Concise candidate bracket listing |
+| `tournament_sim_candidate_brackets.txt` | All candidate brackets |
+| `tournament_sim_model_summary.txt` | Fitted model coefficients |
+| `tournament_sim_backtest_summary.txt` | Rolling backtest accuracy |
+| `bracket_candidates.txt` | Concise candidate listing |
 
-### Heavy Artifacts (ignored by git)
+### Runtime Artifacts
 
-- `tournament_sim.rds` - full simulation bundle
-- `bracket_candidates.rds` - serialized bracket candidates
-- `model_cache/` - cached model fits
-- `model_quality/` - model-quality snapshots
-- other non-deliverable runtime artifacts - scratch outputs outside the supported `master` release contract
+These are generated in the runtime output directory and git-ignored:
+`tournament_sim.rds`, `bracket_candidates.rds`, `model_cache/`, `model_quality/`, and run logs.
 
 ---
 
@@ -140,57 +83,13 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 
 | Command | Purpose |
 |---------|---------|
-| `Rscript scripts/run_simulation.R` | Authoritative full pipeline: fit, backtest, simulate, compare, export, and sync the tracked React dashboard app |
-| `Rscript scripts/update_data.R` | Refresh canonical data files from source |
-| `Rscript scripts/run_bracket_candidates.R` | Lighter rerun without the full backtest, but it still fits or reloads models and regenerates candidates |
-| `Rscript scripts/regenerate_and_sync_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds the app from the saved full results bundle and syncs repo `output/app/` copies |
-| `Rscript scripts/data_quality_check.R` | Data-quality validation |
-| `Rscript scripts/publish_release.R` | Copy approved deliverables into the dated release folder under the configured synced project home |
-| `Rscript scripts/publish_github_pages.R` | Internal plumbing helper that copies an already-rendered dashboard app into tracked repo `output/app/`; not part of the normal user workflow |
-
-Notes:
-
-- `scripts/run_simulation.R` and `scripts/run_bracket_candidates.R` load `.env` when present via `load_dotenv_file()`.
-- Logs are written under the configured runtime output directory's `logs/` subdirectory; full simulation logs are uniquely timestamped per run.
-- `scripts/run_simulation.R` syncs the tracked React dashboard app after a successful full run so the committed `output/app/` files stay aligned with the latest runtime dashboard bundle.
-- `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_and_sync_dashboards.R` when the saved full results bundle already exists.
-- `scripts/publish_github_pages.R` is internal plumbing. It does not regenerate dashboards and should only copy a bundle you already know is the right one.
-- `scripts/publish_release.R` publishes from the runtime output directory, not the cloud output tree, and includes every generated `bracket_candidate_{id}.csv` file in that run's output.
-- Dated releases contain a `deliverables/` folder and a plain-text manifest; non-deliverable runtime artifacts are not part of the release contract.
-- `Rscript tests/testthat.R` is the authoritative branch-health check for `master`.
-
-### TypeScript dashboard frontend
-
-The R pipeline emits versioned JSON payloads
-(`bracket_dashboard_payload.json`, `technical_dashboard_payload.json`,
-schema v1.1.0, contracts in `inst/schemas/`) and syncs a static React + Vite
-frontend in `frontend/` to `output/app/`. The React app is the dashboard
-surface for bracket entry and technical diagnostics.
-
-```sh
-cd frontend && npm install && npm run build
-Rscript scripts/regenerate_and_sync_dashboards.R
-open output/app/index.html
-```
-
-**Frontend development and tests:**
-
-```sh
-cd frontend && npm install
-npm run build          # production bundle to frontend/dist/
-npm test               # Vitest component tests
-cd ..
-npm test               # Playwright interaction tests (e2e/frontend_app.spec.cjs)
-npm run test:visual    # Playwright visual regression (e2e/frontend_visual.spec.cjs)
-npm test -- e2e/frontend_visual.spec.cjs --update-snapshots  # refresh screenshot baselines
-```
-
-Styling uses a token-driven CSS module layout under `frontend/src/styles/`:
-`tokens.css` (design variables), `layout.css` (panel shells and grid rhythm),
-and `components/*.css` (comparison boards, probability tracks, evidence drawer).
-
-Build the frontend before dashboard publication so `output/app/` stays aligned
-with the runtime payload bundle.
+| `Rscript scripts/update_data.R` | Refresh canonical data from source |
+| `Rscript scripts/run_simulation.R` | Full pipeline: fit → backtest → simulate → export |
+| `Rscript scripts/regenerate_and_sync_dashboards.R` | Rebuild dashboard from cached results (no model refit) |
+| `Rscript scripts/run_bracket_candidates.R` | Lighter run: model fit + candidates, no full backtest |
+| `Rscript scripts/data_quality_check.R` | Validate input data |
+| `Rscript scripts/publish_release.R` | Copy deliverables to dated release folder |
+| `Rscript tests/testthat.R` | Run all R package tests |
 
 ---
 
