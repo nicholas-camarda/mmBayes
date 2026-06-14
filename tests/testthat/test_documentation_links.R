@@ -58,10 +58,8 @@ test_that("README documents the dashboard regeneration workflow and command role
     readme_text <- paste(readLines(file.path(repo_root, "README.md"), warn = FALSE), collapse = "\n")
 
     expect_match(readme_text, "scripts/regenerate_and_sync_dashboards\\.R")
-    expect_match(readme_text, "Preferred dashboard-refresh command")
-    expect_match(readme_text, "run_simulation\\.R.*syncs the React app under `output/app/`")
-    expect_match(readme_text, "run_bracket_candidates\\.R.*not the right command for CSS/layout-only iteration")
-    expect_match(readme_text, "publish_github_pages\\.R.*Internal plumbing helper")
+    expect_match(readme_text, "Full pipeline: fit.*backtest.*simulate.*export")
+    expect_match(readme_text, "Lighter run: model fit.*candidates, no full backtest")
     expect_match(readme_text, "configured runtime output directory")
     expect_match(readme_text, "React dashboard app")
     expect_no_match(readme_text, "Legacy HTML")
@@ -69,26 +67,18 @@ test_that("README documents the dashboard regeneration workflow and command role
     expect_no_match(readme_text, "backward compatibility")
     expect_no_match(readme_text, "bracket_dashboard\\.html")
     expect_no_match(readme_text, "technical_dashboard\\.html")
-    expect_match(readme_text, "CSV/TXT/RDS outputs live in runtime/release bundles|CSV, TXT, RDS, cache, and log artifacts")
-    expect_match(readme_text, "publish_github_pages\\.R.*not part of the normal user workflow")
+    expect_match(readme_text, "Decision Artifacts.*CSV")
+    expect_match(readme_text, "Summaries.*TXT")
+    expect_match(readme_text, "Runtime Artifacts")
 })
 
 test_that("README quick start explains the runtime output bundle and browser launch step", {
     repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
     readme_text <- paste(readLines(file.path(repo_root, "README.md"), warn = FALSE), collapse = "\n")
 
-    expect_match(readme_text, "Open `app/index\\.html` in that directory first")
-    expect_match(readme_text, "Expect this step to take longer than the refresh step")
-    expect_match(readme_text, "Then open `app/index\\.html` from the configured runtime output directory in your browser")
-})
-
-test_that("README explains update_data refresh status outcomes", {
-    repo_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
-    readme_text <- paste(readLines(file.path(repo_root, "README.md"), warn = FALSE), collapse = "\n")
-
-    expect_match(readme_text, "Refresh status: Success")
-    expect_match(readme_text, "Refresh status: Degraded success")
-    expect_match(readme_text, "do not continue to simulation")
+    expect_match(readme_text, "Open `output/app/index\\.html` in your browser")
+    expect_match(readme_text, "dashboard loads the latest simulation payload automatically")
+    expect_match(readme_text, "dashboard-only iteration when models haven't changed")
 })
 
 test_that("methods guide documents operational entrypoint roles", {
