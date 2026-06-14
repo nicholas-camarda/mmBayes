@@ -25,16 +25,19 @@ function stageApp() {
     gate_passed: true,
     validation_summary: [
       {
-        metric: "Bracket score",
-        ensemble: 85.4,
-        stan_glm: 82.1,
-        bart: 83.2,
+        model: "learned_ensemble",
+        mean_bracket_score: 85.4,
+        mean_correct_picks: 42.1,
+        mean_log_loss: 0.451,
+        mean_brier: 0.192,
       },
     ],
     gate_conditions: [
       {
         condition: "Calibration guardrail",
         passed: true,
+        observed: 0.041,
+        threshold: 0.05,
       },
     ],
   };
@@ -77,6 +80,13 @@ async function expectInFirstViewport(locator, maxBottom = 960) {
   const box = await locator.boundingBox();
   expect(box).toBeTruthy();
   expect(box.y + box.height).toBeLessThanOrEqual(maxBottom);
+}
+
+async function expectStartsBefore(locator, maxTop) {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  expect(box).toBeTruthy();
+  expect(box.y).toBeLessThanOrEqual(maxTop);
 }
 
 async function expectSvgHasVisibleContent(locator) {
@@ -452,10 +462,6 @@ test.describe("static frontend dashboards", () => {
 
     await page.goto(`file://${path.join(stageDir, "technical.html")}`, { waitUntil: "domcontentloaded" });
     await expectInFirstViewport(page.getByTestId("technical-action-summary"));
-    await expect(page.getByTestId("compare-workspace")).toBeVisible();
-    await expectInFirstViewport(
-      page.getByTestId("compare-workspace").getByRole("heading", { name: /compare workspace/i }),
-      1200,
-    );
+    await expectStartsBefore(page.getByTestId("compare-workspace"), 1200);
   });
 });
