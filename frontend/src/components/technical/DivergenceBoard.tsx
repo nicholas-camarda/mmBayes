@@ -36,7 +36,7 @@ export function DivergenceBoard({ rows }: DivergenceBoardProps) {
             },
             {
               label: "Why it matters",
-              value: "Why it matters",
+              value: `${row.tier ?? "Impact"} ${row.leverage != null ? `· ${row.leverage.toFixed(2)}` : ""}`,
               note:
                 row.why ??
                 (row.leverage != null
