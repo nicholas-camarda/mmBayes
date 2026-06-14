@@ -4,7 +4,11 @@ export function TechnicalActionSummary({ summary }: { summary?: TechnicalActionS
   if (!summary) return null;
 
   return (
-    <section className="technical-panel action-callout" aria-label="Action summary" data-testid="technical-action-summary">
+    <section
+      className="technical-panel action-callout"
+      aria-label="Action summary"
+      data-testid="technical-action-summary"
+    >
       <div className="role-kicker role-kicker--act">Act now</div>
       <h2>Action summary</h2>
       <div className="summary-strip">

@@ -54,7 +54,9 @@ const fullFixture: TechnicalPayload = {
 describe("TechnicalApp", () => {
   it("renders compare workspace, backtest, and decision summary from a full payload", () => {
     render(<TechnicalApp payload={fullFixture} />);
-    expect(screen.getByRole("heading", { name: /technical bracket dashboard/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /technical bracket dashboard/i }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("build-metadata")).toBeInTheDocument();
     expect(screen.getByTestId("decision-summary")).toBeInTheDocument();
     expect(screen.getByTestId("compare-workspace")).toBeInTheDocument();
@@ -64,7 +66,9 @@ describe("TechnicalApp", () => {
     expect(screen.getByTestId("ensemble-diagnostics")).toBeInTheDocument();
     expect(screen.getByTestId("championship-totals")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Ensemble diagnostics/i })).toBeInTheDocument();
-    expect(screen.getByText(/Learned ensemble validation: bracket score 85.4/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Learned ensemble validation: bracket score 85.4/i),
+    ).toBeInTheDocument();
     expect(screen.getByText("0.041")).toBeInTheDocument();
     expect(screen.getByText("0.050")).toBeInTheDocument();
     expect(screen.queryByText("NaN")).not.toBeInTheDocument();
