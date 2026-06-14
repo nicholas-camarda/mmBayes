@@ -14,16 +14,19 @@ const fullFixture: TechnicalPayload = {
     gate_passed: true,
     validation_summary: [
       {
-        metric: "Bracket score",
-        ensemble: 85.4,
-        stan_glm: 82.1,
-        bart: 83.2,
+        model: "learned_ensemble",
+        mean_bracket_score: 85.4,
+        mean_correct_picks: 42.1,
+        mean_log_loss: 0.451,
+        mean_brier: 0.192,
       },
     ],
     gate_conditions: [
       {
         condition: "Calibration guardrail",
         passed: true,
+        observed: 0.041,
+        threshold: 0.05,
       },
     ],
   },
@@ -61,6 +64,10 @@ describe("TechnicalApp", () => {
     expect(screen.getByTestId("ensemble-diagnostics")).toBeInTheDocument();
     expect(screen.getByTestId("championship-totals")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Ensemble diagnostics/i })).toBeInTheDocument();
+    expect(screen.getByText(/Learned ensemble validation: bracket score 85.4/i)).toBeInTheDocument();
+    expect(screen.getByText("0.041")).toBeInTheDocument();
+    expect(screen.getByText("0.050")).toBeInTheDocument();
+    expect(screen.queryByText("NaN")).not.toBeInTheDocument();
   });
 
   it("puts the technical action summary before generic orientation content", () => {
