@@ -1269,7 +1269,18 @@ only when its workflow has automated evidence and a `Pass` row in the ledger. Le
 Pending visual repair
 ```
 
-- [ ] **Step 7: Commit refreshed visual evidence**
+- [ ] **Step 7: Record agent visual review signoff**
+
+If every comparison row is marked `Pass`, update the Final Sign-Off block in `docs/dashboard-cutover-reference/visual-acceptance-ledger.md` so it contains:
+
+```md
+- Agent screenshot review passed: bracket desktop, bracket mobile, technical desktop, technical mobile, bracket desktop full page, technical desktop full page
+- User screenshot review passed:
+```
+
+Do not fill the user screenshot review line. The user must review the refreshed screenshots before final cutover.
+
+- [ ] **Step 8: Commit refreshed visual evidence**
 
 Run:
 
@@ -1380,10 +1391,10 @@ Expected: commit succeeds if snapshots or built app files changed. If no files c
 Run:
 
 ```sh
-rg -n "\| Pending \||Fail|Pending visual repair" docs/dashboard-cutover-reference/visual-acceptance-ledger.md docs/dashboard-cutover-reference/parity-matrix.md
+rg -n "\| Pending \||Fail|Pending visual repair|Automated coverage present; pending final visual gate|Agent screenshot review passed:\s*$|User screenshot review passed:\s*$" docs/dashboard-cutover-reference/visual-acceptance-ledger.md docs/dashboard-cutover-reference/parity-matrix.md
 ```
 
-Expected: no ledger rows still contain `| Pending |`, no `Fail` rows are present, and no `Pending visual repair` rows remain in the parity matrix. If this command finds any match, stop and return to Task 5, Task 6, or Task 7.
+Expected: no ledger rows still contain `| Pending |`, no `Fail` rows are present, no pending parity statuses remain, and neither screenshot review signoff line is blank. If this command finds any match, stop and return to Task 5, Task 6, Task 7, or the user visual review gate.
 
 - [ ] **Step 2: Confirm root monolith outputs are not required by tests**
 
@@ -1455,9 +1466,9 @@ Expected: commit succeeds.
 **Files:**
 - Modify: `docs/dashboard-cutover-reference/visual-acceptance-ledger.md`
 
-- [ ] **Step 1: Fill final sign-off fields**
+- [ ] **Step 1: Verify final sign-off fields**
 
-In `docs/dashboard-cutover-reference/visual-acceptance-ledger.md`, fill:
+In `docs/dashboard-cutover-reference/visual-acceptance-ledger.md`, verify:
 
 ```md
 ## Final Sign-Off
@@ -1465,12 +1476,12 @@ In `docs/dashboard-cutover-reference/visual-acceptance-ledger.md`, fill:
 - Functional tests passed: `npm test`
 - Visual tests passed: `npm run test:visual`
 - R package tests passed: `Rscript tests/testthat.R`
-- Agent screenshot review passed: bracket desktop, bracket mobile, technical desktop, technical mobile
-- User screenshot review passed: bracket desktop, bracket mobile, technical desktop, technical mobile
+- Agent screenshot review passed: bracket desktop, bracket mobile, technical desktop, technical mobile, bracket desktop full page, technical desktop full page
+- User screenshot review passed: bracket desktop, bracket mobile, technical desktop, technical mobile, bracket desktop full page, technical desktop full page
 - Intentional deviations: none
 ```
 
-If any command could not run, replace that line with the exact command and failure reason.
+If any command could not run, replace that line with the exact command and failure reason. If either screenshot review line is not already filled, stop; do not complete Task 10.
 
 - [ ] **Step 2: Commit acceptance report**
 
