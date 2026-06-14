@@ -230,27 +230,25 @@ build_bracket_tree_test_context <- function() {
     )
 }
 
-test_that("bracket tree renders candidate-specific trees and maps evidence drawers", {
+test_that("bracket tree payload data maps candidate-specific trees to evidence rows", {
     context <- build_bracket_tree_test_context()
 
-    dashboard_html <- create_bracket_dashboard_html(
-        bracket_year = 2026L,
+    dashboard_context <- build_bracket_dashboard_context(
+        current_teams = NULL,
         decision_sheet = context$decision_sheet,
         candidates = context$candidates,
-        current_teams = NULL,
-        backtest = NULL,
         play_in_resolution = context$play_in_resolution
     )
+    payload <- build_bracket_dashboard_payload(
+        bracket_year = 2026L,
+        candidates = context$candidates,
+        decision_sheet = context$decision_sheet,
+        dashboard_context = dashboard_context,
+        play_in_resolution = context$play_in_resolution
+    )
+    expect_invisible(validate_dashboard_payload(payload, "bracket"))
 
-    expect_match(dashboard_html, "id='btree-svg-1'")
-    expect_match(dashboard_html, "id='btree-svg-2'")
-    expect_match(dashboard_html, "<meta name='viewport' content='width=device-width, initial-scale=1'>")
-    expect_no_match(dashboard_html, "style='min-width:[0-9]+px;display:block;'")
-    expect_match(dashboard_html, "St\\. John&#39;s")
-    expect_match(dashboard_html, "Texas A&amp;M")
-    expect_match(dashboard_html, "Candidate 2 route change")
-
-    tree_data <- build_bracket_tree_data(context$candidates)
+    tree_data <- payload$bracket_tree
     expect_length(tree_data$trees, 2L)
     expect_false(any(tree_data$trees[[1]]$nodes$route_diff))
     expect_true(any(tree_data$trees[[2]]$nodes$route_diff))
@@ -275,27 +273,18 @@ test_that("bracket tree renders candidate-specific trees and maps evidence drawe
     expect_setequal(feeder_regions(tree_data$trees[[1]], 1L), c("South", "West"))
     expect_setequal(feeder_regions(tree_data$trees[[1]], 2L), c("East", "Midwest"))
 
-    doc <- xml2::read_html(dashboard_html)
-
-    btree <- rvest::html_elements(doc, "svg.btree-svg")
-    expect_equal(length(btree), 2L)
-    expect_true(all(is.na(rvest::html_attr(btree, "style")) | !grepl("min-width", rvest::html_attr(btree, "style"), fixed = TRUE)))
-
-    expect_equal(length(rvest::html_elements(doc, ".btree-toggle[data-btree-target='candidate-1']")), 1L)
-    expect_equal(length(rvest::html_elements(doc, ".btree-toggle[data-btree-target='candidate-2']")), 1L)
-    expect_equal(length(rvest::html_elements(doc, ".btree-toggle[data-btree-target='both']")), 0L)
-    expect_true(length(rvest::html_elements(doc, ".btree-node--route-diff")) > 0)
-    expect_true(length(rvest::html_elements(doc, ".btree-edge--route-diff")) > 0)
-
-    evidence_panels <- rvest::html_elements(doc, "details.evidence-panel")
-    evidence_ids <- rvest::html_attr(evidence_panels, "id")
+    candidate_slot_keys <- unique(unlist(lapply(context$candidates, function(candidate) {
+        as.character(candidate$matchups$slot_key)
+    })))
 
     for (panel_key in c("candidate-1", "candidate-2")) {
-        panel_nodes <- rvest::html_elements(doc, sprintf("[data-btree-panel='%s'] g.btree-node", panel_key))
-        expect_equal(length(panel_nodes), 63L)
-        expect_true(all(nzchar(rvest::html_attr(panel_nodes, "data-open-evidence"))))
-        expect_true(all(nzchar(rvest::html_attr(panel_nodes, "data-tip-matchup"))))
-        expect_true(all(rvest::html_attr(panel_nodes, "data-open-evidence") %in% evidence_ids))
+        panel_index <- if (identical(panel_key, "candidate-1")) 1L else 2L
+        panel_nodes <- tree_data$trees[[panel_index]]$nodes
+        expect_equal(nrow(panel_nodes), 63L)
+        mapped_evidence_ids <- panel_nodes$evidence_id[nzchar(panel_nodes$evidence_id)]
+        expect_gt(length(mapped_evidence_ids), 0L)
+        expect_true(all(nzchar(panel_nodes$matchup_label)))
+        expect_true(all(as.character(panel_nodes$slot_key) %in% candidate_slot_keys))
     }
 })
 

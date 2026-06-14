@@ -371,8 +371,11 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_true(file.exists(decision_outputs$championship_tiebreaker_distribution))
     expect_true(file.exists(decision_outputs$matchup_total_points))
     expect_true(file.exists(decision_outputs$matchup_context))
-    expect_true(file.exists(decision_outputs$technical_dashboard))
-    expect_match(paste(readLines(decision_outputs$technical_dashboard, warn = FALSE), collapse = "\n"), "Live Tournament Performance")
+    expect_true(file.exists(decision_outputs$bracket_payload))
+    expect_true(file.exists(decision_outputs$technical_payload))
+    expect_true(file.exists(decision_outputs$payload_js))
+    expect_null(decision_outputs$dashboard)
+    expect_null(decision_outputs$technical_dashboard)
     expect_match(live_performance$status, "Monitoring only")
     expect_match(live_performance$status, "Live tournament performance through")
     expect_true(nrow(live_performance$summary) == 1)
@@ -437,473 +440,79 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
     expect_equal(nrow(no_game_performance$summary), 0L)
     expect_match(render_live_performance_html(no_game_performance), "No completed current-year games have been recorded yet")
 
-    dashboard_html <- create_bracket_dashboard_html(
-        bracket_year = 2026L,
-        decision_sheet = decision_sheet,
-        candidates = candidates,
+    bracket_context <- build_bracket_dashboard_context(
         current_teams = loaded$current_teams,
-        dashboard_context = build_bracket_dashboard_context(
-            current_teams = loaded$current_teams,
-            decision_sheet = decision_sheet,
-            candidates = candidates,
-            total_points_predictions = total_predictions,
-            play_in_resolution = play_in_resolution,
-            dashboard_build_metadata = list(
-                rendered_at_label = "April 23, 2026 at 01:15 PM EDT",
-                commit_short = "abc1234",
-                repo_snapshot_label = "Synced to tracked repo output in this run"
-            )
-        ),
-        backtest = NULL,
-        play_in_resolution = play_in_resolution,
-        total_points_predictions = total_predictions,
-        model_quality_context = resolved_quality,
-        model_overview = model_overview
-    )
-    expect_match(dashboard_html, "Review Queue")
-    expect_match(dashboard_html, "Divergence Map")
-    expect_match(dashboard_html, "aria-label='Confidence tiers'", fixed = TRUE)
-    expect_match(dashboard_html, "confidence-legend")
-    expect_match(dashboard_html, "review-board")
-    expect_match(dashboard_html, ".review-board .summary-strip{margin:0 0 12px 0;}", fixed = TRUE)
-    expect_match(dashboard_html, ".confidence-legend .legend-swatch", fixed = TRUE)
-    expect_match(dashboard_html, ".divergence-round__title{color:var(--text);}", fixed = TRUE)
-    expect_match(dashboard_html, ".divergence-cell__count{color:var(--text);}", fixed = TRUE)
-    expect_no_match(dashboard_html, "&middot;", fixed = TRUE)
-    expect_match(dashboard_html, "Candidate Recommendations")
-    expect_match(dashboard_html, "Bracket entry workspace")
-    expect_match(dashboard_html, "Enter Candidate 1, then pause at the marked review picks")
-    expect_match(dashboard_html, "next-action-stat--review")
-    expect_match(dashboard_html, "\\.next-action-stat small")
-    expect_match(dashboard_html, "Candidate comparison")
-    expect_match(dashboard_html, "entry-workspace")
-    expect_match(dashboard_html, "data-entry-panel='candidate-1'")
-    expect_match(dashboard_html, "data-entry-panel='candidate-2'")
-    expect_match(dashboard_html, "Entry summary")
-    expect_match(dashboard_html, "Rounded median total")
-    expect_match(dashboard_html, "The tiebreaker is the rounded median")
-    expect_match(dashboard_html, "entry-pick--review")
-    expect_match(dashboard_html, "entry-pick--tier-lean")
-    expect_match(dashboard_html, "entry-pick--tier-toss-up")
-    expect_match(dashboard_html, "entry-pick--tier-volatile")
-    expect_match(dashboard_html, "entry-tier-badge--lean")
-    expect_match(dashboard_html, "entry-tier-badge--toss-up")
-    expect_match(dashboard_html, "entry-tier-badge--volatile")
-    expect_match(dashboard_html, "Confidence:")
-    expect_match(dashboard_html, "entry-split-badge")
-    expect_match(dashboard_html, "C1/C2 split")
-    expect_match(dashboard_html, "entry-region--east")
-    expect_match(dashboard_html, "entry-region--west")
-    expect_match(dashboard_html, "entry-region--south")
-    expect_match(dashboard_html, "entry-region--midwest")
-    expect_match(dashboard_html, "entry-region--national")
-    expect_match(dashboard_html, "grid-template-areas:'east west' 'south midwest' 'national national'")
-    expect_match(dashboard_html, "<span>Fill 1</span>", fixed = TRUE)
-    expect_match(dashboard_html, "<span>Fill 2</span>", fixed = TRUE)
-    expect_match(dashboard_html, "<h4>National</h4>", fixed = TRUE)
-    expect_false(grepl("<h4>NA</h4>", dashboard_html, fixed = TRUE))
-    expect_match(dashboard_html, "entry-check'>Ready to enter", fixed = TRUE)
-    expect_false(grepl("Review split", dashboard_html, fixed = TRUE))
-    expect_match(dashboard_html, "Candidate 2 route change")
-    expect_match(dashboard_html, "Favorite probability")
-    expect_match(dashboard_html, "Same conference")
-    expect_match(dashboard_html, "evidence-panel__lede strong")
-    expect_match(dashboard_html, "advantage-row__metric")
-    expect_match(dashboard_html, "--bg:#080b12")
-    expect_match(dashboard_html, "How to read this workspace")
-    expect_match(dashboard_html, "href='#how-to-read'", fixed = TRUE)
-    expect_match(dashboard_html, "id='how-to-read'", fixed = TRUE)
-    expect_match(dashboard_html, "Start here")
-    expect_match(dashboard_html, "reading-guide__card")
-    expect_match(dashboard_html, "term-chip")
-    expect_match(dashboard_html, "grid-template-columns:repeat(auto-fit,minmax(210px,1fr))", fixed = TRUE)
-    expect_match(dashboard_html, "<meta name='viewport' content='width=device-width, initial-scale=1'>")
-    expect_match(dashboard_html, "Overall strength rating")
-    expect_match(dashboard_html, "Review priority score")
-    expect_match(dashboard_html, "Candidate 2 changes from the baseline")
-    expect_match(dashboard_html, "Matchup Evidence")
-    expect_match(dashboard_html, "Reference matchups")
-    expect_match(dashboard_html, "Full candidate paths")
-    expect_match(dashboard_html, "Technical appendix")
-    expect_match(dashboard_html, "Need more diagnostics?")
-    expect_match(dashboard_html, "Updated")
-    expect_match(dashboard_html, "April 23, 2026 at 01:15 PM EDT")
-    expect_match(dashboard_html, "Built from commit")
-    expect_match(dashboard_html, "abc1234")
-    expect_match(dashboard_html, "Repo snapshot")
-    expect_match(dashboard_html, "Synced to tracked repo output in this run")
-    expect_match(dashboard_html, "Open technical_dashboard.html")
-    expect_match(dashboard_html, "href='technical_dashboard.html'")
-    expect_false(grepl("href='model_comparison_dashboard.html'", dashboard_html, fixed = TRUE))
-    expect_equal(sum(gregexpr("Open the full model comparison dashboard", dashboard_html, fixed = TRUE)[[1]] > 0), 0L)
-    if (isTRUE(play_in_resolution$has_unresolved_slots[[1]])) {
-        expect_match(dashboard_html, "Status: Simulated bracket path")
-        expect_match(dashboard_html, "generated brackets assume simulated First Four winners")
-    } else {
-        expect_match(dashboard_html, "Status: Final result")
-        expect_match(dashboard_html, "First Four slots are resolved")
-    }
-    review_pos <- regexpr("Review Queue", dashboard_html, fixed = TRUE)[[1]]
-    build_pos <- regexpr("Candidate Recommendations", dashboard_html, fixed = TRUE)[[1]]
-    comparison_pos <- regexpr("Candidate comparison", dashboard_html, fixed = TRUE)[[1]]
-    entry_workspace_pos <- regexpr("<div class='entry-workspace'>", dashboard_html, fixed = TRUE)[[1]]
-    entry_east_pos <- regexpr("<section class='entry-region entry-region--east'>", dashboard_html, fixed = TRUE)[[1]]
-    entry_west_pos <- regexpr("<section class='entry-region entry-region--west'>", dashboard_html, fixed = TRUE)[[1]]
-    entry_south_pos <- regexpr("<section class='entry-region entry-region--south'>", dashboard_html, fixed = TRUE)[[1]]
-    entry_midwest_pos <- regexpr("<section class='entry-region entry-region--midwest'>", dashboard_html, fixed = TRUE)[[1]]
-    entry_national_pos <- regexpr("<section class='entry-region entry-region--national'>", dashboard_html, fixed = TRUE)[[1]]
-    helper_pos <- regexpr("How to read this workspace", dashboard_html, fixed = TRUE)[[1]]
-    evidence_pos <- regexpr("Matchup Evidence", dashboard_html, fixed = TRUE)[[1]]
-    paths_pos <- regexpr("Full candidate paths", dashboard_html, fixed = TRUE)[[1]]
-    appendix_pos <- regexpr("Technical appendix", dashboard_html, fixed = TRUE)[[1]]
-    expect_true(build_pos > 0)
-    expect_true(helper_pos > 0)
-    expect_true(review_pos > 0)
-    expect_true(helper_pos < build_pos)
-    expect_true(comparison_pos < entry_workspace_pos)
-    expect_true(entry_east_pos < entry_west_pos)
-    expect_true(entry_west_pos < entry_south_pos)
-    expect_true(entry_south_pos < entry_midwest_pos)
-    expect_true(entry_midwest_pos < entry_national_pos)
-    expect_true(helper_pos < review_pos)
-    expect_true(review_pos < evidence_pos)
-    expect_true(evidence_pos < paths_pos)
-    expect_true(paths_pos < appendix_pos)
-    expect_match(dashboard_html, "Bracket-changing toss-ups")
-    expect_match(dashboard_html, "Upset pivots")
-    expect_match(dashboard_html, "Fragile favorites")
-    expect_match(dashboard_html, "watchlist-card__meta-row")
-    expect_match(dashboard_html, "watchlist-card__callout")
-    expect_match(dashboard_html, "prob-track__summary")
-    expect_match(dashboard_html, "prob-track__stat")
-    expect_match(dashboard_html, ".watchlist-card__probability .prob-track__stat span", fixed = TRUE)
-    expect_match(dashboard_html, ".watchlist-card__probability .prob-track__lane", fixed = TRUE)
-    expect_match(dashboard_html, ".prob-track__stat strong{color:var(--text);}", fixed = TRUE)
-    expect_no_match(dashboard_html, "prob-track__scale")
-    expect_match(dashboard_html, "grid-template-columns:repeat(4,minmax(0,1fr))", fixed = TRUE)
-    expect_match(dashboard_html, "outline-offset:-2px", fixed = TRUE)
-    expect_match(dashboard_html, ".divergence-cell--empty{background:#f8fafc;border-style:dashed;border-color:#d7dde5;cursor:default;text-align:center;align-items:center;justify-content:center;min-height:118px;}", fixed = TRUE)
-    expect_match(dashboard_html, "data-open-evidence")
-    expect_match(dashboard_html, "data-divergence-target")
-    expect_match(dashboard_html, "data-divergence-round")
-    expect_match(dashboard_html, "candidate-divergence-reference")
-    expect_match(dashboard_html, "Baseline reference")
-    expect_match(dashboard_html, "Changed slots from baseline")
-    expect_match(dashboard_html, "Pairwise diff:")
-    expect_no_match(dashboard_html, "Change count")
-    expect_match(dashboard_html, "Candidate 1 full path")
-    expect_match(dashboard_html, "Candidate 2 full path")
-    expect_match(dashboard_html, "Need more diagnostics?")
-    expect_match(dashboard_html, "Core metrics")
-    expect_match(dashboard_html, "Model-facing matchup comparison")
-    expect_match(dashboard_html, "Raw model inputs")
-    expect_match(dashboard_html, "Favorite:")
-    expect_match(dashboard_html, "Underdog:")
-    expect_match(dashboard_html, "advantage-row")
-    expect_match(dashboard_html, "Diff favors")
-    expect_match(dashboard_html, "Favorite probability")
-    expect_no_match(dashboard_html, "Underdog probability")
-    expect_match(dashboard_html, "Candidate usage")
-    divergence_map_pos <- regexpr("Divergence Map", dashboard_html, fixed = TRUE)[[1]]
-    confidence_legend_pos <- regexpr("aria-label='Confidence tiers'", dashboard_html, fixed = TRUE)[[1]]
-    review_board_pos <- regexpr("Review picks that still need attention", dashboard_html, fixed = TRUE)[[1]]
-    diff_reference_pos <- regexpr("Candidate 2 changes from the baseline", dashboard_html, fixed = TRUE)[[1]]
-    expect_true(divergence_map_pos > 0)
-    expect_true(confidence_legend_pos > review_pos)
-    expect_true(confidence_legend_pos < divergence_map_pos)
-    expect_true(divergence_map_pos < review_board_pos)
-    expect_true(review_board_pos < diff_reference_pos)
-
-    dashboard_doc <- xml2::read_html(dashboard_html)
-    review_boards <- rvest::html_elements(dashboard_doc, ".review-board")
-    expect_equal(length(review_boards), 1L)
-    expect_equal(length(rvest::html_elements(review_boards[[1]], ".summary-strip")), 1L)
-    expect_equal(length(rvest::html_elements(review_boards[[1]], ".filter-toolbar")), 1L)
-    expect_true(length(rvest::html_elements(review_boards[[1]], ".watchlist-shell")) > 0)
-
-    reference_panels <- rvest::html_elements(dashboard_doc, "details.evidence-panel[data-surface='All matchups']")
-    expect_true(length(reference_panels) > 0)
-    reference_panel_text <- rvest::html_text2(reference_panels[[1]])
-    expect_match(reference_panel_text, "Reference matchup\\. Use this drawer when you want the evidence inputs behind a specific node\\.")
-    expect_match(reference_panel_text, "Candidate usage")
-    expect_match(reference_panel_text, "C1:")
-    expect_match(reference_panel_text, "C2:")
-    expect_match(reference_panel_text, "Favorite:")
-    expect_match(reference_panel_text, "Underdog:")
-    expect_match(reference_panel_text, "Raw model inputs")
-    expect_match(reference_panel_text, "Diff favors")
-    expect_match(reference_panel_text, "Conference")
-    expect_match(reference_panel_text, "Different conferences|Same conference|Conference relationship unavailable")
-
-    reference_roles <- rvest::html_text2(rvest::html_elements(reference_panels[[1]], ".team-card__role"))
-    expect_equal(reference_roles, c("Favorite", "Underdog"))
-    expect_true(length(rvest::html_elements(reference_panels[[1]], ".advantage-row")) > 0)
-    expect_equal(length(rvest::html_elements(reference_panels[[1]], ".matchup-context-flags .context-flag")), 1L)
-    advantage_metric_text <- rvest::html_text2(rvest::html_elements(reference_panels[[1]], ".advantage-row__metric"))
-    expect_false("Same conference" %in% advantage_metric_text)
-    expect_equal(length(rvest::html_elements(reference_panels[[1]], "details.comparison-details")), 1L)
-
-    technical_html <- create_technical_dashboard_html(
-        bracket_year = 2026L,
         decision_sheet = decision_sheet,
         candidates = candidates,
-        backtest = list(summary = tibble::tibble(
+        total_points_predictions = total_predictions,
+        play_in_resolution = play_in_resolution,
+        dashboard_build_metadata = list(
+            rendered_at_label = "April 23, 2026 at 01:15 PM EDT",
+            commit_short = "abc1234",
+            repo_snapshot_label = "Synced to tracked repo output in this run"
+        )
+    )
+    bracket_payload <- build_bracket_dashboard_payload(
+        bracket_year = 2026L,
+        candidates = candidates,
+        decision_sheet = decision_sheet,
+        dashboard_context = bracket_context,
+        total_points_predictions = total_predictions,
+        play_in_resolution = play_in_resolution
+    )
+    expect_invisible(validate_dashboard_payload(bracket_payload, "bracket"))
+    expect_equal(bracket_payload$build_metadata$commit_short, "abc1234")
+    expect_true(is.data.frame(bracket_payload$decision_sheet))
+    expect_true(is.data.frame(bracket_payload$watchlist))
+    expect_true(is.data.frame(bracket_payload$divergence_map))
+    expect_true(is.data.frame(bracket_payload$matchup_context))
+    expect_true(is.list(bracket_payload$bracket_tree))
+    expect_true(is.data.frame(bracket_payload$candidate_summaries))
+    expect_true(any(bracket_payload$watchlist$reason_surface %in% c("Bracket-changing toss-ups", "Upset pivots", "Fragile favorites")))
+    expect_equal(length(bracket_payload$candidates), length(candidates))
+
+    technical_backtest <- list(
+        summary = tibble::tibble(
             mean_log_loss = 0.401,
             mean_brier = 0.188,
             mean_accuracy = 0.713,
             mean_bracket_score = 85.4,
             mean_correct_picks = 42.7
-        ), calibration = tibble::tibble(
+        ),
+        calibration = tibble::tibble(
             mean_predicted = c(0.35, 0.55, 0.75),
             empirical_rate = c(0.30, 0.58, 0.78),
             n_games = c(12L, 16L, 10L)
-        ), yearly_metrics = tibble::tibble(year = c(2018L, 2019L, 2020L))),
-        total_points_predictions = total_predictions,
-        play_in_resolution = play_in_resolution,
-        model_quality_context = resolved_quality,
-        live_performance = live_performance,
-        model_overview = model_overview
-    )
-    expect_match(technical_html, "mmBayes Technical Bracket Dashboard")
-    expect_match(technical_html, "<meta name='viewport' content='width=device-width, initial-scale=1'>")
-    expect_match(technical_html, "How To Use This Dashboard")
-    expect_match(technical_html, "Action Summary")
-    expect_match(technical_html, "Key Warnings")
-    expect_match(technical_html, "Compare Workspace")
-    expect_match(technical_html, "Model Overview")
-    expect_match(technical_html, "What this means")
-    expect_match(technical_html, "Backtest Calibration Curve")
-    expect_match(technical_html, "Backtest By Round")
-    expect_match(technical_html, "diagnostics-overview-grid")
-    expect_match(technical_html, "diagnostics-detail-grid")
-    expect_match(technical_html, "calibration-layout")
-    expect_match(technical_html, "tech-svg--calibration")
-    expect_match(technical_html, "Live Tournament Performance - Stan GLM")
-    expect_match(technical_html, "Recent Games")
-    expect_match(technical_html, "review-priority queue")
-    expect_match(technical_html, "Cached identical validation snapshot")
-    expect_match(technical_html, "Log loss")
-    expect_match(technical_html, "Brier score")
-    expect_match(technical_html, "Accuracy")
-    expect_match(technical_html, "Doing well")
-    expect_match(technical_html, "Needs attention")
-    expect_match(technical_html, "The backtest is the historical baseline")
-    expect_match(technical_html, "Rolling holdout years")
-    expect_match(technical_html, "2018, 2019, 2020")
-    expect_match(technical_html, "calibration-help-grid")
-    expect_match(technical_html, "Held-out games grouped by predicted win-probability range")
-    expect_match(technical_html, "Perfect long-run calibration")
-    expect_match(technical_html, "tech-svg--live-rounds")
-    expect_false(grepl("Candidate 1 Path Review", technical_html, fixed = TRUE))
-    expect_false(grepl("Candidate 2 Path Review", technical_html, fixed = TRUE))
-    expect_match(technical_html, "Additional model detail")
-    expect_false(grepl("Engine settings and feature detail", technical_html, fixed = TRUE))
-    expect_match(technical_html, "Observed bucket rate")
-    expect_match(technical_html, "Observed win rate")
-    expect_match(technical_html, "predicted rate equals observed rate")
-    expect_match(technical_html, "Perfect calibration")
-    expect_match(technical_html, "too optimistic")
-    expect_match(technical_html, "too pessimistic")
-    expect_match(technical_html, "quality-grid")
-    expect_match(technical_html, "What this means")
-    expect_match(technical_html, "Backtest Summary")
-    expect_false(grepl("Backtest unavailable", technical_html, fixed = TRUE))
-    expect_match(technical_html, "Ranked Decision Board")
-    expect_match(technical_html, "review priority = round weight x \\(underdog win probability \\+ interval width\\)")
-    expect_match(technical_html, "Upset Opportunity Board")
-    expect_match(technical_html, "leverage = round weight x underdog win probability x \\(1 \\+ interval width\\)")
-    expect_match(technical_html, "Underdog posterior uncertainty")
-    expect_match(technical_html, "Derived posterior credible interval")
-    expect_match(technical_html, "Candidate Divergence")
-    expect_match(technical_html, "Bracket position where the paths split")
-    expect_match(technical_html, "Candidate 1 matchup uncertainty")
-    expect_match(technical_html, "Posterior credible interval")
-    expect_match(technical_html, "Championship Tiebreaker Comparison")
-    expect_match(technical_html, "data-view-target='compare'")
-    expect_match(technical_html, "data-view-target='candidate-1'")
-    expect_match(technical_html, "data-view-target='candidate-2'")
-    expect_match(technical_html, "Candidate 1 Most Fragile Picks")
-    expect_match(technical_html, "Candidate 2 Most Fragile Picks")
-    expect_match(technical_html, "Candidate 1 Championship Distribution")
-    expect_match(technical_html, "Backtest and calibration evidence")
-    expect_match(technical_html, "Live performance evidence")
-    expect_match(technical_html, "Model setup and ensemble diagnostics")
-    expect_match(technical_html, "Reference tables")
-    expect_false(grepl("Why These Boards Are Ordered This Way", technical_html, fixed = TRUE))
-    expect_false(grepl("Differing slot", technical_html, fixed = TRUE))
-    expect_false(grepl("Preferred path, alternate path, and usage note", technical_html, fixed = TRUE))
-    expect_false(grepl("Round, candidate usage, and why to consider it", technical_html, fixed = TRUE))
-
-    bart_model_overview <- list(
-        matchup = list(
-            engine = "bart",
-            engine_label = "BART",
-            prior_type = "normal",
-            draw_budget = 1000L,
-            predictor_count = 7L,
-            betting_predictor_count = 3L,
-            predictor_summary = "7 predictors: round, same_conf, seed_gap, barthag_logit_gap, betting_abs_prob_edge, betting_abs_spread, betting_bookmakers",
-            bart_config = list(
-                n_trees = 200L,
-                n_burn = 500L,
-                n_post = 1000L,
-                k = 2,
-                power = 2
-            ),
-            interaction_terms = character(0)
         ),
-        totals = list(
-            engine = "bart",
-            engine_label = "BART",
-            prior_type = "normal",
-            draw_budget = 1000L,
-            predictor_count = 4L,
-            betting_predictor_count = 2L,
-            predictor_summary = "4 predictors: round, seed_gap, betting_abs_prob_edge, betting_minutes_before_commence",
-            bart_config = list(
-                n_trees = 200L,
-                n_burn = 500L,
-                n_post = 1000L,
-                k = 2,
-                power = 2
-            ),
-            interaction_terms = character(0)
-        )
+        round_summary = tibble::tibble(
+            round = c("Round of 64", "Round of 32"),
+            games = c(32L, 16L),
+            accuracy = c(0.72, 0.69),
+            log_loss = c(0.42, 0.45),
+            brier = c(0.18, 0.19),
+            empirical_rate = c(0.70, 0.68)
+        ),
+        yearly_metrics = tibble::tibble(year = c(2018L, 2019L, 2020L))
     )
-    bart_dashboard_html <- create_technical_dashboard_html(
+    technical_payload <- build_technical_dashboard_payload(
         bracket_year = 2026L,
         decision_sheet = decision_sheet,
         candidates = candidates,
-        backtest = NULL,
+        model_quality_context = list(source_label = resolved_quality$source_label, backtest = technical_backtest),
+        build_metadata = bracket_context$build_metadata,
+        model_overview = model_overview,
         total_points_predictions = total_predictions,
         play_in_resolution = play_in_resolution,
-        model_quality_context = resolved_quality,
-        model_overview = bart_model_overview
+        live_performance = live_performance
     )
-    expect_match(bart_dashboard_html, "BART")
-    expect_match(bart_dashboard_html, "Nonlinear posterior tree model")
-    expect_match(bart_dashboard_html, "n_trees")
-    expect_match(bart_dashboard_html, "n_post")
-    expect_match(bart_dashboard_html, "Model Overview")
-    expect_match(bart_dashboard_html, "BART settings")
-    expect_match(bart_dashboard_html, "Cached identical validation snapshot")
-
-    alt_backtest <- list(
-        summary = tibble::tibble(
-            mean_log_loss = 0.362,
-            mean_brier = 0.171,
-            mean_accuracy = 0.742,
-            mean_bracket_score = 87.1,
-            mean_correct_picks = 44.9
-        ),
-        calibration = tibble::tibble(
-            mean_predicted = c(0.32, 0.54, 0.76),
-            empirical_rate = c(0.29, 0.57, 0.79),
-            n_games = c(12L, 16L, 10L)
-        )
-    )
-    alt_live_performance <- live_performance
-    alt_live_performance$summary <- live_performance$summary %>%
-        dplyr::mutate(
-            log_loss = log_loss + 0.018,
-            brier = brier + 0.011,
-            accuracy = pmin(1, accuracy + 0.05)
-        )
-    alt_live_performance$status <- "BART comparison snapshot."
-    comparison_bundle <- list(
-        available = TRUE,
-        attempted = TRUE,
-        status = "Comparison completed for Stan GLM and BART.",
-        current_label = "Stan GLM",
-        alternate_label = "BART",
-        current = list(
-            model_overview = model_overview,
-            backtest = list(summary = tibble::tibble(
-                mean_log_loss = 0.401,
-                mean_brier = 0.188,
-                mean_accuracy = 0.713,
-                mean_bracket_score = 85.4,
-                mean_correct_picks = 42.7
-            )),
-            live_performance = live_performance
-        ),
-        alternate = list(
-            model_overview = bart_model_overview,
-            backtest = alt_backtest,
-            live_performance = alt_live_performance
-        ),
-        backtest_comparison = build_model_metric_comparison_table(
-            current_summary = tibble::tibble(
-                mean_log_loss = 0.401,
-                mean_brier = 0.188,
-                mean_accuracy = 0.713,
-                mean_bracket_score = 85.4,
-                mean_correct_picks = 42.7
-            ),
-            alternate_summary = alt_backtest$summary,
-            current_label = "Stan GLM",
-            alternate_label = "BART",
-            kind = "backtest"
-        ),
-        live_comparison = build_model_metric_comparison_table(
-            current_summary = live_performance$summary,
-            alternate_summary = alt_live_performance$summary,
-            current_label = "Stan GLM",
-            alternate_label = "BART",
-            kind = "live"
-        ),
-        summary = summarize_model_metric_comparison(
-            comparison_table = build_model_metric_comparison_table(
-                current_summary = tibble::tibble(
-                    mean_log_loss = 0.401,
-                    mean_brier = 0.188,
-                    mean_accuracy = 0.713,
-                    mean_bracket_score = 85.4,
-                    mean_correct_picks = 42.7
-                ),
-                alternate_summary = alt_backtest$summary,
-                current_label = "Stan GLM",
-                alternate_label = "BART",
-                kind = "backtest"
-            ),
-            current_label = "Stan GLM",
-            alternate_label = "BART"
-        ),
-        notes = character()
-    )
-    comparison_link_html <- render_model_comparison_link_html(comparison_bundle)
-    expect_identical(comparison_link_html, "")
-
-    html_without_quality <- create_technical_dashboard_html(
-        bracket_year = 2026L,
-        decision_sheet = decision_sheet,
-        candidates = candidates,
-        backtest = NULL,
-        total_points_predictions = NULL,
-        play_in_resolution = play_in_resolution
-    )
-    expect_match(html_without_quality, "Backtest not computed in this run.")
-    expect_match(html_without_quality, "Backtest calibration was not available for this run.")
-
-    ranked_matchups <- decision_sheet %>%
-        dplyr::arrange(dplyr::desc(decision_score), round, region, matchup_number) %>%
-        dplyr::pull(matchup_label)
-    expect_true(length(ranked_matchups) >= 2)
-    ranked_section_start <- regexpr("Ranked Decision Board", technical_html, fixed = TRUE)[[1]]
-    ranked_section_end <- regexpr("Upset Opportunity Board", technical_html, fixed = TRUE)[[1]]
-    ranked_section <- substr(technical_html, ranked_section_start, ranked_section_end - 1L)
-    first_ranked_position <- regexpr(ranked_matchups[[1]], ranked_section, fixed = TRUE)[[1]]
-    second_ranked_position <- regexpr(ranked_matchups[[2]], ranked_section, fixed = TRUE)[[1]]
-    expect_true(first_ranked_position > 0)
-    expect_true(second_ranked_position > first_ranked_position)
-
-    diff_matchup <- decision_sheet %>%
-        dplyr::filter(candidate_diff_flag) %>%
-        dplyr::slice_head(n = 1) %>%
-        dplyr::pull(matchup_label)
-    if (length(diff_matchup) == 1L) {
-        expect_match(technical_html, diff_matchup)
-    }
+    expect_invisible(validate_dashboard_payload(technical_payload, "technical"))
+    expect_equal(technical_payload$model_quality$source_label, resolved_quality$source_label)
+    expect_true(is.data.frame(technical_payload$ranked_decisions))
+    expect_true(is.data.frame(technical_payload$candidate_differences))
+    expect_true(is.data.frame(technical_payload$upset_opportunities))
+    expect_true(is.data.frame(technical_payload$championship_totals$candidate_summaries))
+    expect_equal(technical_payload$backtest$summary$mean_log_loss, 0.401)
+    expect_true(is.data.frame(technical_payload$backtest$round_performance))
 
     same_winner_board <- decision_sheet %>%
         dplyr::slice_head(n = 1) %>%
@@ -913,20 +522,6 @@ test_that("candidate generation adds decision metadata and an alternate bracket"
             candidate_2_pick = "Duke"
         )
     expect_match(render_ranked_decision_svg(same_winner_board), "Same winner, different path")
-
-    technical_html_without_optional <- create_technical_dashboard_html(
-        bracket_year = 2026L,
-        decision_sheet = decision_sheet,
-        candidates = candidates,
-        backtest = NULL,
-        total_points_predictions = NULL,
-        play_in_resolution = play_in_resolution,
-        model_quality_context = resolved_quality,
-        model_overview = model_overview
-    )
-    expect_match(technical_html_without_optional, "Cached identical validation snapshot")
-    expect_match(technical_html_without_optional, "Championship total-points distributions were not supplied for this run.")
-    expect_match(technical_html_without_optional, "Championship Tiebreaker Comparison")
 })
 
 test_that("candidate divergence board uses per-candidate matchup uncertainty", {
@@ -1373,20 +968,19 @@ test_that("dashboard warning tracks unresolved versus completed First Four slots
         candidates = candidates_partial,
         play_in_resolution = play_in_resolution_partial
     )
-    html_partial <- create_bracket_dashboard_html(
+    payload_partial <- build_bracket_dashboard_payload(
         bracket_year = loaded_partial$bracket_year,
-        decision_sheet = decision_sheet_partial,
         candidates = candidates_partial,
-        current_teams = loaded_partial$current_teams,
-        backtest = fake_quality_backtest,
+        decision_sheet = decision_sheet_partial,
         dashboard_context = context_partial,
         play_in_resolution = play_in_resolution_partial
     )
 
-    expect_match(html_partial, "Status: Simulated bracket path")
+    expect_invisible(validate_dashboard_payload(payload_partial, "bracket"))
+    expect_true(isTRUE(payload_partial$play_in_resolution$has_unresolved_slots[[1]]))
     expect_true(any(context_partial$matchup_context_rows$round == "First Four"))
     expect_true(any(context_partial$divergence_map_rows$round == "First Four"))
-    expect_match(html_partial, "data-round='First Four'")
+    expect_true(any(payload_partial$matchup_context$round == "First Four"))
 
     write_fixture_data_files(team_file, results_file, team_data = team_data, results_data = dplyr::bind_rows(results_data, current_duplicate_slots))
     loaded_resolved <- load_tournament_data(config)
@@ -1407,22 +1001,20 @@ test_that("dashboard warning tracks unresolved versus completed First Four slots
         candidates = candidates_resolved,
         play_in_resolution = play_in_resolution_resolved
     )
-    html_resolved <- create_bracket_dashboard_html(
+    payload_resolved <- build_bracket_dashboard_payload(
         bracket_year = loaded_resolved$bracket_year,
-        decision_sheet = decision_sheet_resolved,
         candidates = candidates_resolved,
-        current_teams = loaded_resolved$current_teams,
-        backtest = fake_quality_backtest,
+        decision_sheet = decision_sheet_resolved,
         dashboard_context = context_resolved,
         play_in_resolution = play_in_resolution_resolved
     )
 
-    expect_match(html_resolved, "Status: Final result")
-    expect_no_match(html_resolved, "Status: Simulated bracket path")
+    expect_invisible(validate_dashboard_payload(payload_resolved, "bracket"))
+    expect_false(isTRUE(payload_resolved$play_in_resolution$has_unresolved_slots[[1]]))
     expect_true(any(context_resolved$matchup_context_rows$round == "First Four"))
     expect_false(any(context_resolved$watchlist_rows$round == "First Four"))
     expect_false(any(context_resolved$divergence_map_rows$round == "First Four"))
-    expect_no_match(html_resolved, "data-round='First Four'")
-    expect_no_match(html_resolved, "data-divergence-round='First Four'")
-    expect_match(html_resolved, "<td>First Four</td>")
+    expect_false(any(payload_resolved$watchlist$round == "First Four"))
+    expect_false(any(payload_resolved$divergence_map$round == "First Four"))
+    expect_true(any(payload_resolved$matchup_context$round == "First Four"))
 })

@@ -30,6 +30,7 @@ test_that("publish_release_bundle copies only approved deliverables", {
             dir.create(target_path, recursive = TRUE, showWarnings = FALSE)
             writeLines("<html></html>", file.path(target_path, "index.html"))
             writeLines("<html></html>", file.path(target_path, "technical.html"))
+            writeLines("window.__MMBAYES_PAYLOADS__ = {};", file.path(target_path, "dashboard_payloads.js"))
         } else {
             writeLines(sprintf("fixture:%s", filename), target_path)
         }
@@ -59,6 +60,7 @@ test_that("publish_release_bundle copies only approved deliverables", {
     expect_equal(
         sort(list.files(result$deliverables_dir, recursive = TRUE)),
         sort(c(
+            "app/dashboard_payloads.js",
             "app/index.html",
             "app/technical.html",
             setdiff(release_deliverable_manifest(), "app"),
@@ -72,11 +74,51 @@ test_that("publish_release_bundle copies only approved deliverables", {
     expect_false(dir.exists(file.path(result$deliverables_dir, "model_cache")))
     expect_false(dir.exists(file.path(result$deliverables_dir, "logs")))
     expect_false(dir.exists(file.path(result$release_root, "data_snapshot")))
+    expect_false(file.exists(file.path(result$deliverables_dir, "bracket_dashboard.html")))
+    expect_false(file.exists(file.path(result$deliverables_dir, "technical_dashboard.html")))
     manifest_text <- paste(readLines(result$manifest_path, warn = FALSE), collapse = "\n")
     expect_match(manifest_text, "bracket_candidate_3\\.csv")
     expect_match(manifest_text, "source: configured runtime output directory")
     expect_match(manifest_text, "deliverables_dir: deliverables")
+    expect_no_match(manifest_text, "bracket_dashboard\\.html")
+    expect_no_match(manifest_text, "technical_dashboard\\.html")
     expect_false(grepl(output_dir, manifest_text, fixed = TRUE))
+})
+
+test_that("release deliverable manifest publishes only the React dashboard app", {
+    manifest <- release_deliverable_manifest()
+    expect_true("app" %in% manifest)
+    expect_false("bracket_dashboard.html" %in% manifest)
+    expect_false("technical_dashboard.html" %in% manifest)
+    expect_false("model_comparison_dashboard.html" %in% manifest)
+})
+
+test_that("publish_release_bundle fails clearly when the React app deliverable is incomplete", {
+    runtime_root <- tempfile(pattern = "mmBayes-runtime-")
+    output_dir <- file.path(runtime_root, "output")
+    app_dir <- file.path(output_dir, "app")
+    dir.create(app_dir, recursive = TRUE, showWarnings = FALSE)
+    on.exit(unlink(runtime_root, recursive = TRUE), add = TRUE)
+
+    config <- default_project_config()
+    config$runtime$root <- runtime_root
+    config$output$path <- output_dir
+    config <- normalize_project_paths(config)
+
+    for (filename in setdiff(release_deliverable_manifest(), "app")) {
+        writeLines(sprintf("fixture:%s", filename), file.path(output_dir, filename))
+    }
+    writeLines("fixture:bracket_candidate_1.csv", file.path(output_dir, "bracket_candidate_1.csv"))
+    writeLines("<html>bracket app</html>", file.path(app_dir, "index.html"))
+
+    expect_error(
+        publish_release_bundle(
+            config = config,
+            release_date = as.Date("2026-03-31"),
+            publish_root = tempfile(pattern = "mmBayes-publish-")
+        ),
+        regexp = "React dashboard app deliverable is incomplete.*technical\\.html.*dashboard_payloads\\.js"
+    )
 })
 
 test_that("publish_release_bundle defaults to the runtime output contract and fails without candidate CSVs", {
@@ -90,6 +132,7 @@ test_that("publish_release_bundle defaults to the runtime output contract and fa
             dir.create(target_path, recursive = TRUE, showWarnings = FALSE)
             writeLines("<html></html>", file.path(target_path, "index.html"))
             writeLines("<html></html>", file.path(target_path, "technical.html"))
+            writeLines("window.__MMBAYES_PAYLOADS__ = {};", file.path(target_path, "dashboard_payloads.js"))
         } else {
             writeLines(sprintf("fixture:%s", filename), target_path)
         }

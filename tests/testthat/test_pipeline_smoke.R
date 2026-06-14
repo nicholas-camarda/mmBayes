@@ -30,9 +30,12 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     expect_true(file.exists(file.path(output_dir, "fixture_model_summary.txt")))
     expect_true(file.exists(file.path(output_dir, "fixture_backtest_summary.txt")))
     expect_false(file.exists(file.path(output_dir, "fixture_bracket.png")))
-    expect_true(file.exists(file.path(output_dir, "bracket_dashboard.html")))
-    expect_true(file.exists(file.path(output_dir, "technical_dashboard.html")))
+    expect_false(file.exists(file.path(output_dir, "bracket_dashboard.html")))
+    expect_false(file.exists(file.path(output_dir, "technical_dashboard.html")))
     expect_false(file.exists(file.path(output_dir, "model_comparison_dashboard.html")))
+    expect_true(file.exists(file.path(output_dir, "bracket_dashboard_payload.json")))
+    expect_true(file.exists(file.path(output_dir, "technical_dashboard_payload.json")))
+    expect_true(file.exists(file.path(output_dir, "dashboard_payloads.js")))
     expect_true(file.exists(file.path(output_dir, "bracket_decision_sheet.csv")))
     expect_true(file.exists(file.path(output_dir, "bracket_candidate_1.csv")))
     expect_true(file.exists(file.path(output_dir, "model_quality", "latest_model_quality.rds")))
@@ -46,16 +49,14 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     expect_true(file.exists(results$output$model_quality_archive))
     expect_identical(results$output$model_quality_archive, results$output$model_quality_latest)
     expect_null(results$output$model_comparison_dashboard)
+    expect_null(results$output$dashboard)
+    expect_null(results$output$technical_dashboard)
     expect_false(any(startsWith(results$model$predictor_columns, "betting_")))
     expect_false(any(startsWith(results$total_points_model$predictor_columns, "betting_")))
     expect_null(results$visualization)
     expect_null(results$output$bracket_plot)
-    expect_true(file.exists(results$output$technical_dashboard))
-
     repo_output_dir <- file.path(tempfile(pattern = "mmBayes-repo-output-"))
     dir.create(repo_output_dir, recursive = TRUE, showWarnings = FALSE)
-    unlink(file.path(output_dir, "bracket_dashboard.html"))
-    unlink(file.path(output_dir, "technical_dashboard.html"))
 
     testthat::local_mocked_bindings(
         run_tournament_simulation = function(...) stop("regeneration should not rerun the full simulation"),
@@ -77,25 +78,11 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
         dashboard_build_metadata = dashboard_build_metadata
     )
 
-    expect_true(file.exists(regenerated$dashboard))
-    expect_true(file.exists(regenerated$technical_dashboard))
+    expect_null(regenerated$dashboard)
+    expect_null(regenerated$technical_dashboard)
     expect_null(regenerated$model_comparison_dashboard)
-    expect_length(regenerated$repo_output_files, 2L)
-    expect_true(all(file.exists(regenerated$repo_output_files)))
-    expect_equal(
-        basename(regenerated$repo_output_files),
-        dashboard_html_manifest()
-    )
-
-    rendered_dashboard_html <- paste(readLines(regenerated$dashboard, warn = FALSE), collapse = "\n")
-    synced_dashboard_html <- paste(readLines(regenerated$repo_output_files[[1]], warn = FALSE), collapse = "\n")
-    expect_match(rendered_dashboard_html, "Updated")
-    expect_match(rendered_dashboard_html, "April 23, 2026")
-    expect_match(rendered_dashboard_html, "Built from commit")
-    expect_match(rendered_dashboard_html, "Repo snapshot")
-    expect_match(rendered_dashboard_html, "Synced to tracked repo output in this run")
-    expect_match(synced_dashboard_html, "Synced to tracked repo output in this run")
-    if (!is.na(dashboard_build_metadata$commit_short)) {
-        expect_match(rendered_dashboard_html, dashboard_build_metadata$commit_short)
-    }
+    expect_true(file.exists(regenerated$bracket_payload))
+    expect_true(file.exists(regenerated$technical_payload))
+    expect_true(file.exists(regenerated$payload_js))
+    expect_equal(regenerated$repo_output_files, character(0))
 })

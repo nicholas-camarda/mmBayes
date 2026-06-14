@@ -207,7 +207,7 @@ test_that("dashboard payload JSON round-trips with rows orientation", {
     expect_equal(parsed$candidates[[1]]$matchups[[1]]$teamA, "Duke")
 })
 
-test_that("write_dashboard_outputs writes validated payload artifacts beside the HTML", {
+test_that("write_dashboard_outputs writes validated React app payload artifacts only", {
     output_dir <- file.path(tempdir(), paste0("payload_test_", as.integer(Sys.time())))
     dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
     on.exit(unlink(output_dir, recursive = TRUE), add = TRUE)
@@ -226,9 +226,13 @@ test_that("write_dashboard_outputs writes validated payload artifacts beside the
             )
         )
     )
+    expect_false(file.exists(file.path(output_dir, "bracket_dashboard.html")))
+    expect_false(file.exists(file.path(output_dir, "technical_dashboard.html")))
     expect_true(file.exists(file.path(output_dir, "bracket_dashboard_payload.json")))
     expect_true(file.exists(file.path(output_dir, "technical_dashboard_payload.json")))
     expect_true(file.exists(file.path(output_dir, "dashboard_payloads.js")))
+    expect_null(result$dashboard)
+    expect_null(result$technical_dashboard)
     expect_equal(result$bracket_payload, file.path(output_dir, "bracket_dashboard_payload.json"))
 
     parsed <- jsonlite::fromJSON(
@@ -251,16 +255,15 @@ test_that("tracked output app payload is not the Vitest fixture shim", {
     expect_no_match(payload_line, "West_01_2025", fixed = TRUE)
 })
 
-test_that("sync_frontend_app skips with an actionable message when dist is missing", {
+test_that("sync_frontend_app fails clearly when dist is missing", {
     project_root <- file.path(tempdir(), paste0("no_dist_", as.integer(Sys.time())))
     runtime_dir <- file.path(project_root, "runtime_output")
     dir.create(runtime_dir, recursive = TRUE, showWarnings = FALSE)
     on.exit(unlink(project_root, recursive = TRUE), add = TRUE)
-    expect_message(
-        result <- sync_frontend_app(project_root, runtime_output_dir = runtime_dir),
-        "npm install"
+    expect_error(
+        sync_frontend_app(project_root, runtime_output_dir = runtime_dir),
+        "Frontend app build not found"
     )
-    expect_null(result)
 })
 
 test_that("sync_frontend_app copies the built app and payload shim to both targets", {
