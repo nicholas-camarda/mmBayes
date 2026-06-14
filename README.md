@@ -43,8 +43,7 @@ Live tournament commentary is separate from the prediction-time inputs: First Fo
 
 Optional diagnostics:
 
-- [Technical dashboard (React app)](https://nicholas-camarda.github.io/mmBayes/output/app/technical.html) - compare boards, calibration, and backtest detail
-- [Technical dashboard (legacy HTML)](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) - R-rendered snapshot kept for backward compatibility
+- [Technical dashboard](https://nicholas-camarda.github.io/mmBayes/output/app/technical.html) - compare boards, calibration, and backtest detail
 
 ## Working Roots
 
@@ -69,7 +68,7 @@ Rscript scripts/update_data.R
 Rscript scripts/run_simulation.R
 
 # This writes the live dashboard bundle to the configured runtime output directory
-# and syncs the tracked repo dashboard HTML snapshot under `output/`.
+# and syncs the React app under `output/app/`.
 # Open `app/index.html` in that directory first.
 # Expect this step to take longer than the refresh step because it fits/loads models,
 # runs the backtest workflow, and then renders the dashboard bundle.
@@ -90,13 +89,13 @@ Rscript scripts/regenerate_and_sync_dashboards.R
 ```
 
 Then scan `bracket_decision_sheet.csv` in the configured runtime output directory to identify the highest-leverage picks before filling out your entry.
-The pipeline writes its live outputs under the configured runtime output directory. The tracked files under `output/` in this repo are dashboard HTML snapshots for GitHub Pages, not the live run directory and not the CSV/TXT source of truth. `scripts/run_simulation.R` now syncs those tracked HTML snapshots automatically after a successful full run. Publish scripts can copy approved runtime deliverables into the configured synced project home when you want a shared release bundle.
+The pipeline writes its live outputs under the configured runtime output directory. The tracked dashboard app under `output/app/` is the GitHub Pages surface, not the live run directory and not the CSV/TXT source of truth. `scripts/run_simulation.R` syncs the React app under `output/app/` after a successful full run. Publish scripts can copy approved runtime deliverables into the configured synced project home when you want a shared release bundle.
 
 ---
 
 ## Outputs
 
-After a pipeline run the following artifacts are generated in the configured runtime output directory. The repository tracks only the dashboard HTML snapshots under `output/` for GitHub Pages. CSV, TXT, RDS, cache, and log artifacts should be read from the runtime output directory or from a dated release bundle.
+After a pipeline run the following artifacts are generated in the configured runtime output directory. The repository tracks the React dashboard app under `output/app/` for GitHub Pages. CSV, TXT, RDS, cache, and log artifacts should be read from the runtime output directory or from a dated release bundle.
 
 ### Primary Dashboard (React app)
 
@@ -104,13 +103,6 @@ After a pipeline run the following artifacts are generated in the configured run
 |------|-------------|
 | [output/app/index.html](https://nicholas-camarda.github.io/mmBayes/output/app/index.html) | Primary bracket entry workspace |
 | [output/app/technical.html](https://nicholas-camarda.github.io/mmBayes/output/app/technical.html) | Compare boards, live monitoring, calibration, and backtest detail |
-
-### Legacy HTML snapshots
-
-| File | Description |
-|------|-------------|
-| [bracket_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/bracket_dashboard.html) | R-rendered bracket dashboard kept for backward compatibility |
-| [technical_dashboard.html](https://nicholas-camarda.github.io/mmBayes/output/technical_dashboard.html) | R-rendered technical dashboard kept for backward compatibility |
 
 ### Decision Artifacts (CSV)
 
@@ -148,19 +140,19 @@ Release publishing includes every generated `bracket_candidate_{id}.csv` file fo
 
 | Command | Purpose |
 |---------|---------|
-| `Rscript scripts/run_simulation.R` | Authoritative full pipeline: fit, backtest, simulate, compare, export, and sync tracked repo dashboard HTML |
+| `Rscript scripts/run_simulation.R` | Authoritative full pipeline: fit, backtest, simulate, compare, export, and sync the tracked React dashboard app |
 | `Rscript scripts/update_data.R` | Refresh canonical data files from source |
 | `Rscript scripts/run_bracket_candidates.R` | Lighter rerun without the full backtest, but it still fits or reloads models and regenerates candidates |
-| `Rscript scripts/regenerate_and_sync_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds HTML from the saved full results bundle and syncs repo `output/` copies |
+| `Rscript scripts/regenerate_and_sync_dashboards.R` | Preferred dashboard-refresh command for rendering changes; rebuilds the app from the saved full results bundle and syncs repo `output/app/` copies |
 | `Rscript scripts/data_quality_check.R` | Data-quality validation |
 | `Rscript scripts/publish_release.R` | Copy approved deliverables into the dated release folder under the configured synced project home |
-| `Rscript scripts/publish_github_pages.R` | Internal plumbing helper that copies already-rendered dashboard HTML into tracked repo `output/` files; not part of the normal user workflow |
+| `Rscript scripts/publish_github_pages.R` | Internal plumbing helper that copies an already-rendered dashboard app into tracked repo `output/app/`; not part of the normal user workflow |
 
 Notes:
 
 - `scripts/run_simulation.R` and `scripts/run_bracket_candidates.R` load `.env` when present via `load_dotenv_file()`.
 - Logs are written under the configured runtime output directory's `logs/` subdirectory; full simulation logs are uniquely timestamped per run.
-- `scripts/run_simulation.R` syncs the tracked repo dashboard HTML snapshot after a successful full run so the committed `output/` files stay aligned with the latest runtime dashboard bundle.
+- `scripts/run_simulation.R` syncs the tracked React dashboard app after a successful full run so the committed `output/app/` files stay aligned with the latest runtime dashboard bundle.
 - `scripts/run_bracket_candidates.R` is not the right command for CSS/layout-only iteration; it still performs model/candidate work. Use `scripts/regenerate_and_sync_dashboards.R` when the saved full results bundle already exists.
 - `scripts/publish_github_pages.R` is internal plumbing. It does not regenerate dashboards and should only copy a bundle you already know is the right one.
 - `scripts/publish_release.R` publishes from the runtime output directory, not the cloud output tree, and includes every generated `bracket_candidate_{id}.csv` file in that run's output.
@@ -172,9 +164,8 @@ Notes:
 The R pipeline emits versioned JSON payloads
 (`bracket_dashboard_payload.json`, `technical_dashboard_payload.json`,
 schema v1.1.0, contracts in `inst/schemas/`) and syncs a static React + Vite
-frontend in `frontend/` to `output/app/`. The beautified React app is the
-primary dashboard entry surface; legacy R-rendered HTML is still generated as a
-secondary snapshot.
+frontend in `frontend/` to `output/app/`. The React app is the dashboard
+surface for bracket entry and technical diagnostics.
 
 ```sh
 cd frontend && npm install && npm run build
@@ -198,9 +189,8 @@ Styling uses a token-driven CSS module layout under `frontend/src/styles/`:
 `tokens.css` (design variables), `layout.css` (panel shells and grid rhythm),
 and `components/*.css` (comparison boards, probability tracks, evidence drawer).
 
-If the frontend is not built, all R commands work unchanged and the legacy
-HTML dashboards are still produced. Build the frontend before publishing so
-`output/app/` stays aligned with the runtime payload bundle.
+Build the frontend before dashboard publication so `output/app/` stays aligned
+with the runtime payload bundle.
 
 ---
 
@@ -288,7 +278,7 @@ mmBayes/
 ├── scripts/            # Command-line entry points
 ├── tests/              # Automated tests and fixtures
 ├── data/               # Checked-in reference inputs; live canonical data live in the configured synced project home
-├── output/             # Checked-in dashboard HTML snapshots; active runs use the configured runtime output directory
+├── output/             # Checked-in React dashboard app; active runs use the configured runtime output directory
 ├── docs/               # Methods guide and reference material
 ├── archive/            # Historical material no longer in the active workflow
 └── config.yml          # Pipeline configuration
