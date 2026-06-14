@@ -31,13 +31,13 @@ export function entryRegionDisplay(region: string | undefined, round: string | u
 export function entryFillStep(regionName: string): string {
   switch (regionName) {
     case "East":
-      return "Fill 1";
+      return "Fill first";
     case "West":
-      return "Fill 2";
+      return "Fill second";
     case "South":
-      return "Fill 3";
+      return "Fill third";
     case "Midwest":
-      return "Fill 4";
+      return "Fill fourth";
     case "National":
       return "Finals";
     default:
