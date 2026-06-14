@@ -1391,10 +1391,10 @@ Expected: commit succeeds if snapshots or built app files changed. If no files c
 Run:
 
 ```sh
-rg -n "\| Pending \||Fail|Pending visual repair|Automated coverage present; pending final visual gate|Agent screenshot review passed:\s*$|User screenshot review passed:\s*$" docs/dashboard-cutover-reference/visual-acceptance-ledger.md docs/dashboard-cutover-reference/parity-matrix.md
+rg -n "\| Pending \||\| Fail \||Pending visual repair|Automated coverage present; pending final visual gate|Agent screenshot review passed:\s*$|User screenshot review passed:\s*$" docs/dashboard-cutover-reference/visual-acceptance-ledger.md docs/dashboard-cutover-reference/parity-matrix.md
 ```
 
-Expected: no ledger rows still contain `| Pending |`, no `Fail` rows are present, no pending parity statuses remain, and neither screenshot review signoff line is blank. If this command finds any match, stop and return to Task 5, Task 6, Task 7, or the user visual review gate.
+Expected: no ledger rows still contain `| Pending |`, no ledger rows are marked `| Fail |`, no pending parity statuses remain, and neither screenshot review signoff line is blank. If this command finds any match, stop and return to Task 5, Task 6, Task 7, or the user visual review gate.
 
 - [ ] **Step 2: Confirm root monolith outputs are not required by tests**
 
