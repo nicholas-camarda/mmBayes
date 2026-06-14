@@ -16,4 +16,7 @@ test("renders labeled stats and lane for accessibility", () => {
   expect(screen.getByText("Posterior mean")).toBeInTheDocument();
   expect(screen.getByText("72.0%")).toBeInTheDocument();
   expect(document.querySelector(".prob-track__lane")).toBeTruthy();
+  expect(document.querySelector(".prob-track__scale")).toBeTruthy();
+  expect(document.querySelector(".prob-track__range")).toBeTruthy();
+  expect(screen.getByRole("img", { name: /Posterior mean 72.0%/ })).toBeInTheDocument();
 });

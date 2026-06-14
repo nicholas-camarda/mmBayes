@@ -7,6 +7,7 @@
   --bg: #071018;
   --bg-2: #0a1420;
   --panel: rgba(15, 23, 42, 0.94);
+  --panel-2: rgba(21, 32, 50, 0.86);
   --panel-strong: rgba(17, 24, 39, 0.98);
   --panel-soft: rgba(21, 32, 50, 0.72);
   --border: rgba(125, 151, 183, 0.34);
@@ -34,10 +35,10 @@
   --space-5: 22px;
   --space-6: 30px;
 
-  --text-xs: 0.72rem;
-  --text-sm: 0.84rem;
-  --text-base: 0.94rem;
-  --text-lg: 1.06rem;
-  --text-xl: 1.42rem;
-  --text-hero: clamp(1.75rem, 2.5vw, 2.35rem);
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 0.95rem;
+  --text-lg: 1.08rem;
+  --text-xl: 1.45rem;
+  --text-hero: clamp(1.8rem, 2.5vw, 2.4rem);
 }

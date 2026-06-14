@@ -1,5 +1,6 @@
+import type { CSSProperties } from "react";
+import { formatProbability, formatProbabilityInterval, tierClassName } from "../../lib/format";
 import { tierColor } from "../../lib/tierColors";
-import { formatProbability, formatProbabilityInterval } from "../../lib/format";
 
 interface ProbabilityTrackProps {
   meanProbability?: number;
@@ -16,6 +17,14 @@ interface ProbabilityTrackProps {
 function clampPosition(value: number, min: number, max: number): number {
   if (max <= min) return 50;
   return Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+}
+
+function axisTickValues(axisMin: number, axisMax: number, tickCount = 3): number[] {
+  if (tickCount < 2 || axisMax <= axisMin) {
+    return [axisMin, axisMax];
+  }
+  const step = (axisMax - axisMin) / (tickCount - 1);
+  return Array.from({ length: tickCount }, (_, index) => axisMin + step * index);
 }
 
 export function ProbabilityTrack({
@@ -36,11 +45,17 @@ export function ProbabilityTrack({
   const meanPosition = clampPosition(mean, axisMin, axisMax);
   const lowerPosition = clampPosition(lower, axisMin, axisMax);
   const upperPosition = clampPosition(upper, axisMin, axisMax);
+  const ticks = axisTickValues(axisMin, axisMax, 3);
+  const laneLabel = `${valueLabel} ${formatProbability(meanProbability)} with ${intervalLabel.toLowerCase()} ${formatProbabilityInterval(lowerProbability, upperProbability)}`;
 
   return (
-    <div className="prob-track">
+    <div
+      className="prob-track"
+      data-tier={tierClassName(confidenceTier)}
+      style={{ "--track-color": trackColor } as CSSProperties}
+    >
       <div className="prob-track__summary">
-        <div className="prob-track__stat">
+        <div className="prob-track__stat prob-track__stat-hero">
           <span>{valueLabel}</span>
           <strong>{formatProbability(meanProbability)}</strong>
         </div>
@@ -49,22 +64,57 @@ export function ProbabilityTrack({
           <strong>{formatProbabilityInterval(lowerProbability, upperProbability)}</strong>
         </div>
       </div>
-      <div className="prob-track__lane">
-        <div
-          className="prob-track__range"
-          style={{
-            left: `${lowerPosition}%`,
-            width: `${Math.max(upperPosition - lowerPosition, 1)}%`,
-            background: trackColor,
-          }}
-        />
-        <div
-          className="prob-track__point"
-          style={{
-            left: `${meanPosition}%`,
-            background: trackColor,
-          }}
-        />
+
+      <div className="prob-track__chart">
+        <div className="prob-track__lane" role="img" aria-label={laneLabel}>
+          <div className="prob-track__grid" aria-hidden="true">
+            {ticks.map((tick) => (
+              <span
+                key={tick}
+                className="prob-track__grid-line"
+                style={{ left: `${clampPosition(tick, axisMin, axisMax)}%` }}
+              />
+            ))}
+          </div>
+          <div
+            className="prob-track__range"
+            style={{
+              left: `${lowerPosition}%`,
+              width: `${Math.max(upperPosition - lowerPosition, 2)}%`,
+            }}
+          />
+          <span
+            className="prob-track__bound prob-track__bound--lower"
+            style={{ left: `${lowerPosition}%` }}
+            aria-hidden="true"
+          >
+            <em>{formatProbability(lower)}</em>
+          </span>
+          <span
+            className="prob-track__bound prob-track__bound--upper"
+            style={{ left: `${upperPosition}%` }}
+            aria-hidden="true"
+          >
+            <em>{formatProbability(upper)}</em>
+          </span>
+          <span className="prob-track__point" style={{ left: `${meanPosition}%` }} aria-hidden="true" />
+        </div>
+        <div className="prob-track__scale" aria-hidden="true">
+          {ticks.map((tick, index) => (
+            <span
+              key={`label-${tick}`}
+              className={[
+                "prob-track__scale-label",
+                index === 0 ? "prob-track__scale-label--start" : "",
+                index === ticks.length - 1 ? "prob-track__scale-label--end" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {formatProbability(tick)}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -146,6 +146,25 @@
   margin-top: var(--space-3);
 }
 
+.advantage-chart__intro {
+  display: grid;
+  gap: 2px;
+}
+
+.advantage-chart__title {
+  margin: 0;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.advantage-chart__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .advantage-chart__header,
 .advantage-row__values {
   display: grid;
@@ -171,6 +190,10 @@
 .advantage-row__feature {
   color: var(--muted);
   text-align: center;
+  text-decoration: underline dotted rgba(148, 163, 184, 0.75);
+  text-underline-offset: 0.18em;
+  cursor: help;
+  font-style: normal;
 }
 
 .advantage-row__values span:first-child,

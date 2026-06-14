@@ -3,6 +3,7 @@ import {
   advantageDirection,
   advantageTrackWidth,
   favorLabel,
+  featureTooltip,
   formatFeatureValue,
 } from "../../lib/matchupFeatures";
 
@@ -33,6 +34,7 @@ export function AdvantageChart({ row, teamAName, teamBName }: AdvantageChartProp
 
     return {
       feature: spec.label,
+      featureTooltip: featureTooltip(spec),
       teamA: formatFeatureValue(teamAValue, spec.digits),
       teamB: formatFeatureValue(teamBValue, spec.digits),
       diff: formatFeatureValue(diffValue, spec.digits),
@@ -44,6 +46,10 @@ export function AdvantageChart({ row, teamAName, teamBName }: AdvantageChartProp
 
   return (
     <div className="advantage-chart" data-testid="advantage-chart">
+      <div className="advantage-chart__intro">
+        <h4 className="advantage-chart__title">Matchup comparison</h4>
+        <p className="advantage-chart__hint">Hover a metric name for the full definition.</p>
+      </div>
       <div className="advantage-chart__header">
         <span>{teamAName}</span>
         <span>Advantage</span>
@@ -53,7 +59,12 @@ export function AdvantageChart({ row, teamAName, teamBName }: AdvantageChartProp
         <div key={metric.feature} className="advantage-row">
           <div className="advantage-row__values">
             <span>{metric.teamA}</span>
-            <span className="advantage-row__feature">{metric.feature}</span>
+            <abbr
+              className="advantage-row__feature"
+              title={metric.featureTooltip}
+            >
+              {metric.feature}
+            </abbr>
             <span>{metric.teamB}</span>
           </div>
           <div className="advantage-row__lane" aria-hidden="true">
