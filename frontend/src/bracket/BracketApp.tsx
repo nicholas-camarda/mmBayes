@@ -71,15 +71,15 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
           candidates={payload.candidates}
           decisionSheet={payload.decision_sheet}
         />
+        <div className="candidate-grid candidate-grid--detail">
+          <CandidateSummaryPanel candidates={payload.candidates} />
+        </div>
         <EntryWorkspace
           candidates={payload.candidates}
           decisionSheet={payload.decision_sheet}
           candidateSummaries={payload.candidate_summaries}
           onOpenEvidence={openEvidence}
         />
-        <div className="candidate-grid candidate-grid--detail">
-          <CandidateSummaryPanel candidates={payload.candidates} />
-        </div>
       </DashboardSection>
 
       <DashboardSection
