@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const repoRoot = path.resolve(__dirname, "..");
 const distDir = path.join(repoRoot, "frontend", "dist");
+const COMPARE_WORKSPACE_NEAR_VIEWPORT_TOP = 1200;
 
 function stageApp() {
   const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), "mmbayes-frontend-e2e-"));
@@ -274,7 +275,7 @@ test.describe("static frontend dashboards", () => {
     await expect(page.locator("svg.btree-svg")).toHaveCount(2);
 
     const treeNode = page.locator("[data-btree-panel='candidate-1'] g.btree-node").first();
-    await treeNode.hover();
+    await treeNode.locator("rect").hover();
     await expect(page.locator("#btree-tooltip")).toHaveClass(/is-visible/);
 
     const evidenceId = await treeNode.getAttribute("data-open-evidence");
@@ -462,6 +463,11 @@ test.describe("static frontend dashboards", () => {
 
     await page.goto(`file://${path.join(stageDir, "technical.html")}`, { waitUntil: "domcontentloaded" });
     await expectInFirstViewport(page.getByTestId("technical-action-summary"));
-    await expectStartsBefore(page.getByTestId("compare-workspace"), 1200);
+    // Compare is a full analytical workspace, so the gate requires its start
+    // near the first viewport after the action and orientation panels.
+    await expectStartsBefore(
+      page.getByTestId("compare-workspace"),
+      COMPARE_WORKSPACE_NEAR_VIEWPORT_TOP,
+    );
   });
 });
