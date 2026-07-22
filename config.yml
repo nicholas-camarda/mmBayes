@@ -1,8 +1,8 @@
 default:
   runtime:
     slug: "mmBayes"
-    root: "~/ProjectsRuntime/mmBayes"
-    exports_root: "~/ProjectsRuntime/mmBayes/exports"
+    root: "~/Workspaces/mmbayes/runtime"
+    exports_root: "~/Workspaces/mmbayes/runtime/exports"
   data:
     team_features_path: "~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx"
     game_results_path: "~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx"
@@ -49,8 +49,8 @@ default:
     random_seed: 42
     n_draws: 1000
   output:
-    path: "~/ProjectsRuntime/mmBayes/output"
+    path: "~/Workspaces/mmbayes/runtime/output"
     prefix: "tournament_sim"
-    model_cache_path: "~/ProjectsRuntime/mmBayes/output/model_cache"
-    log_path: "~/ProjectsRuntime/mmBayes/output/logs/tournament_simulation.log"
-    refresh_log_path: "~/ProjectsRuntime/mmBayes/output/logs/data_refresh.log"
+    model_cache_path: "~/Workspaces/mmbayes/runtime/output/model_cache"
+    log_path: "~/Workspaces/mmbayes/runtime/output/logs/tournament_simulation.log"
+    refresh_log_path: "~/Workspaces/mmbayes/runtime/output/logs/data_refresh.log"

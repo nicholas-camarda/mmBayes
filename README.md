@@ -77,6 +77,12 @@ All artifacts are written to your configured runtime output directory. The repos
 These are generated in the runtime output directory and git-ignored:
 `tournament_sim.rds`, `bracket_candidates.rds`, `model_cache/`, `model_quality/`, and run logs.
 
+### Directory Roots
+
+- Source: `~/Workspaces/mmbayes/source`
+- Runtime: `~/Workspaces/mmbayes/runtime`
+- Cloud data and published releases: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes`
+
 ---
 
 ## Commands

@@ -14,7 +14,7 @@ project_slug <- function() {
 #' @return A normalized path under the user's home directory.
 #' @keywords internal
 default_runtime_root <- function() {
-    path.expand(file.path("~", "ProjectsRuntime", project_slug()))
+    path.expand(file.path("~", "Workspaces", "mmbayes", "runtime"))
 }
 
 #' Return the default local code root
@@ -22,7 +22,7 @@ default_runtime_root <- function() {
 #' @return A normalized path to the active local checkout.
 #' @keywords internal
 default_code_root <- function() {
-    path.expand(file.path("~", "Projects", project_slug()))
+    path.expand(file.path("~", "Workspaces", "mmbayes", "source"))
 }
 
 #' Return the canonical cloud root for shared project files

@@ -1,3 +1,4 @@
 project_slug: mmBayes
 project_type: sideproject
+runtime_home: ~/Workspaces/mmbayes/runtime
 publish_root_name: releases

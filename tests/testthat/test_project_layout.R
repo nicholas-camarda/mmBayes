@@ -1,8 +1,8 @@
 test_that("project roots point at the local code, runtime, cloud, and publish paths", {
     roots <- project_roots(as.Date("2026-03-27"))
 
-    expect_equal(roots$code_root, path.expand("~/Projects/mmBayes"))
-    expect_equal(roots$runtime_root, path.expand("~/ProjectsRuntime/mmBayes"))
+    expect_equal(roots$code_root, path.expand("~/Workspaces/mmbayes/source"))
+    expect_equal(roots$runtime_root, path.expand("~/Workspaces/mmbayes/runtime"))
     expect_equal(
         roots$cloud_root,
         path.expand("~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes")
@@ -182,4 +182,9 @@ test_that("regenerate_dashboards_from_saved_results fails clearly when the saved
         ),
         regexp = "Saved results bundle not found: .*fixture\\.rds.*run_simulation\\.R"
     )
+})
+
+test_that("retired odds collector launchd template is absent", {
+    repo_root <- normalizePath(testthat::test_path("..", ".."), mustWork = TRUE)
+    expect_false(file.exists(file.path(repo_root, "launchd", "com.ncamarda.mmBayes.odds_collector.plist")))
 })
