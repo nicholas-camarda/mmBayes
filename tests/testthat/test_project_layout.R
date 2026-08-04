@@ -5,13 +5,13 @@ test_that("project roots point at the local code, runtime, cloud, and publish pa
     expect_equal(roots$runtime_root, path.expand("~/Workspaces/mmbayes/runtime"))
     expect_equal(
         roots$cloud_root,
-        path.expand("~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes")
+        path.expand("~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/mmbayes")
     )
     expect_equal(roots$data_root, file.path(roots$cloud_root, "data"))
     expect_equal(roots$output_root, file.path(roots$runtime_root, "output"))
     expect_equal(
         roots$publish_root,
-        path.expand("~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes")
+        path.expand("~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/mmbayes")
     )
     expect_equal(roots$release_root, file.path(roots$publish_root, "releases", "2026-03-27"))
 })
