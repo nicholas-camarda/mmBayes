@@ -1,7 +1,7 @@
 test_that("project roots point at the local code, runtime, cloud, and publish paths", {
     roots <- project_roots(as.Date("2026-03-27"))
 
-    expect_equal(roots$code_root, path.expand("~/Workspaces/mmbayes/source"))
+    expect_equal(roots$code_root, path.expand("~/Workspaces/mmbayes"))
     expect_equal(roots$runtime_root, path.expand("~/Workspaces/mmbayes/runtime"))
     expect_equal(
         roots$cloud_root,

@@ -11,7 +11,7 @@ output/*.log
 tests/testthat/output/logs
 tests/testthat/output/model_cache
 
-archive/
+/archive/
 
 *.Rout
 priors/*.rds
@@ -51,3 +51,7 @@ frontend/dist/
 
 # Claude Code session worktrees
 .claude/worktrees/
+
+# Workspace files at the repo root (also in the global ignore)
+/runtime/
+/manifest.yaml

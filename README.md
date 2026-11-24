@@ -79,7 +79,7 @@ These are generated in the runtime output directory and git-ignored:
 
 ### Directory Roots
 
-- Source: `~/Workspaces/mmbayes/source`
+- Source: `~/Workspaces/mmbayes`
 - Runtime: `~/Workspaces/mmbayes/runtime`
 - Cloud data and published releases: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes`
 

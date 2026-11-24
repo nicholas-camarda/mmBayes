@@ -22,7 +22,7 @@ default_runtime_root <- function() {
 #' @return A normalized path to the active local checkout.
 #' @keywords internal
 default_code_root <- function() {
-    path.expand(file.path("~", "Workspaces", "mmbayes", "source"))
+    path.expand(file.path("~", "Workspaces", "mmbayes"))
 }
 
 #' Return the canonical cloud root for shared project files
