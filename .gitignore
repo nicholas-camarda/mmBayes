@@ -48,3 +48,6 @@ frontend/dist/
 # Tracked static frontend snapshot for GitHub Pages
 !output/app/
 !output/app/**
+
+# Claude Code session worktrees
+.claude/worktrees/
