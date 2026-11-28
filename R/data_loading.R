@@ -349,7 +349,7 @@ prepare_current_teams <- function(team_data, bracket_year) {
 #' @param team_features A historical team feature table.
 #' @param game_results A historical tournament game-results table.
 #'
-#' @return A matchup-level training table with forward and reversed game rows.
+#' @return A matchup-level training table with one row per game.
 #' @keywords internal
 build_explicit_matchup_history <- function(team_features, game_results) {
     if (!"team_key" %in% names(team_features)) {
@@ -434,34 +434,38 @@ build_explicit_matchup_history <- function(team_features, game_results) {
         }
     )
 
-    reverse_rows <- forward_rows %>%
-        dplyr::mutate(
-            teamA_original = teamA,
-            teamB_original = teamB,
-            teamA = teamB_original,
-            teamB = teamA_original,
-            winner = dplyr::if_else(actual_outcome >= 0.5, teamB_original, teamA_original),
-            actual_outcome = 1 - actual_outcome,
-            same_conf = same_conf,
-            seed_diff = -seed_diff,
-            barthag_logit_diff = -barthag_logit_diff,
-            AdjOE_diff = -AdjOE_diff,
-            AdjDE_diff = -AdjDE_diff,
-            WAB_diff = -WAB_diff,
-            TOR_diff = -TOR_diff,
-            TORD_diff = -TORD_diff,
-            ORB_diff = -ORB_diff,
-            DRB_diff = -DRB_diff,
-            `3P%_diff` = -`3P%_diff`,
-            `3P%D_diff` = -`3P%D_diff`,
-            `Adj T._diff` = -`Adj T._diff`
-        ) %>%
-        dplyr::select(-teamA_original, -teamB_original)
-
-    dplyr::bind_rows(forward_rows, reverse_rows) %>%
+    orient_games_for_training(forward_rows) %>%
         dplyr::mutate(
             round = factor(round, levels = round_levels())
         )
+}
+
+#' Give each historical game one training row with a fixed pseudo-random side
+#'
+#' Each game enters the likelihood once. Which team is listed first is chosen
+#' from a hash of the game's identity (year, region, round, slot), so the
+#' choice is reproducible, independent of the global random seed, and
+#' unrelated to seed or bracket position.
+#'
+#' @param forward_rows Matchup rows in source order (one per game).
+#'
+#' @return The same games, about half of them swapped.
+#' @keywords internal
+orient_games_for_training <- function(forward_rows) {
+    game_identity <- paste(forward_rows$Year, forward_rows$region, forward_rows$round, forward_rows$game_index, sep = "|")
+    flip <- vapply(game_identity, function(id) {
+        strtoi(substr(digest::digest(id, algo = "md5", serialize = FALSE), 1, 7), base = 16L) %% 2L == 1L
+    }, logical(1), USE.NAMES = FALSE)
+    if (!any(flip)) {
+        return(forward_rows)
+    }
+    swapped <- swap_matchup_orientation(forward_rows[flip, , drop = FALSE])
+    if ("winner" %in% names(swapped)) {
+        swapped$winner <- forward_rows$winner[flip]
+    }
+    out <- forward_rows
+    out[flip, ] <- swapped
+    out
 }
 
 #' Join actual game results back to team features

@@ -1572,7 +1572,6 @@ render_ensemble_diagnostics_html <- function(model_overview) {
         "<div class='summary-grid'>",
         "<div class='summary-card'><div class='summary-label'>Stan GLM weight</div><div class='summary-value'>", html_escape(sprintf("%.3f", safe_numeric(combiner$weight_stan_glm %||% NA_real_, default = NA_real_))), "</div></div>",
         "<div class='summary-card'><div class='summary-label'>BART weight</div><div class='summary-value'>", html_escape(sprintf("%.3f", safe_numeric(combiner$weight_bart %||% NA_real_, default = NA_real_))), "</div></div>",
-        "<div class='summary-card'><div class='summary-label'>Intercept</div><div class='summary-value'>", html_escape(sprintf("%.3f", safe_numeric(combiner$intercept %||% NA_real_, default = NA_real_))), "</div></div>",
         "<div class='summary-card'><div class='summary-label'>Proof gate</div><div class='summary-value'>", html_escape(if (isTRUE(validation$gate_passed %||% FALSE)) "Pass" else "Not recorded"), "</div></div>",
         "</div>",
         "<p>", html_escape(summary_text), "</p>",

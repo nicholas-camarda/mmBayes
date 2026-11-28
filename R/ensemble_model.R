@@ -88,17 +88,19 @@ clip_ensemble_probability <- function(probability) {
 
 #' Combine component probabilities on the logit scale
 #'
+#' The combination has no intercept, so it stays order-invariant: swapping
+#' the two teams turns each component probability p into 1 - p and the
+#' combined probability into 1 minus itself.
+#'
 #' @param stan_probability Stan GLM probabilities.
 #' @param bart_probability BART probabilities.
-#' @param intercept Optional intercept.
 #' @param weight_stan_glm Weight assigned to Stan GLM.
 #'
 #' @return Combined probabilities.
 #' @keywords internal
-combine_ensemble_probabilities <- function(stan_probability, bart_probability, intercept = 0, weight_stan_glm = 0.5) {
+combine_ensemble_probabilities <- function(stan_probability, bart_probability, weight_stan_glm = 0.5) {
     stats::plogis(
-        intercept +
-            weight_stan_glm * stats::qlogis(clip_ensemble_probability(stan_probability)) +
+        weight_stan_glm * stats::qlogis(clip_ensemble_probability(stan_probability)) +
             (1 - weight_stan_glm) * stats::qlogis(clip_ensemble_probability(bart_probability))
     )
 }
@@ -107,12 +109,11 @@ combine_ensemble_probabilities <- function(stan_probability, bart_probability, i
 #'
 #' @param stan_draws Draw-by-game Stan probability matrix.
 #' @param bart_draws Draw-by-game BART probability matrix.
-#' @param intercept Optional intercept.
 #' @param weight_stan_glm Weight assigned to Stan GLM.
 #'
 #' @return A draw-by-game combined probability matrix.
 #' @keywords internal
-combine_ensemble_draws <- function(stan_draws, bart_draws, intercept = 0, weight_stan_glm = 0.5) {
+combine_ensemble_draws <- function(stan_draws, bart_draws, weight_stan_glm = 0.5) {
     draw_count <- min(nrow(stan_draws), nrow(bart_draws))
     if (draw_count < 1L) {
         stop_with_message("No posterior draws were available for ensemble prediction")
@@ -121,7 +122,6 @@ combine_ensemble_draws <- function(stan_draws, bart_draws, intercept = 0, weight
     combined <- combine_ensemble_probabilities(
         stan_probability = stan_draws[seq_len(draw_count), , drop = FALSE],
         bart_probability = bart_draws[seq_len(draw_count), , drop = FALSE],
-        intercept = intercept,
         weight_stan_glm = weight_stan_glm
     )
     matrix(combined, nrow = draw_count, ncol = game_count)
@@ -158,30 +158,24 @@ fit_constrained_ensemble_combiner <- function(predictions) {
         stop_with_message("Combiner training requires at least 10 holdout rows")
     }
 
-    objective <- function(parameters) {
+    actual <- as.numeric(predictions$actual_outcome)
+    objective <- function(weight_stan_glm) {
         predicted <- combine_ensemble_probabilities(
             stan_probability = predictions$stan_glm,
             bart_probability = predictions$bart,
-            intercept = parameters[[1]],
-            weight_stan_glm = stats::plogis(parameters[[2]])
+            weight_stan_glm = weight_stan_glm
         )
-        actual <- as.numeric(predictions$actual_outcome)
         -mean(actual * log(predicted) + (1 - actual) * log(1 - predicted))
     }
 
-    fit <- stats::optim(c(0, 0), objective, method = "BFGS", control = list(maxit = 1000))
-    if (!identical(fit$convergence, 0L)) {
-        stop_with_message(sprintf("Constrained ensemble combiner did not converge: %s", fit$message %||% fit$convergence))
-    }
-
-    weight_stan_glm <- as.numeric(stats::plogis(fit$par[[2]]))
+    fit <- stats::optimize(objective, interval = c(0, 1), tol = 1e-8)
+    weight_stan_glm <- as.numeric(fit$minimum)
     tibble::tibble(
-        intercept = as.numeric(fit$par[[1]]),
         weight_stan_glm = weight_stan_glm,
         weight_bart = 1 - weight_stan_glm,
         training_rows = nrow(predictions),
         training_years = paste(sort(unique(predictions$holdout_year)), collapse = ","),
-        training_log_loss = as.numeric(fit$value)
+        training_log_loss = as.numeric(fit$objective)
     )
 }
 
@@ -211,7 +205,6 @@ predict_ensemble_matchup_rows <- function(matchup_rows, model_results, draws = 1
     combine_ensemble_draws(
         stan_draws = stan_draws,
         bart_draws = bart_draws,
-        intercept = safe_numeric(combiner$intercept %||% 0, default = 0),
         weight_stan_glm = safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5)
     )
 }
@@ -368,7 +361,7 @@ fit_ensemble_combiner_validation <- function(historical_teams,
                 actual_outcome = actual_outcome,
                 stan_glm = colMeans(stan_draws),
                 bart = colMeans(bart_draws),
-                equal_weight = colMeans(combine_ensemble_draws(stan_draws, bart_draws, intercept = 0, weight_stan_glm = 0.5))
+                equal_weight = colMeans(combine_ensemble_draws(stan_draws, bart_draws, weight_stan_glm = 0.5))
             )
 
         component_scores[[(index - 2L) * 2L + 1L]] <- score_ensemble_validation_bracket(
@@ -401,9 +394,9 @@ fit_ensemble_combiner_validation <- function(historical_teams,
         }
     )
     all_predictions <- all_predictions %>%
-        dplyr::left_join(parameter_rows %>% dplyr::select(holdout_year, intercept, weight_stan_glm), by = "holdout_year") %>%
+        dplyr::left_join(parameter_rows %>% dplyr::select(holdout_year, weight_stan_glm), by = "holdout_year") %>%
         dplyr::mutate(
-            learned_ensemble = combine_ensemble_probabilities(stan_glm, bart, intercept = intercept, weight_stan_glm = weight_stan_glm)
+            learned_ensemble = combine_ensemble_probabilities(stan_glm, bart, weight_stan_glm = weight_stan_glm)
         )
 
     probability_metrics <- dplyr::bind_rows(
@@ -421,13 +414,13 @@ fit_ensemble_combiner_validation <- function(historical_teams,
             equal_model <- list(
                 engine = "ensemble",
                 components = list(stan_glm = context$stan_model, bart = context$bart_model),
-                combiner = list(intercept = 0, weight_stan_glm = 0.5),
+                combiner = list(weight_stan_glm = 0.5),
                 predictor_columns = predictor_columns
             )
             learned_model <- list(
                 engine = "ensemble",
                 components = list(stan_glm = context$stan_model, bart = context$bart_model),
-                combiner = list(intercept = params$intercept[[1]], weight_stan_glm = params$weight_stan_glm[[1]]),
+                combiner = list(weight_stan_glm = params$weight_stan_glm[[1]]),
                 predictor_columns = predictor_columns
             )
             dplyr::bind_rows(
@@ -593,7 +586,6 @@ fit_ensemble_tournament_model <- function(data,
         components = list(stan_glm = stan_model, bart = bart_model),
         combiner = list(
             type = ensemble_config$combiner,
-            intercept = safe_numeric(validation$combiner$intercept %||% 0, default = 0),
             weight_stan_glm = safe_numeric(validation$combiner$weight_stan_glm %||% 0.5, default = 0.5),
             weight_bart = safe_numeric(validation$combiner$weight_bart %||% 0.5, default = 0.5)
         ),

@@ -211,7 +211,6 @@ serialize_ensemble_diagnostics_payload <- function(model_overview) {
     compact_payload(list(
         weight_stan_glm = combiner$weight_stan_glm %||% NULL,
         weight_bart = combiner$weight_bart %||% NULL,
-        intercept = combiner$intercept %||% NULL,
         gate_passed = validation$gate_passed %||% NULL,
         validation_summary = if (nrow(validation_summary) > 0) as.data.frame(validation_summary) else NULL,
         gate_conditions = if (nrow(gate_conditions) > 0) as.data.frame(gate_conditions) else NULL

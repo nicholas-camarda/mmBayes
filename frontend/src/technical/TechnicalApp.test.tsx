@@ -10,7 +10,6 @@ const fullFixture: TechnicalPayload = {
   ensemble_diagnostics: {
     weight_stan_glm: 0.62,
     weight_bart: 0.38,
-    intercept: -0.04,
     gate_passed: true,
     validation_summary: [
       {

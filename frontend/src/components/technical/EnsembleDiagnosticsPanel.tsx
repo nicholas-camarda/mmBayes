@@ -35,10 +35,6 @@ export function EnsembleDiagnosticsPanel({
           <strong>{diagnostics.weight_bart?.toFixed(3) ?? "n/a"}</strong>
         </div>
         <div className="summary-chip">
-          <span>Intercept</span>
-          <strong>{diagnostics.intercept?.toFixed(3) ?? "n/a"}</strong>
-        </div>
-        <div className="summary-chip">
           <span>Proof gate</span>
           <strong>{diagnostics.gate_passed ? "Pass" : "Not recorded"}</strong>
         </div>

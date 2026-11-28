@@ -342,7 +342,7 @@ run_tournament_simulation <- function(config = NULL) {
     if (identical(model_results$engine %||% NULL, "ensemble")) {
         combiner <- model_results$combiner %||% list()
         logger::log_info(
-            "Ensemble combiner ready: intercept={round(safe_numeric(combiner$intercept %||% 0, default = 0), 3)}, stan_glm_weight={round(safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5), 3)}, bart_weight={round(1 - safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5), 3)}"
+            "Ensemble combiner ready: stan_glm_weight={round(safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5), 3)}, bart_weight={round(1 - safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5), 3)}"
         )
         validation_summary <- model_results$validation$comparison$summary %||% NULL
         if (!is.null(validation_summary) && nrow(validation_summary) > 0L) {
