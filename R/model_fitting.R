@@ -182,22 +182,31 @@ align_bart_matrix_columns <- function(matrix, training_columns) {
 #' @param predictor_columns Predictor columns requested for the model.
 #' @param scaled_columns Optional subset of predictor columns to standardize.
 #'
-#' @return A named list of centering and scaling values for continuous predictors.
+#' With `center = TRUE` each column is centred on its mean and divided by its
+#' standard deviation. With `center = FALSE` (used for the winner model's
+#' difference predictors, which have a natural zero at two equal teams) the
+#' centre is 0 and the scale is the root-mean-square, so a swapped matchup is
+#' exactly the negation of the original after scaling.
+#'
+#' @param center Whether to centre columns on their mean.
+#'
+#' @return A named list of centering and scaling values for continuous
+#'   predictors.
 #' @keywords internal
-build_scaling_reference <- function(data, predictor_columns, scaled_columns = NULL) {
+build_scaling_reference <- function(data, predictor_columns, scaled_columns = NULL, center = TRUE) {
     scaled_columns <- scaled_columns %||% intersect(continuous_matchup_diff_columns(), predictor_columns)
 
     purrr::map(scaled_columns, function(column_name) {
         values <- suppressWarnings(as.numeric(data[[column_name]]))
-        center <- mean(values, na.rm = TRUE)
-        scale <- stats::sd(values, na.rm = TRUE)
-        if (!is.finite(center)) {
-            center <- 0
+        column_center <- if (isTRUE(center)) mean(values, na.rm = TRUE) else 0
+        scale <- if (isTRUE(center)) stats::sd(values, na.rm = TRUE) else sqrt(mean(values^2, na.rm = TRUE))
+        if (!is.finite(column_center)) {
+            column_center <- 0
         }
         if (!is.finite(scale) || scale == 0) {
             scale <- 1
         }
-        list(center = center, scale = scale)
+        list(center = column_center, scale = scale)
     }) %>%
         stats::setNames(scaled_columns)
 }
@@ -270,7 +279,7 @@ prepare_model_data <- function(data, predictor_columns, scaling_reference = NULL
             same_conf = as.integer(same_conf)
         )
 
-    scaling_reference <- scaling_reference %||% build_scaling_reference(prepared_data, predictor_columns, scaled_columns = scaled_columns)
+    scaling_reference <- scaling_reference %||% build_scaling_reference(prepared_data, predictor_columns, scaled_columns = scaled_columns, center = FALSE)
     prepared_data <- apply_scaling_reference(prepared_data, scaling_reference)
 
     list(
@@ -288,15 +297,20 @@ prepare_model_data <- function(data, predictor_columns, scaling_reference = NULL
 #'   element is inserted verbatim so the caller is responsible for correct R
 #'   formula syntax.
 #'
+#' The formula has no intercept and no main effects for `round` or
+#' `same_conf`. Those terms take the same value whichever team is listed
+#' first, so on their own they can only shift the prediction toward the
+#' first-listed team; `round` still enters through interactions with
+#' difference predictors.
+#'
 #' @return A model formula for the requested outcome.
 #' @keywords internal
 build_model_formula <- function(predictor_columns, outcome_column = "actual_outcome", interaction_terms = NULL) {
-    predictor_terms <- predictor_columns[predictor_columns != "round"]
-    formula_terms <- c("round", predictor_terms[predictor_terms != "round"])
+    formula_terms <- setdiff(predictor_columns, order_invariant_matchup_columns())
 
     base_formula <- paste(
         outcome_column,
-        "~",
+        "~ 0 +",
         paste(sprintf("`%s`", formula_terms), collapse = " + ")
     )
 
@@ -306,6 +320,40 @@ build_model_formula <- function(predictor_columns, outcome_column = "actual_outc
     }
 
     stats::as.formula(base_formula)
+}
+
+#' Text describing how the winner model is specified, for cache keys
+#'
+#' Changes to the formula, scaling or prediction rules must invalidate cached
+#' fits even when the training data are unchanged.
+#'
+#' @param predictor_columns Predictor columns.
+#' @param interaction_terms Interaction terms.
+#'
+#' @return A single string.
+#' @keywords internal
+winner_model_specification <- function(predictor_columns, interaction_terms = NULL) {
+    paste(
+        paste(deparse(build_model_formula(predictor_columns, interaction_terms = interaction_terms)), collapse = " "),
+        "scaling=rms-uncentred",
+        "prediction=antisymmetrized",
+        sep = "; "
+    )
+}
+
+#' Build the total-points model formula
+#'
+#' Unlike the winner model, total points is not order-dependent and needs an
+#' intercept (the typical total) and main effects for `round` and
+#' `same_conf`.
+#'
+#' @param predictor_columns Predictor columns to include.
+#'
+#' @return A model formula with `total_points` as the outcome.
+#' @keywords internal
+build_total_points_formula <- function(predictor_columns) {
+    terms <- unique(c("round", setdiff(predictor_columns, "round")))
+    stats::as.formula(paste("total_points ~", paste(sprintf("`%s`", terms), collapse = " + ")))
 }
 
 #' Configure priors for the matchup model
@@ -376,9 +424,11 @@ build_model_fit_cache_key <- function(historical_matchups,
                                       prior_type = "normal",
                                       engine = "stan_glm",
                                       engine_config = NULL,
-                                      encoding_metadata = NULL) {
+                                      encoding_metadata = NULL,
+                                      model_specification = NULL) {
     cache_signature <- list(
         model_label = model_label,
+        model_specification = model_specification,
         engine = engine,
         engine_config = engine_config,
         encoding_metadata = encoding_metadata,
@@ -473,7 +523,8 @@ fit_tournament_model <- function(historical_matchups,
             prior_type = prior_type,
             engine = engine,
             engine_config = NULL,
-            encoding_metadata = NULL
+            encoding_metadata = NULL,
+            model_specification = winner_model_specification(predictor_columns, interaction_terms)
         )
         cache_path <- build_model_fit_cache_path(cache_dir, cache_key, model_label = "matchup")
         if (file.exists(cache_path)) {
@@ -839,7 +890,8 @@ fit_total_points_model <- function(historical_total_points,
             model_label = "totals",
             engine = engine,
             engine_config = NULL,
-            encoding_metadata = NULL
+            encoding_metadata = NULL,
+            model_specification = paste(deparse(build_total_points_formula(predictor_columns)), collapse = " ")
         )
         cache_path <- build_model_fit_cache_path(cache_dir, cache_key, model_label = "totals")
         if (file.exists(cache_path)) {
@@ -854,7 +906,7 @@ fit_total_points_model <- function(historical_total_points,
     set.seed(random_seed)
 
     prepared <- prepare_total_points_model_data(historical_total_points, predictor_columns, require_outcome = TRUE)
-    formula_input <- build_model_formula(predictor_columns, outcome_column = "total_points")
+    formula_input <- build_total_points_formula(predictor_columns)
     chains <- getOption("mmBayes.stan_chains", 4L)
     iter <- getOption("mmBayes.stan_iter", 2000L)
     refresh <- getOption("mmBayes.stan_refresh", 0L)
@@ -1068,7 +1120,49 @@ actual_results_to_matchup_rows <- function(actual_results) {
     rows
 }
 
+#' Matchup columns that do not change when the two teams are swapped
+#'
+#' @return A character vector of column names.
+#' @keywords internal
+order_invariant_matchup_columns <- function() {
+    c("round", "same_conf")
+}
+
+#' Swap team A and team B in matchup rows
+#'
+#' Difference predictors and the team-A betting features change sign, team
+#' labels swap, and an observed outcome becomes its complement. `round` and
+#' `same_conf` are unchanged.
+#'
+#' @param matchup_rows A matchup-level table.
+#'
+#' @return The same games seen from the other team's side.
+#' @keywords internal
+swap_matchup_orientation <- function(matchup_rows) {
+    odd_columns <- c(
+        grep("_diff$", names(matchup_rows), value = TRUE),
+        intersect(c("betting_prob_centered", "betting_spread_teamA"), names(matchup_rows))
+    )
+    swapped <- matchup_rows
+    for (column_name in odd_columns) {
+        swapped[[column_name]] <- -safe_numeric(matchup_rows[[column_name]])
+    }
+    if (all(c("teamA", "teamB") %in% names(matchup_rows))) {
+        swapped$teamA <- matchup_rows$teamB
+        swapped$teamB <- matchup_rows$teamA
+    }
+    if ("actual_outcome" %in% names(matchup_rows)) {
+        swapped$actual_outcome <- 1 - matchup_rows$actual_outcome
+    }
+    swapped
+}
+
 #' Predict posterior win probabilities for matchup rows
+#'
+#' Component predictions are made order-invariant: each game is predicted from
+#' both sides in one call (so both use the same posterior draws) and combined
+#' as `plogis((logit p(A beats B) - logit p(B beats A)) / 2)`. The result
+#' satisfies p(A beats B) = 1 - p(B beats A) exactly, draw by draw.
 #'
 #' @param matchup_rows A matchup-level prediction table.
 #' @param model_results A fitted model result bundle.
@@ -1078,12 +1172,32 @@ actual_results_to_matchup_rows <- function(actual_results) {
 #' @keywords internal
 predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
     engine <- model_results$engine %||% "stan_glm"
-    if (engine %in% c("bayes", "bayes_glm")) {
-        engine <- "stan_glm"
-    }
-
     if (identical(engine, "ensemble")) {
         return(predict_ensemble_matchup_rows(matchup_rows, model_results, draws = draws))
+    }
+
+    n_games <- nrow(matchup_rows)
+    both_sides <- dplyr::bind_rows(matchup_rows, swap_matchup_orientation(matchup_rows))
+    raw <- predict_component_matchup_rows(both_sides, model_results, draws = draws)
+    clip <- function(p) pmin(pmax(p, 1e-9), 1 - 1e-9)
+    forward <- stats::qlogis(clip(raw[, seq_len(n_games), drop = FALSE]))
+    reverse <- stats::qlogis(clip(raw[, n_games + seq_len(n_games), drop = FALSE]))
+    combined <- stats::plogis((forward - reverse) / 2)
+    matrix(combined, nrow = nrow(raw), ncol = n_games)
+}
+
+#' Raw component predictions for matchup rows, in the orientation given
+#'
+#' @param matchup_rows A matchup-level prediction table.
+#' @param model_results A fitted Stan GLM or BART result bundle.
+#' @param draws Number of posterior draws to return.
+#'
+#' @return A draw-by-game matrix of posterior expected win probabilities.
+#' @keywords internal
+predict_component_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
+    engine <- model_results$engine %||% "stan_glm"
+    if (engine %in% c("bayes", "bayes_glm")) {
+        engine <- "stan_glm"
     }
 
     if (identical(engine, "bart")) {

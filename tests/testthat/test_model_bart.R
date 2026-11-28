@@ -69,7 +69,7 @@ test_that("BART engine fits matchup and total-points models and returns draw mat
     ensemble_model <- list(
         engine = "ensemble",
         components = list(stan_glm = stan_model, bart = model_results),
-        combiner = list(intercept = 0, weight_stan_glm = 0.5),
+        combiner = list(weight_stan_glm = 0.5),
         predictor_columns = config$model$required_predictors
     )
     ensemble_draws_1 <- predict_matchup_rows(loaded$historical_matchups[1:4, , drop = FALSE], ensemble_model, draws = 10)

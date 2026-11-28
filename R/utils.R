@@ -2641,9 +2641,8 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
         combiner <- model_results$combiner %||% list()
         stan_weight <- safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5)
         bart_weight <- 1 - stan_weight
-        intercept <- safe_numeric(combiner$intercept %||% 0, default = 0)
         logger::log_info(
-            "Candidate simulations use ensemble predictions: stan_glm_weight={round(stan_weight, 3)}, bart_weight={round(bart_weight, 3)}, intercept={round(intercept, 3)}"
+            "Candidate simulations use ensemble predictions: stan_glm_weight={round(stan_weight, 3)}, bart_weight={round(bart_weight, 3)}"
         )
     }
 

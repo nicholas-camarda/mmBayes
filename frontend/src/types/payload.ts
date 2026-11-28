@@ -326,7 +326,6 @@ export interface BacktestPayload {
 export interface EnsembleDiagnosticsPayload {
   weight_stan_glm?: number;
   weight_bart?: number;
-  intercept?: number;
   gate_passed?: boolean;
   validation_summary?: Record<string, unknown>[];
   gate_conditions?: Record<string, unknown>[];

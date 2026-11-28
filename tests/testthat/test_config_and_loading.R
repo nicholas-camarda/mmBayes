@@ -98,7 +98,7 @@ test_that("load_tournament_data returns matchup history and current teams", {
     expect_false(any(is.na(loaded$historical_games$total_points)))
 })
 
-test_that("historical matchup builder duplicates rows symmetrically and preserves first four", {
+test_that("historical matchup builder keeps one row per game, preserves first four, and orients rows consistently", {
     team_data <- make_fixture_team_features(history_years = 2024, current_year = 2025)
     results_data <- make_fixture_game_results(team_data, history_years = 2024)
 
@@ -109,39 +109,15 @@ test_that("historical matchup builder duplicates rows symmetrically and preserve
 
     matchups <- build_explicit_matchup_history(historical_teams, historical_results)
 
-    forward_count <- nrow(historical_results)
-    expect_equal(nrow(matchups), forward_count * 2)
+    expect_equal(nrow(matchups), nrow(historical_results))
     expect_true(any(matchups$round == "First Four"))
 
-    first_forward <- matchups %>% dplyr::slice(1)
-    first_reverse <- matchups %>% dplyr::filter(
-        Year == first_forward$Year,
-        round == first_forward$round,
-        game_index == first_forward$game_index,
-        teamA == first_forward$teamB,
-        teamB == first_forward$teamA
-    ) %>%
-        dplyr::slice(1)
-
-    diff_columns <- c(
-        "seed_diff",
-        "barthag_logit_diff",
-        "AdjOE_diff",
-        "AdjDE_diff",
-        "WAB_diff",
-        "TOR_diff",
-        "TORD_diff",
-        "ORB_diff",
-        "DRB_diff",
-        "3P%_diff",
-        "3P%D_diff",
-        "Adj T._diff"
-    )
-    for (column in diff_columns) {
-        expect_equal(first_forward[[column]], -first_reverse[[column]], info = column)
-    }
-    expect_equal(first_forward$same_conf, first_reverse$same_conf)
-    expect_equal(first_forward$actual_outcome, 1 - first_reverse$actual_outcome)
+    features <- normalize_team_features(historical_teams)
+    seeds <- stats::setNames(features$Seed, features$Team)
+    barthag <- stats::setNames(features$barthag_logit, features$Team)
+    expect_equal(matchups$seed_diff, unname(seeds[matchups$teamA] - seeds[matchups$teamB]))
+    expect_equal(matchups$barthag_logit_diff, unname(barthag[matchups$teamA] - barthag[matchups$teamB]))
+    expect_equal(matchups$actual_outcome, as.numeric(matchups$winner == matchups$teamA))
 })
 
 test_that("load_tournament_data is invariant to input row order", {
