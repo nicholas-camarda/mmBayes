@@ -15,9 +15,7 @@ export function TeamCard({ teamName, seed, conferenceLabel, stats }: TeamCardPro
         </div>
         {seed != null ? <span className="team-card__seed">#{seed}</span> : null}
       </header>
-      {conferenceLabel ? (
-        <p className="team-card__conference">{conferenceLabel}</p>
-      ) : null}
+      {conferenceLabel ? <p className="team-card__conference">{conferenceLabel}</p> : null}
       <dl className="team-card__stats">
         {stats.map((stat) => (
           <div key={stat.label} className="team-card__stat">

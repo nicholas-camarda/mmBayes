@@ -1,5 +1,9 @@
 import type { MatchupContextRow, WatchlistRow } from "../../types/payload";
-import { MATCHUP_FEATURE_SPECS, formatFeatureValue, sameConferenceLabel } from "../../lib/matchupFeatures";
+import {
+  MATCHUP_FEATURE_SPECS,
+  formatFeatureValue,
+  sameConferenceLabel,
+} from "../../lib/matchupFeatures";
 import { AdvantageChart } from "./AdvantageChart";
 import { TeamCard } from "./TeamCard";
 
@@ -47,19 +51,11 @@ function teamName(row: Record<string, unknown>, side: "A" | "B"): string {
 function teamStats(row: Record<string, unknown>, side: "A" | "B") {
   return MATCHUP_FEATURE_SPECS.slice(0, 3).map((spec) => ({
     label: spec.label,
-    value: formatFeatureValue(
-      row[side === "A" ? spec.teamAColumn : spec.teamBColumn],
-      spec.digits,
-    ),
+    value: formatFeatureValue(row[side === "A" ? spec.teamAColumn : spec.teamBColumn], spec.digits),
   }));
 }
 
-export function EvidencePanel({
-  rows,
-  watchlist,
-  openEvidenceId,
-  onClose,
-}: EvidencePanelProps) {
+export function EvidencePanel({ rows, watchlist, openEvidenceId, onClose }: EvidencePanelProps) {
   const row = findEvidenceRow(rows, watchlist, openEvidenceId);
   const teamAName = row ? teamName(row, "A") : "Team A";
   const teamBName = row ? teamName(row, "B") : "Team B";
@@ -81,14 +77,11 @@ export function EvidencePanel({
             Select a bracket node, divergence cell, or review card to open evidence.
           </p>
         ) : !row ? (
-          <p className="missing-section">Evidence details are not available for {openEvidenceId}.</p>
+          <p className="missing-section">
+            Evidence details are not available for {openEvidenceId}.
+          </p>
         ) : (
-          <details
-            className="evidence-panel"
-            id={openEvidenceId}
-            open
-            data-testid="evidence-card"
-          >
+          <details className="evidence-panel" id={openEvidenceId} open data-testid="evidence-card">
             <summary>
               <div className="evidence-panel__summary">
                 <div>
@@ -110,8 +103,8 @@ export function EvidencePanel({
             <div className="evidence-panel__body">
               <div className="evidence-panel__summary-block">
                 <p className="evidence-panel__lede">
-                  <strong>{String(row.posterior_favorite ?? "n/a")}</strong> is the posterior favorite
-                  at{" "}
+                  <strong>{String(row.posterior_favorite ?? "n/a")}</strong> is the posterior
+                  favorite at{" "}
                   {typeof row.win_prob_favorite === "number"
                     ? `${(100 * row.win_prob_favorite).toFixed(1)}%`
                     : "n/a"}

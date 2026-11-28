@@ -17,9 +17,7 @@ export function PlayInStatusPanel({ rows }: PlayInStatusPanelProps) {
 
   const expected = Number(row.expected_slots ?? 0);
   const resolved = Number(row.resolved_slots ?? 0);
-  const unresolved = Number(
-    row.unresolved_slots ?? Math.max(expected - resolved, 0),
-  );
+  const unresolved = Number(row.unresolved_slots ?? Math.max(expected - resolved, 0));
   const hasUnresolved = Boolean(row.has_unresolved_slots ?? unresolved > 0);
 
   return (

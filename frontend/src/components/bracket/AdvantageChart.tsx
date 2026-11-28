@@ -59,10 +59,7 @@ export function AdvantageChart({ row, teamAName, teamBName }: AdvantageChartProp
         <div key={metric.feature} className="advantage-row">
           <div className="advantage-row__values">
             <span>{metric.teamA}</span>
-            <abbr
-              className="advantage-row__feature"
-              title={metric.featureTooltip}
-            >
+            <abbr className="advantage-row__feature" title={metric.featureTooltip}>
               {metric.feature}
             </abbr>
             <span>{metric.teamB}</span>

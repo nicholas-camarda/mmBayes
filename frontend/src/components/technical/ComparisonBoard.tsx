@@ -36,7 +36,8 @@ export function BoardRow({ variant, cells }: BoardRowProps) {
         <div
           key={cell.label}
           className={`board-cell${cell.plot ? " board-cell--plot" : ""}${
-            cell.label.toLowerCase().includes("game") || cell.label.toLowerCase().includes("underdog")
+            cell.label.toLowerCase().includes("game") ||
+            cell.label.toLowerCase().includes("underdog")
               ? " board-cell--game"
               : ""
           }`}

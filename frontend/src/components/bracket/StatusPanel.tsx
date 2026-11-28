@@ -8,8 +8,8 @@ export function StatusPanel({ playInResolution }: StatusPanelProps) {
     return (
       <div className="status-panel status-unknown">
         <strong>Status not supplied.</strong>
-        No play-in summary was supplied, so the review panel cannot tell whether these slots
-        are simulated or final.
+        No play-in summary was supplied, so the review panel cannot tell whether these slots are
+        simulated or final.
       </div>
     );
   }

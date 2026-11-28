@@ -17,7 +17,12 @@ export function CandidateFragilityChart({ rows }: CandidateFragilityChartProps) 
   }
 
   return (
-    <div className="fragility-chart" data-testid="candidate-fragility-chart" role="img" aria-label="Candidate fragility board">
+    <div
+      className="fragility-chart"
+      data-testid="candidate-fragility-chart"
+      role="img"
+      aria-label="Candidate fragility board"
+    >
       <div className="fragility-chart__header">
         <span>Most fragile selected matchups</span>
         <div className="fragility-chart__axis" aria-hidden="true">
@@ -57,9 +62,7 @@ export function CandidateFragilityChart({ rows }: CandidateFragilityChartProps) 
                 style={{ left: `${meanPos}%`, background: color }}
               />
             </div>
-            <div className="fragility-row__interval">
-              {formatProbabilityInterval(lower, upper)}
-            </div>
+            <div className="fragility-row__interval">{formatProbabilityInterval(lower, upper)}</div>
           </div>
         );
       })}

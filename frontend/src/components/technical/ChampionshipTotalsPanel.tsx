@@ -17,11 +17,7 @@ function formatInterval(lower?: number, upper?: number): string {
   return `${Math.round(lower)}-${Math.round(upper)}`;
 }
 
-export function ChampionshipTotalsPanel({
-  totals,
-}: {
-  totals?: ChampionshipTotalsPayload | null;
-}) {
+export function ChampionshipTotalsPanel({ totals }: { totals?: ChampionshipTotalsPayload | null }) {
   if (!totals?.candidate_summaries?.length && !totals?.championship_distribution?.length) {
     return <MissingSection label="Championship tiebreaker comparison" />;
   }
@@ -32,7 +28,10 @@ export function ChampionshipTotalsPanel({
   const maxProbability = scale.max_probability ?? 0.05;
   const span = Math.max(maxTotal - minTotal, 1);
 
-  const byCandidate = new Map<number, NonNullable<ChampionshipTotalsPayload["championship_distribution"]>>();
+  const byCandidate = new Map<
+    number,
+    NonNullable<ChampionshipTotalsPayload["championship_distribution"]>
+  >();
   for (const row of totals.championship_distribution ?? []) {
     const candidateId = Number(row.candidate_id ?? 0);
     const bucket = byCandidate.get(candidateId) ?? [];
@@ -66,8 +65,7 @@ export function ChampionshipTotalsPanel({
           const marginBottom = 42;
           const plotWidth = width - marginLeft - marginRight;
           const plotHeight = height - marginTop - marginBottom;
-          const toX = (total: number) =>
-            marginLeft + ((total - minTotal) / span) * plotWidth;
+          const toX = (total: number) => marginLeft + ((total - minTotal) / span) * plotWidth;
           const toY = (probability: number) =>
             marginTop + plotHeight - (probability / maxProbability) * plotHeight;
           const barWidth = Math.max(3, plotWidth / Math.max(distribution.length, 40));
@@ -114,9 +112,9 @@ export function ChampionshipTotalsPanel({
                   </p>
                 ) : null}
                 <p className="distribution-note">
-                  Use the recommended tiebreaker as the default entry. It is the model&apos;s rounded
-                  median championship total, so it minimizes miss distance more often than chasing an
-                  extreme outcome.
+                  Use the recommended tiebreaker as the default entry. It is the model&apos;s
+                  rounded median championship total, so it minimizes miss distance more often than
+                  chasing an extreme outcome.
                 </p>
               </div>
               {distribution.length > 0 ? (

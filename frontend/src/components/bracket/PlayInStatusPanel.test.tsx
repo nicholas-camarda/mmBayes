@@ -47,9 +47,5 @@ test("renders slot counts in table", () => {
       ]}
     />,
   );
-  expect(screen.getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
-    "4",
-    "2",
-    "2",
-  ]);
+  expect(screen.getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["4", "2", "2"]);
 });

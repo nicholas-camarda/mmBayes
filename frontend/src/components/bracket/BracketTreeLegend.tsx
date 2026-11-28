@@ -7,7 +7,11 @@ export function BracketTreeLegend() {
     <div className="btree-legend" aria-label="Bracket tree legend">
       {LEGEND_TIERS.map((tier) => (
         <span key={tier} className="btree-legend-item">
-          <span className="btree-legend-swatch" style={{ background: tierColor(tier) }} aria-hidden />
+          <span
+            className="btree-legend-swatch"
+            style={{ background: tierColor(tier) }}
+            aria-hidden
+          />
           {tier}
         </span>
       ))}
