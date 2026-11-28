@@ -31,7 +31,8 @@ AGENTS.md
 
 .claude/
 .codex/
-.github/
+.github/*
+!.github/workflows/
 .vscode/
 .codex/ 
 node_modules/
