@@ -481,7 +481,7 @@ test_that("update_tournament_data returns success when refresh sources complete 
     config$data$game_results_path <- results_file
 
     testthat::local_mocked_bindings(
-        scrape_bart_data = function(year) {
+        compute_season_team_ratings = function(year, ...) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
         scrape_historical_tournament_roster = function(year) {
@@ -526,7 +526,7 @@ test_that("update_tournament_data returns degraded success for optional fallback
     config$data$game_results_path <- results_file
 
     testthat::local_mocked_bindings(
-        scrape_bart_data = function(year) {
+        compute_season_team_ratings = function(year, ...) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
         scrape_historical_tournament_roster = function(year) {
@@ -591,7 +591,7 @@ test_that("update_tournament_data reuses complete historical years, refreshes in
     scraped_result_years <- integer()
 
     testthat::local_mocked_bindings(
-        scrape_bart_data = function(year) {
+        compute_season_team_ratings = function(year, ...) {
             scraped_bart_years <<- c(scraped_bart_years, year)
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
@@ -690,7 +690,7 @@ test_that("update_tournament_data returns blocked without rewrite when a require
     }
 
     testthat::local_mocked_bindings(
-        scrape_bart_data = function(year) {
+        compute_season_team_ratings = function(year, ...) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
         scrape_historical_tournament_roster = function(year) {
@@ -780,7 +780,7 @@ test_that("update_tournament_data writes available years when the configured his
     }
 
     testthat::local_mocked_bindings(
-        scrape_bart_data = function(year) {
+        compute_season_team_ratings = function(year, ...) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
         scrape_historical_tournament_roster = function(year) {
@@ -833,7 +833,7 @@ test_that("update_tournament_data degrades when current-year fallback is empty b
     config$data$game_results_path <- results_file
 
     testthat::local_mocked_bindings(
-        scrape_bart_data = function(year) {
+        compute_season_team_ratings = function(year, ...) {
             bart_ratings %>% dplyr::filter(Year == as.character(year))
         },
         scrape_historical_tournament_roster = function(year) {
@@ -874,7 +874,7 @@ test_that("update_tournament_data still fails on required source errors", {
     config$data$game_results_path <- results_file
 
     testthat::local_mocked_bindings(
-        scrape_bart_data = function(year) {
+        compute_season_team_ratings = function(year, ...) {
             stop(sprintf("Could not pass browser verification for %s", year))
         }
     )
