@@ -1,8 +1,24 @@
 const TIERS = [
-  { name: "Lock", color: "#2a9d8f", description: "Strong favorite; route rarely flips across posterior draws." },
-  { name: "Lean", color: "#457b9d", description: "Clear lean, but not a lock if you want a contrarian path." },
-  { name: "Toss-up", color: "#e9c46a", description: "Near coin flip; manual review is usually worthwhile." },
-  { name: "Volatile", color: "#e76f51", description: "Wide uncertainty or leverage; inspect before you commit." },
+  {
+    name: "Lock",
+    color: "#2a9d8f",
+    description: "Strong favorite; route rarely flips across posterior draws.",
+  },
+  {
+    name: "Lean",
+    color: "#457b9d",
+    description: "Clear lean, but not a lock if you want a contrarian path.",
+  },
+  {
+    name: "Toss-up",
+    color: "#e9c46a",
+    description: "Near coin flip; manual review is usually worthwhile.",
+  },
+  {
+    name: "Volatile",
+    color: "#e76f51",
+    description: "Wide uncertainty or leverage; inspect before you commit.",
+  },
 ] as const;
 
 export function ConfidenceLegend({ title = "Confidence tiers" }: { title?: string }) {

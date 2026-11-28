@@ -206,7 +206,9 @@ export function BracketTree({ trees, onOpenEvidence }: BracketTreeProps) {
             : undefined
         }
       >
-        {tooltip?.lines.map((line) => <div key={line}>{line}</div>)}
+        {tooltip?.lines.map((line) => (
+          <div key={line}>{line}</div>
+        ))}
       </div>
     </section>
   );

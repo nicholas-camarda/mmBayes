@@ -137,7 +137,9 @@ export const MATCHUP_FEATURE_SPECS: MatchupFeatureSpec[] = [
   },
 ];
 
-export function featureTooltip(spec: Pick<MatchupFeatureSpec, "label" | "code" | "definition">): string {
+export function featureTooltip(
+  spec: Pick<MatchupFeatureSpec, "label" | "code" | "definition">,
+): string {
   if (spec.code === spec.label) {
     return spec.definition;
   }

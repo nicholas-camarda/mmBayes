@@ -20,7 +20,11 @@ export function CandidatePathsPanel({ candidates }: CandidatePathsPanelProps) {
       </summary>
       <div className="dashboard-disclosure__body">
         {candidates.map((candidate) => (
-          <details key={candidate.candidate_id} className="path-panel" id={`candidate-path-${candidate.candidate_id}`}>
+          <details
+            key={candidate.candidate_id}
+            className="path-panel"
+            id={`candidate-path-${candidate.candidate_id}`}
+          >
             <summary>
               <strong>Candidate {candidate.candidate_id} full path</strong>
             </summary>

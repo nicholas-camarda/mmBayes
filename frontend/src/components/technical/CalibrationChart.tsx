@@ -23,9 +23,7 @@ export function CalibrationChart({ rows }: { rows: CalibrationRow[] }) {
 
   const plotWidth = WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
   const plotHeight = HEIGHT - MARGIN_BOTTOM - MARGIN_TOP;
-  const sorted = [...rows].sort(
-    (a, b) => (a.mean_predicted ?? 0) - (b.mean_predicted ?? 0),
-  );
+  const sorted = [...rows].sort((a, b) => (a.mean_predicted ?? 0) - (b.mean_predicted ?? 0));
   const tickValues = [0, 0.25, 0.5, 0.75, 1];
   const polyline = sorted
     .map((row) => {

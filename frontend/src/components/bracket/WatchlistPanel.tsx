@@ -83,7 +83,11 @@ export function WatchlistPanel({
           <strong>{surfaceCount(watchlist, "Fragile favorites")}</strong>
         </div>
       </div>
-      <div className="watchlist-toolbar filter-toolbar" role="toolbar" aria-label="Watchlist filters">
+      <div
+        className="watchlist-toolbar filter-toolbar"
+        role="toolbar"
+        aria-label="Watchlist filters"
+      >
         {SURFACE_FILTERS.map((filter) => (
           <button
             key={filter.id}
