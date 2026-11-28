@@ -437,7 +437,7 @@ final_four_pairings <- function() {
         "2023", "East", "South", "Midwest", "West",
         "2024", "East", "West", "Midwest", "South",
         "2025", "East", "Midwest", "South", "West",
-        "2026", "West", "Midwest", "East", "South"
+        "2026", "East", "South", "Midwest", "West"
     )
 }
 
