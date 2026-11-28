@@ -30,6 +30,7 @@ empty_team_feature_table <- function() {
         Seed = integer(),
         Region = character(),
         Conf = character(),
+        ratings_cutoff = character(),
         Barthag = numeric(),
         AdjOE = numeric(),
         AdjDE = numeric(),
@@ -212,6 +213,10 @@ assess_historical_year_cache <- function(existing_team_features, existing_game_r
         )
         if (!is.null(roster_issue)) {
             issues <- c(issues, roster_issue)
+        }
+
+        if (nrow(find_ratings_cutoff_issues(year_team_features)) > 0) {
+            issues <- c(issues, "ratings not cut off at Selection Sunday")
         }
 
         missing_feature_rows <- year_team_features %>%
@@ -688,20 +693,90 @@ scrape_conf_assignments <- function(year) {
         dplyr::select(Year, Team, Seed, Region, Conf)
 }
 
+#' Selection Sunday dates by tournament year
+#'
+#' The day the NCAA men's bracket is announced. Team ratings use only games
+#' played on or before this date. 2020 has no tournament. Add the next year's
+#' date here before running the Selection Sunday refresh.
+#'
+#' @return A tibble with `Year` (character) and `selection_sunday` (Date).
+#' @keywords internal
+selection_sunday_dates <- function() {
+    tibble::tribble(
+        ~Year, ~selection_sunday,
+        "2008", "2008-03-16",
+        "2009", "2009-03-15",
+        "2010", "2010-03-14",
+        "2011", "2011-03-13",
+        "2012", "2012-03-11",
+        "2013", "2013-03-17",
+        "2014", "2014-03-16",
+        "2015", "2015-03-15",
+        "2016", "2016-03-13",
+        "2017", "2017-03-12",
+        "2018", "2018-03-11",
+        "2019", "2019-03-17",
+        "2021", "2021-03-14",
+        "2022", "2022-03-13",
+        "2023", "2023-03-12",
+        "2024", "2024-03-17",
+        "2025", "2025-03-16",
+        "2026", "2026-03-15"
+    ) %>%
+        dplyr::mutate(selection_sunday = as.Date(selection_sunday))
+}
+
+#' Look up the ratings cutoff date for a tournament year
+#'
+#' Team ratings are restricted to games played on or before Selection Sunday,
+#' the day the bracket is released, so every season's features describe what
+#' was known when entries were made.
+#'
+#' @param year A tournament year.
+#'
+#' @return A single Date.
+#' @keywords internal
+ratings_cutoff_date <- function(year) {
+    year <- as.character(year)
+    dates <- selection_sunday_dates()
+    cutoff <- dates$selection_sunday[dates$Year == year]
+    if (length(cutoff) != 1L || is.na(cutoff)) {
+        stop_with_message(sprintf(
+            "No Selection Sunday date for %s; add it to selection_sunday_dates() in R/data_refresh.R before refreshing data",
+            year
+        ))
+    }
+    cutoff
+}
+
+#' Build the Bart Torvik ratings URL for a season window
+#'
+#' @param year The tournament year.
+#' @param cutoff_date Last date (inclusive) of games used in the ratings.
+#'
+#' @return A single URL string.
+#' @keywords internal
+build_bart_ratings_url <- function(year, cutoff_date = ratings_cutoff_date(year)) {
+    paste0(
+        "https://barttorvik.com/?year=", year,
+        "&sort=&hteam=&t2value=&conlimit=All",
+        "&state=All&begin=", as.integer(year) - 1L, "1101",
+        "&end=", format(as.Date(cutoff_date), "%Y%m%d"),
+        "&top=0&revquad=0&quad=5&venue=All&type=All&mingames=0#"
+    )
+}
+
 #' Scrape Bart Torvik pre-tournament team features
 #'
 #' @param year The tournament year to scrape.
+#' @param cutoff_date Last date (inclusive) of games used in the ratings;
+#'   defaults to that year's Selection Sunday.
 #'
-#' @return A year-wide team-level feature table for the requested year.
+#' @return A year-wide team-level feature table for the requested year, with a
+#'   `ratings_cutoff` column recording the cutoff used.
 #' @keywords internal
-scrape_bart_data <- function(year) {
-    url <- paste0(
-        "https://barttorvik.com/?year=", year,
-        "&sort=&hteam=&t2value=&conlimit=All",
-        "&state=All&begin=", year - 1, "1101",
-        "&end=", year, "0501",
-        "&top=0&revquad=0&quad=5&venue=All&type=All&mingames=0#"
-    )
+scrape_bart_data <- function(year, cutoff_date = ratings_cutoff_date(year)) {
+    url <- build_bart_ratings_url(year, cutoff_date)
     logger::log_info("Scraping Bart data from {url}")
 
     page <- read_html_verified(url)
@@ -736,12 +811,15 @@ scrape_bart_data <- function(year) {
             !is.na(Barthag),
             !Team %in% c("Team", "")
         ) %>%
+        dplyr::mutate(ratings_cutoff = format(as.Date(cutoff_date), "%Y-%m-%d")) %>%
         dplyr::select(
             Year,
             Team,
             team_key,
             Seed,
             Conf,
+            G,
+            ratings_cutoff,
             Barthag,
             AdjOE,
             AdjDE,
@@ -895,6 +973,7 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
                     team_key,
                     Seed,
                     Conf,
+                    ratings_cutoff,
                     Barthag,
                     AdjOE,
                     AdjDE,
@@ -915,7 +994,7 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
         )
 
     unresolved_roster <- joined %>%
-        dplyr::filter(dplyr::if_any(c(Conf, Barthag, AdjOE, AdjDE, WAB, TOR, TORD, ORB, DRB, `3P%`, `3P%D`, `Adj T.`), is.na)) %>%
+        dplyr::filter(dplyr::if_any(c(Conf, ratings_cutoff, Barthag, AdjOE, AdjDE, WAB, TOR, TORD, ORB, DRB, `3P%`, `3P%D`, `Adj T.`), is.na)) %>%
         dplyr::distinct(Year, Team)
     if (nrow(unresolved_roster) > 0) {
         stop_with_message(
@@ -945,6 +1024,7 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
             Seed = Seed,
             Region,
             Conf,
+            ratings_cutoff,
             Barthag,
             AdjOE,
             AdjDE,
