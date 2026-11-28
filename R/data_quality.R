@@ -61,6 +61,33 @@ find_unresolved_result_teams <- function(team_features, game_results) {
         dplyr::arrange(Year, Team, source_column)
 }
 
+#' Find team-feature rows whose ratings were not cut off at Selection Sunday
+#'
+#' Every team-feature row must record a `ratings_cutoff` equal to that year's
+#' Selection Sunday. Rows without the column (workbooks written before the
+#' cutoff was enforced) or with a later date may include tournament games.
+#'
+#' @param team_features A team feature table.
+#'
+#' @return A tibble of offending rows with `Year`, `Team`, `ratings_cutoff` and
+#'   `expected_cutoff`.
+#' @keywords internal
+find_ratings_cutoff_issues <- function(team_features) {
+    observed <- if ("ratings_cutoff" %in% names(team_features)) {
+        as.character(team_features$ratings_cutoff)
+    } else {
+        rep(NA_character_, nrow(team_features))
+    }
+    expected <- selection_sunday_dates() %>%
+        dplyr::transmute(Year, expected_cutoff = format(selection_sunday, "%Y-%m-%d"))
+
+    team_features %>%
+        dplyr::transmute(Year = as.character(Year), Team, ratings_cutoff = observed) %>%
+        dplyr::left_join(expected, by = "Year") %>%
+        dplyr::filter(is.na(ratings_cutoff) | is.na(expected_cutoff) | ratings_cutoff != expected_cutoff) %>%
+        dplyr::arrange(Year, Team)
+}
+
 #' Evaluate canonical data quality for modeling readiness
 #'
 #' @param team_features A team feature table.
@@ -200,7 +227,9 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         dplyr::arrange(Year, round, region, game_index)
 
     unresolved_teams <- find_unresolved_result_teams(team_features, game_results)
+    ratings_cutoff_issues <- find_ratings_cutoff_issues(team_features)
     passed <- all(games_per_year$ok) &&
+        nrow(ratings_cutoff_issues) == 0 &&
         nrow(round_count_issues) == 0 &&
         nrow(current_year_round_scope_issues) == 0 &&
         nrow(current_year_round_count_issues) == 0 &&
@@ -229,6 +258,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         suspicious_first_four_rows = nrow(suspicious_first_four),
         invalid_score_rows = nrow(invalid_score_rows),
         unresolved_team_rows = nrow(unresolved_teams),
+        ratings_cutoff_issue_rows = nrow(ratings_cutoff_issues),
         passed = passed
     )
 
@@ -249,6 +279,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         suspicious_first_four = suspicious_first_four,
         invalid_score_rows = invalid_score_rows,
         unresolved_teams = unresolved_teams,
+        ratings_cutoff_issues = ratings_cutoff_issues,
         passed = isTRUE(passed)
     )
 }
@@ -498,6 +529,22 @@ assert_canonical_data_quality <- function(team_features, game_results) {
     report <- evaluate_canonical_data_quality(team_features, game_results)
 
     issues <- character()
+    if (nrow(report$ratings_cutoff_issues) > 0) {
+        cutoff_text <- report$ratings_cutoff_issues %>%
+            dplyr::count(Year, ratings_cutoff, expected_cutoff, name = "teams") %>%
+            dplyr::mutate(text = sprintf(
+                "%s: %s teams have ratings_cutoff=%s (expected Selection Sunday %s)",
+                Year, teams, dplyr::coalesce(ratings_cutoff, "missing"), dplyr::coalesce(expected_cutoff, "unknown")
+            )) %>%
+            dplyr::pull(text)
+        issues <- c(
+            issues,
+            paste(
+                "Team ratings are not restricted to games through Selection Sunday; re-run scripts/update_data.R:",
+                paste(cutoff_text, collapse = "; ")
+            )
+        )
+    }
     bad_game_years <- report$games_per_year %>%
         dplyr::filter(!ok)
     if (nrow(bad_game_years) > 0) {

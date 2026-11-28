@@ -889,3 +889,64 @@ test_that("update_tournament_data still fails on required source errors", {
         regexp = "Could not pass browser verification"
     )
 })
+
+test_that("Selection Sunday table covers every supported year and only lists Sundays", {
+    dates <- selection_sunday_dates()
+    expected_years <- as.character(setdiff(2008:2026, 2020))
+
+    expect_setequal(dates$Year, expected_years)
+    expect_false(anyNA(dates$selection_sunday))
+    expect_true(all(weekdays(dates$selection_sunday) == "Sunday"))
+    expect_true(all(format(dates$selection_sunday, "%m") == "03"))
+})
+
+test_that("Bart ratings URL ends at Selection Sunday for every year", {
+    dates <- selection_sunday_dates()
+    for (i in seq_len(nrow(dates))) {
+        url <- build_bart_ratings_url(dates$Year[[i]])
+        end_value <- stringr::str_match(url, "&end=(\\d{8})")[, 2]
+        begin_value <- stringr::str_match(url, "&begin=(\\d{8})")[, 2]
+        expect_identical(end_value, format(dates$selection_sunday[[i]], "%Y%m%d"))
+        expect_identical(begin_value, sprintf("%d1101", as.integer(dates$Year[[i]]) - 1L))
+    }
+})
+
+test_that("ratings cutoff lookup fails loudly for a year without a Selection Sunday date", {
+    expect_error(ratings_cutoff_date(2099), "No Selection Sunday date for 2099")
+    expect_error(ratings_cutoff_date(2020), "No Selection Sunday date for 2020")
+})
+
+test_that("quality gates reject team features without a Selection Sunday ratings cutoff", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024)
+
+    expect_true(evaluate_canonical_data_quality(team_data, results_data)$passed)
+
+    missing_cutoff <- dplyr::select(team_data, -ratings_cutoff)
+    missing_report <- evaluate_canonical_data_quality(missing_cutoff, results_data)
+    expect_false(missing_report$passed)
+    expect_equal(nrow(missing_report$ratings_cutoff_issues), nrow(team_data))
+    expect_error(
+        assert_canonical_data_quality(missing_cutoff, results_data),
+        "not restricted to games through Selection Sunday"
+    )
+
+    late_cutoff <- team_data %>%
+        dplyr::mutate(ratings_cutoff = dplyr::if_else(Year == "2024", "2024-05-01", ratings_cutoff))
+    late_report <- evaluate_canonical_data_quality(late_cutoff, results_data)
+    expect_false(late_report$passed)
+    expect_true(all(late_report$ratings_cutoff_issues$Year == "2024"))
+})
+
+test_that("historical cache is not reused when stored ratings lack the Selection Sunday cutoff", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024)
+
+    clean <- assess_historical_year_cache(normalize_team_features(team_data), normalize_game_results(results_data), 2024)
+    expect_true(clean$reusable)
+
+    leaked <- team_data %>% dplyr::mutate(ratings_cutoff = "2024-05-01")
+    stale <- assess_historical_year_cache(normalize_team_features(leaked), normalize_game_results(results_data), 2024)
+    expect_false(stale$reusable)
+    expect_match(stale$completeness_issue, "ratings not cut off at Selection Sunday")
+})
