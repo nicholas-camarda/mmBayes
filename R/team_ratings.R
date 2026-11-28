@@ -136,7 +136,7 @@ espn_team_box_columns <- function() {
 espn_schedule_columns <- function() {
     c(
         "game_id", "neutral_site", "home_id", "away_id", "home_conference_id",
-        "away_conference_id", "groups_id", "groups_short_name", "groups_is_conference"
+        "away_conference_id"
     )
 }
 
@@ -394,7 +394,7 @@ compute_team_ratings <- function(games, cutoff_date, conference_names = NULL, bu
             .groups = "drop"
         )
 
-    conference_names <- conference_names %||% tibble::tibble(conference_id = character(), Conf = character())
+    conference_names <- conference_names %||% espn_conference_names()
     factors %>%
         dplyr::inner_join(ratings, by = "team_id") %>%
         dplyr::left_join(wab, by = "team_id") %>%
@@ -421,17 +421,53 @@ compute_team_ratings <- function(games, cutoff_date, conference_names = NULL, bu
         dplyr::arrange(dplyr::desc(Barthag))
 }
 
-#' Conference name lookup from an ESPN schedule
+#' ESPN conference IDs and stable short names
 #'
-#' @param schedule Schedule rows for one season.
+#' ESPN conference IDs are stable across seasons, but the names in each
+#' season's schedule file are incomplete and vary (for example "A 10" and
+#' "A-10"). Conference labels are used to identify same-conference matchups,
+#' so one name per ID is used for every season. ID 43 holds Division I
+#' independents (and transitional members such as the Great West).
 #'
-#' @return A tibble with `conference_id` and `Conf` (ESPN short name).
+#' @return A tibble with `conference_id` (character) and `Conf`.
 #' @keywords internal
-espn_conference_names <- function(schedule) {
-    schedule %>%
-        dplyr::filter(parse_espn_flag(groups_is_conference), !is.na(groups_id)) %>%
-        dplyr::distinct(conference_id = as.character(groups_id), Conf = as.character(groups_short_name)) %>%
-        dplyr::distinct(conference_id, .keep_all = TRUE)
+espn_conference_names <- function() {
+    tibble::tribble(
+        ~conference_id, ~Conf,
+        "1", "Am. East",
+        "2", "ACC",
+        "3", "A-10",
+        "4", "Big East",
+        "5", "Big Sky",
+        "6", "Big South",
+        "7", "Big Ten",
+        "8", "Big 12",
+        "9", "Big West",
+        "10", "CAA",
+        "11", "CUSA",
+        "12", "Ivy",
+        "13", "MAAC",
+        "14", "MAC",
+        "16", "MEAC",
+        "18", "MVC",
+        "19", "NEC",
+        "20", "OVC",
+        "21", "Pac-12",
+        "22", "Patriot",
+        "23", "SEC",
+        "24", "SoCon",
+        "25", "Southland",
+        "26", "SWAC",
+        "27", "Sun Belt",
+        "29", "WCC",
+        "30", "WAC/UAC",
+        "43", "Ind.",
+        "44", "Mountain West",
+        "45", "Horizon",
+        "46", "ASUN",
+        "49", "Summit",
+        "62", "American"
+    )
 }
 
 #' Compute one season's team ratings through its Selection Sunday
@@ -447,6 +483,6 @@ compute_season_team_ratings <- function(season, raw_dir, cutoff_date = ratings_c
     paths <- download_espn_season_files(season, raw_dir, refresh = refresh)
     season_data <- read_espn_season_files(paths)
     games <- build_espn_team_games(season_data$team_box, season_data$schedule)
-    compute_team_ratings(games, cutoff_date, conference_names = espn_conference_names(season_data$schedule)) %>%
+    compute_team_ratings(games, cutoff_date, conference_names = espn_conference_names()) %>%
         dplyr::mutate(Year = as.character(season), .before = 1)
 }

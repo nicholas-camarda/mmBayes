@@ -103,9 +103,9 @@ This alias layer is important because every historical result row must join back
 
 `validate_tournament_roster()` enforces structural assumptions about the field:
 
-- exactly 68 teams per year
-- each region contains 16 to 18 listed teams before play-in resolution
-- exactly four duplicate seed slots per year for the First Four
+- the full field each year: 68 teams from 2011, 65 teams (one play-in game) for 2008-2010
+- each region contains 16 teams plus the play-in games assigned to it (in 2014 three of the four First Four games were in the Midwest)
+- one duplicate seed slot per play-in game (four from 2011, one before)
 - duplicate seed slots must be pairs, not triples or other counts
 
 ### Canonical result checks

@@ -316,15 +316,15 @@ test_that("quality gates flag suspicious First Four rows and round-count drift",
     )
 })
 
-test_that("parser keeps national 1-seed games out of First Four for affected years", {
-    for (year in c(2018L, 2021L, 2024L, 2025L)) {
-        parsed <- parse_tournament_results_lines(make_parser_fixture_lines(year), year)
+test_that("bracket HTML parser labels rounds and keeps national games out of the First Four", {
+    for (year in c(2018L, 2024L, 2025L)) {
+        parsed <- parse_tournament_results_lines(make_parser_fixture_html(year), year)
         counts <- parsed %>%
             dplyr::count(round, name = "games")
 
         expected <- tibble::tibble(
-            round = names(expected_completed_round_counts()),
-            games = unname(expected_completed_round_counts())
+            round = names(expected_completed_round_counts(year)),
+            games = unname(expected_completed_round_counts(year))
         )
 
         expect_equal(
@@ -334,14 +334,29 @@ test_that("parser keeps national 1-seed games out of First Four for affected yea
         expect_false(any(parsed$region == "First Four" & parsed$teamA_seed == 1L & parsed$teamB_seed == 1L))
         expect_equal(sum(parsed$region == "National" & parsed$round == "Final Four"), 2)
         expect_equal(sum(parsed$region == "National" & parsed$round == "Championship"), 1)
-        expect_true(all(c("teamA_score", "teamB_score", "total_points") %in% names(parsed)))
         expect_true(all(parsed$total_points == parsed$teamA_score + parsed$teamB_score))
+        expect_true(all(parsed$winner == ifelse(parsed$teamA_score > parsed$teamB_score, parsed$teamA, parsed$teamB)))
     }
 })
 
+test_that("bracket HTML parser matches fixture results game for game", {
+    year <- 2025L
+    team_data <- make_fixture_team_features(current_year = year, history_years = integer())
+    expected <- make_fixture_game_results(team_data, history_years = year) %>%
+        dplyr::filter(round != "First Four") %>%
+        dplyr::select(region, round, game_index, teamA, teamB, teamA_score, teamB_score, winner) %>%
+        dplyr::arrange(region, round, game_index)
+    parsed <- parse_tournament_results_lines(make_parser_fixture_html(year), year) %>%
+        dplyr::filter(round != "First Four") %>%
+        dplyr::select(region, round, game_index, teamA, teamB, teamA_score, teamB_score, winner) %>%
+        dplyr::arrange(region, round, game_index)
+    expect_equal(parsed, expected, ignore_attr = TRUE)
+})
+
+
 test_that("historical Sports-Reference roster parsing yields canonical 68-team fields", {
-    for (year in c(2018L, 2021L, 2024L, 2025L)) {
-        parsed <- parse_historical_tournament_roster_lines(make_parser_fixture_lines(year), year)
+    for (year in c(2018L, 2024L, 2025L)) {
+        parsed <- parse_historical_tournament_roster_lines(make_parser_fixture_html(year), year)
         duplicate_slots <- parsed %>%
             dplyr::count(Year, Region, Seed, name = "n") %>%
             dplyr::filter(n == 2L)
@@ -352,6 +367,15 @@ test_that("historical Sports-Reference roster parsing yields canonical 68-team f
         expect_true(all(is.na(parsed$Conf)))
     }
 })
+
+test_that("pre-2011 fields have 65 teams and one play-in game", {
+    expect_equal(tournament_field_size(c(2008, 2010, 2011, 2026)), c(65L, 65L, 68L, 68L))
+    expect_equal(expected_play_in_games(c(2009, 2012)), c(1L, 4L))
+    expect_equal(unname(expected_completed_round_counts(2009)["First Four"]), 1L)
+    expect_equal(sum(expected_completed_round_counts(2009)), 64L)
+    expect_equal(sum(expected_completed_round_counts(2021)), 66L)
+})
+
 
 test_that("tournament scoreboard dates stop at today for the active bracket year", {
     active_dates <- tournament_scoreboard_dates(2026L, today = as.Date("2026-04-08"))
@@ -429,43 +453,18 @@ test_that("current-year First Four fallback fills unresolved slots from a second
 })
 
 test_that("parser handles no-contest bracket slots without shifting later rounds", {
-    west_lines <- c(
-        purrr::map_chr(seq_len(7), function(idx) {
-            sprintf("(1) West_R64_%02dA 80, (16) West_R64_%02dB 60", idx, idx)
-        }),
-        "team 7 Oregon",
-        "team 10 VCU",
-        purrr::map_chr(seq_len(4), function(idx) {
-            sprintf("(1) West_R32_%02dA 80, (8) West_R32_%02dB 60", idx, idx)
-        }),
-        purrr::map_chr(seq_len(2), function(idx) {
-            sprintf("(1) West_S16_%02dA 80, (4) West_S16_%02dB 60", idx, idx)
-        }),
-        "(1) West_E8_A 80, (2) West_E8_B 60"
+    year <- 2021L
+    parsed <- parse_tournament_results_lines(
+        make_parser_fixture_html(year, no_contest_slot = list(region = "West", game_index = 4L)),
+        year
     )
-
-    lines <- c(
-        "East",
-        "Midwest",
-        "South",
-        "West",
-        "National",
-        purrr::map_chr(seq_len(45), function(idx) {
-            sprintf("(1) Team_%02dA 80, (16) Team_%02dB 60", idx, idx)
-        }),
-        west_lines,
-        "(11) UCLA 90, (1) Gonzaga 93",
-        "(2) Houston 59, (1) Baylor 78",
-        "(1) Gonzaga 70, (1) Baylor 86"
-    )
-
-    parsed <- parse_tournament_results_lines(lines, 2021L)
-
-    expect_equal(sum(parsed$round == "Round of 64"), 31L)
-    expect_equal(sum(parsed$region == "National" & parsed$round == "Final Four"), 2L)
-    expect_equal(sum(parsed$region == "National" & parsed$round == "Championship"), 1L)
-    expect_false(any(parsed$teamA == "Oregon" & parsed$teamB == "VCU"))
+    west_r64 <- parsed %>% dplyr::filter(region == "West", round == "Round of 64")
+    expect_equal(nrow(west_r64), 7L)
+    expect_false(4L %in% west_r64$game_index)
+    expect_equal(sort(west_r64$game_index), c(1:3, 5:8))
+    expect_equal(sum(parsed$round == "Round of 32" & parsed$region == "West"), 4L)
 })
+
 
 test_that("update_tournament_data returns success when refresh sources complete cleanly", {
     team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)

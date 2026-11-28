@@ -460,6 +460,11 @@ team_name_aliases <- function() {
         "prairieviewaandm" = "Prairie View A&M",
         "queensnc" = "Queens",
         "queensuniversity" = "Queens",
+        "siuedwardsville" = "SIU-Edwardsville",
+        "etsu" = "East Tennessee State",
+        "loyolamd" = "Loyola Maryland",
+        "albanyny" = "Albany",
+        "ualbany" = "Albany",
         "pennsylvania" = "Penn",
         "americanuniversity" = "American",
         "queensnorthcarolina" = "Queens",
@@ -918,11 +923,37 @@ expected_completed_round_counts <- function(year = NULL) {
     )
 
     year_value <- suppressWarnings(as.integer(year))
-    if (length(year_value) == 1L && !is.na(year_value) && year_value == 2021L) {
-        counts["Round of 64"] <- 31L
+    if (length(year_value) == 1L && !is.na(year_value)) {
+        counts["First Four"] <- expected_play_in_games(year_value)
+        if (year_value == 2021L) {
+            counts["Round of 64"] <- 31L
+        }
     }
 
     counts
+}
+
+#' Number of teams in the NCAA men's tournament field
+#'
+#' The field had 65 teams (one play-in game) through 2010 and 68 teams (four
+#' First Four games) from 2011.
+#'
+#' @param year Tournament year(s).
+#'
+#' @return An integer vector of field sizes.
+#' @keywords internal
+tournament_field_size <- function(year) {
+    ifelse(suppressWarnings(as.integer(year)) <= 2010L, 65L, 68L)
+}
+
+#' Number of play-in (First Four) games in a tournament year
+#'
+#' @param year Tournament year(s).
+#'
+#' @return An integer vector of play-in game counts.
+#' @keywords internal
+expected_play_in_games <- function(year) {
+    ifelse(suppressWarnings(as.integer(year)) <= 2010L, 1L, 4L)
 }
 
 #' Return expected historical teams without a completed game

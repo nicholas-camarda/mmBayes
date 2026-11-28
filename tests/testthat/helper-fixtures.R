@@ -456,68 +456,86 @@ apply_fixture_result_aliases <- function(results_data) {
         )
 }
 
-#' Build synthetic parser input lines for a tournament year
+#' Build a Sports-Reference style bracket page from fixture results
 #'
-#' @param year Tournament year to emulate.
+#' Mirrors the markup of sports-reference.com/cbb/postseason/men/{year}-ncaa.html:
+#' `div#brackets` holds one div per region; play-in games are listed in a
+#' paragraph headed "{Region} First Four" (or "Play-In"); the bracket is
+#' `div#bracket` with one `div.round` per round, each game a div holding two
+#' team divs (seed span, team link, score link).
 #'
-#' @return A character vector of parser input lines.
-make_parser_fixture_lines <- function(year = 2025L) {
-    build_game_lines <- function(game_rows) {
-        game_rows %>%
-            dplyr::transmute(
-                line = sprintf(
-                    "(%s) %s %s, (%s) %s %s",
-                    teamA_seed,
-                    teamA,
-                    teamA_score,
-                    teamB_seed,
-                    teamB,
-                    teamB_score
-                )
-            ) %>%
-            dplyr::pull(line)
-    }
-
+#' @param year Tournament year.
+#' @param play_in_label Heading used for play-in games.
+#' @param no_contest_slot Optional list(region, game_index) of a Round of 64
+#'   game to render without scores (a no-contest).
+#'
+#' @return A character vector of HTML lines.
+#' @keywords internal
+make_parser_fixture_html <- function(year = 2025L, play_in_label = "First Four", no_contest_slot = NULL) {
     year_chr <- as.character(year)
     team_data <- make_fixture_team_features(current_year = year, history_years = integer())
     results_data <- make_fixture_game_results(team_data, history_years = year) %>%
         dplyr::filter(Year == year_chr)
 
-    regional_sections <- purrr::map(
-        c("East", "Midwest", "South", "West"),
-        function(region_name) {
-            first_four_games <- results_data %>%
-                dplyr::filter(region == region_name, round == "First Four") %>%
-                dplyr::arrange(game_index)
-            round_games <- results_data %>%
-                dplyr::filter(region == region_name, round %in% c("Round of 64", "Round of 32", "Sweet 16", "Elite 8")) %>%
-                dplyr::arrange(
-                    match(round, c("Round of 64", "Round of 32", "Sweet 16", "Elite 8")),
-                    game_index
-                )
+    team_div <- function(seed, team, score, winner) {
+        score_html <- if (is.na(score)) "" else sprintf("<a href='/cbb/boxscores/x.html'>%s</a>", score)
+        sprintf(
+            "<div%s><span>%s</span> <a href='/cbb/schools/x/men/%s.html'>%s</a> %s</div>",
+            if (isTRUE(winner)) " class=\"winner\"" else "", seed, year, team, score_html
+        )
+    }
+    game_div <- function(game, blank_scores = FALSE) {
+        a_score <- if (blank_scores) NA else game$teamA_score
+        b_score <- if (blank_scores) NA else game$teamB_score
+        paste0(
+            "<div>",
+            team_div(game$teamA_seed, game$teamA, a_score, !blank_scores && game$winner == game$teamA),
+            team_div(game$teamB_seed, game$teamB, b_score, !blank_scores && game$winner == game$teamB),
+            "<span><a href='/cbb/boxscores/x.html'>at Somewhere, ST</a></span></div>"
+        )
+    }
+    rounds_for <- function(region_name) {
+        if (region_name == "National") c("Final Four", "Championship") else c("Round of 64", "Round of 32", "Sweet 16", "Elite 8")
+    }
 
-            c(
-                if (nrow(first_four_games) > 0) c(
-                    sprintf("%s First Four", region_name),
-                    build_game_lines(first_four_games)
-                ) else character(),
-                build_game_lines(round_games)
+    region_html <- purrr::map_chr(c("East", "Midwest", "South", "West", "National"), function(region_name) {
+        play_in <- results_data %>%
+            dplyr::filter(region == region_name, round == "First Four")
+        play_in_html <- if (nrow(play_in) > 0) {
+            paste0(
+                sprintf("<br><p><strong>%s %s</strong>", region_name, play_in_label),
+                paste(sprintf(
+                    "<br>\n<strong>%s</strong> <a href='/x'>%s</a> <a href='/y'>%s</a>, <strong>%s</strong> <a href='/x'>%s</a> <a href='/y'>%s</a>\n&nbsp;<span class='note'><small>at Dayton, OH</small></span>",
+                    play_in$teamA_seed, play_in$teamA, play_in$teamA_score, play_in$teamB_seed, play_in$teamB, play_in$teamB_score
+                ), collapse = ""),
+                "\n</p>"
             )
+        } else {
+            ""
         }
-    )
+        rounds_html <- purrr::map_chr(rounds_for(region_name), function(round_name) {
+            games <- results_data %>%
+                dplyr::filter(region == region_name, round == round_name) %>%
+                dplyr::arrange(game_index)
+            game_html <- purrr::map_chr(seq_len(nrow(games)), function(i) {
+                blank <- !is.null(no_contest_slot) && round_name == "Round of 64" &&
+                    region_name == no_contest_slot$region && games$game_index[[i]] == no_contest_slot$game_index
+                game_div(games[i, ], blank_scores = blank)
+            })
+            paste0("<div class=\"round\">", paste(game_html, collapse = "\n"), "</div>")
+        })
+        champion_round <- "<div class=\"round\"><div><div><span>1</span> <a href='/x'>Champion</a></div></div></div>"
+        sprintf(
+            "<div id='%s'>\n%s\n<div id=\"bracket\" class=\"team16\">\n%s\n%s\n</div>\n</div>",
+            tolower(region_name), play_in_html, paste(rounds_html, collapse = "\n"), champion_round
+        )
+    })
 
-    national_lines <- results_data %>%
-        dplyr::filter(region == "National") %>%
-        dplyr::arrange(match(round, c("Final Four", "Championship")), game_index) %>%
-        build_game_lines()
-
-    c(
-        c("East", "Midwest", "South", "West"),
-        "National",
-        unlist(regional_sections, use.names = FALSE),
-        "National",
-        national_lines
-    )
+    unlist(strsplit(paste0(
+        "<html><body><div class='switcher filter'><div><a>East</a></div></div>\n<div id='brackets'>\n",
+        paste(region_html, collapse = "\n"),
+        "\n</div></body></html>"
+    ), "\n"))
 }
 
 #' Override a single candidate matchup row for dashboard fixture edge cases

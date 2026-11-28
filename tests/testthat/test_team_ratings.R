@@ -113,7 +113,7 @@ test_that("ESPN release URLs point at the sportsdataverse release files", {
 test_that("team ratings recover known opponent-adjusted efficiencies", {
     season <- make_synthetic_espn_season()
     games <- build_espn_team_games(season$team_box, season$schedule, min_games = 5L)
-    ratings <- compute_team_ratings(games, as.Date("2025-05-01"), espn_conference_names(season$schedule), bubble_rank = 6L)
+    ratings <- compute_team_ratings(games, as.Date("2025-05-01"), espn_conference_names(), bubble_rank = 6L)
 
     ratings <- ratings[match(season$team_ids, ratings$espn_team_id), ]
     expect_equal(ratings$AdjOE, unname(season$mu + season$offense), tolerance = 1e-6)

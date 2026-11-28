@@ -41,7 +41,7 @@ season_rows <- lapply(years, function(year) {
     paths <- download_espn_season_files(as.integer(year), config$data$espn_raw_dir)
     season <- read_espn_season_files(paths)
     games <- build_espn_team_games(season$team_box, season$schedule)
-    conferences <- espn_conference_names(season$schedule)
+    conferences <- espn_conference_names()
     list(
         selection_sunday = compute_team_ratings(games, ratings_cutoff_date(year), conferences) %>% dplyr::mutate(Year = year),
         full_season = compute_team_ratings(games, as.Date(sprintf("%s-05-01", year)), conferences) %>% dplyr::mutate(Year = year)
