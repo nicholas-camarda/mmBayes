@@ -1189,9 +1189,6 @@ render_model_overview_html <- function(model_overview, compact = FALSE) {
     }
 
     model_type_note <- function(engine) {
-        if (identical(engine, "ensemble")) {
-            return("Logit-scale ensemble of Stan GLM and BART")
-        }
         if (identical(engine, "bart")) {
             return("Nonlinear posterior tree model")
         }
@@ -1516,68 +1513,6 @@ render_model_diagnostics_html <- function(quality_backtest, quality_source_label
 #' @keywords internal
 render_model_comparison_link_html <- function(model_comparison) {
     ""
-}
-
-#' Render ensemble diagnostics for the technical dashboard
-#'
-#' @param model_overview A normalized model overview bundle.
-#'
-#' @return A scalar HTML string.
-#' @keywords internal
-render_ensemble_diagnostics_html <- function(model_overview) {
-    matchup_overview <- normalize_model_overview(model_overview)
-    if (!identical(matchup_overview$engine %||% NULL, "ensemble")) {
-        return("")
-    }
-    combiner <- matchup_overview$ensemble_combiner %||% list()
-    validation <- matchup_overview$ensemble_validation %||% list()
-    summary_tbl <- validation$summary %||% tibble::tibble()
-    gate_tbl <- validation$gate_conditions %||% tibble::tibble()
-
-    learned_row <- summary_tbl %>%
-        dplyr::filter(model == "learned_ensemble")
-    summary_text <- if (nrow(learned_row) == 1L) {
-        sprintf(
-            "Mean bracket score %.1f; mean correct picks %.1f; log loss %.3f; Brier %.3f.",
-            safe_numeric(learned_row$mean_bracket_score[[1]], default = NA_real_),
-            safe_numeric(learned_row$mean_correct_picks[[1]], default = NA_real_),
-            safe_numeric(learned_row$mean_log_loss[[1]], default = NA_real_),
-            safe_numeric(learned_row$mean_brier[[1]], default = NA_real_)
-        )
-    } else {
-        "Validation summary was not recorded in this bundle."
-    }
-    gate_rows <- if (nrow(gate_tbl) > 0) {
-        paste(
-            purrr::map_chr(seq_len(nrow(gate_tbl)), function(index) {
-                status <- if (isTRUE(gate_tbl$passed[[index]])) "Pass" else "Fail"
-                paste0(
-                    "<tr><td>", html_escape(gate_tbl$condition[[index]]), "</td>",
-                    "<td>", html_escape(status), "</td>",
-                    "<td>", html_escape(sprintf("%.3f", safe_numeric(gate_tbl$observed[[index]], default = NA_real_))), "</td>",
-                    "<td>", html_escape(sprintf("%.3f", safe_numeric(gate_tbl$threshold[[index]], default = NA_real_))), "</td></tr>"
-                )
-            }),
-            collapse = "\n"
-        )
-    } else {
-        "<tr><td colspan='4'>No gate conditions recorded.</td></tr>"
-    }
-
-    paste0(
-        "<section class='panel' id='ensemble-diagnostics'>",
-        "<div class='role-kicker role-kicker--act'>Primary model</div>",
-        "<h2>Ensemble Diagnostics</h2>",
-        "<p class='panel-caption'>The bracket picker combines Stan GLM and BART probabilities on the logit scale; component engines are diagnostics, not competing product choices.</p>",
-        "<div class='summary-grid'>",
-        "<div class='summary-card'><div class='summary-label'>Stan GLM weight</div><div class='summary-value'>", html_escape(sprintf("%.3f", safe_numeric(combiner$weight_stan_glm %||% NA_real_, default = NA_real_))), "</div></div>",
-        "<div class='summary-card'><div class='summary-label'>BART weight</div><div class='summary-value'>", html_escape(sprintf("%.3f", safe_numeric(combiner$weight_bart %||% NA_real_, default = NA_real_))), "</div></div>",
-        "<div class='summary-card'><div class='summary-label'>Proof gate</div><div class='summary-value'>", html_escape(if (isTRUE(validation$gate_passed %||% FALSE)) "Pass" else "Not recorded"), "</div></div>",
-        "</div>",
-        "<p>", html_escape(summary_text), "</p>",
-        "<table class='dashboard-table'><thead><tr><th>Condition</th><th>Status</th><th>Observed</th><th>Threshold</th></tr></thead><tbody>", gate_rows, "</tbody></table>",
-        "</section>"
-    )
 }
 
 #' Create the bracket dashboard HTML
@@ -3260,7 +3195,6 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
     live_model <- normalize_model_overview(model_overview)
     live_model_label <- live_model$engine_label %||% live_model$engine %||% if (!is.null(live_performance)) "Stan GLM" else NULL
     overview_panel <- render_model_overview_html(model_overview)
-    ensemble_diagnostics_panel <- render_ensemble_diagnostics_html(model_overview)
     comparison_panel <- render_model_comparison_link_html(model_comparison)
     diagnostics_panel <- render_model_diagnostics_html(quality_backtest, quality_source_label = quality_source_label)
 
@@ -3677,11 +3611,11 @@ create_technical_dashboard_html <- function(bracket_year, decision_sheet, candid
             )
         ),
         render_dashboard_disclosure_html(
-            title = "Model setup and ensemble diagnostics",
+            title = "Model setup",
             role = "reference",
-            note = "Primary ensemble configuration and component-model provenance.",
+            note = "Model configuration and provenance.",
             open = FALSE,
-            body = paste0(ensemble_diagnostics_panel, overview_panel, comparison_panel)
+            body = paste0(overview_panel, comparison_panel)
         ),
         render_dashboard_disclosure_html(
             title = "Reference tables",
@@ -5019,7 +4953,7 @@ create_bracket_dashboard_html <- function(bracket_year, decision_sheet, candidat
     appendix_callout <- paste0(
         "<div class='diagnostic-callout'>",
         "<strong>Need more diagnostics?</strong>",
-        "<p>The technical dashboard keeps ensemble validation, calibration, backtest, and component diagnostics separate from the bracket workflow.</p>",
+        "<p>The technical dashboard keeps calibration, backtest, and component diagnostics separate from the bracket workflow.</p>",
         "<p><a href='", dashboard_preview_url("app/technical.html"), "'>Open technical dashboard</a></p>",
         "</div>"
     )

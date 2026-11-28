@@ -164,10 +164,10 @@ format_year_labels <- function(years) {
 #' @keywords internal
 configured_completed_historical_years <- function(bracket_year, history_window = 8L, min_year = 2008L) {
     bracket_year <- suppressWarnings(as.integer(bracket_year))
-    history_window <- suppressWarnings(as.integer(history_window))
+    history_window <- resolve_history_window(history_window)
     min_year <- suppressWarnings(as.integer(min_year))
 
-    if (is.na(bracket_year) || is.na(history_window) || is.na(min_year) || history_window < 1L) {
+    if (is.na(bracket_year) || is.na(min_year)) {
         stop_with_message("Historical refresh window configuration is invalid")
     }
 
@@ -2145,7 +2145,7 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
             "Configured historical window could not be fully produced; proceeding with %s available historical year%s instead of %s. Omitted years: %s",
             length(available_historical_years),
             ifelse(length(available_historical_years) == 1L, "", "s"),
-            as.integer(history_window),
+            history_window_label(history_window),
             paste(sprintf("%s (%s)", unrecoverable_historical_years$Year, dplyr::coalesce(unrecoverable_historical_years$first_missing_stage, "unknown")), collapse = ", ")
         )
         logger::log_warn(shortfall_message)

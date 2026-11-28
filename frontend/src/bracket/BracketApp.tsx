@@ -147,8 +147,8 @@ export function BracketApp({ payload }: { payload: BracketPayload }) {
         <div className="diagnostic-callout">
           <strong>Need more diagnostics?</strong>
           <p>
-            The technical dashboard keeps ensemble validation, calibration, backtest, and component
-            diagnostics separate from the bracket workflow.
+            The technical dashboard keeps calibration, backtest, and model diagnostics separate from
+            the bracket workflow.
           </p>
           <p>
             <a href="technical.html">Open technical dashboard</a>

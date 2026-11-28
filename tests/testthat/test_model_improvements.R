@@ -127,7 +127,7 @@ test_that("default_project_config includes interaction_terms and prior_type", {
     expect_true("prior_type" %in% names(config$model))
     expect_true("compare_engines" %in% names(config$model))
     expect_equal(config$model$prior_type, "normal")
-    expect_true(isTRUE(config$model$compare_engines))
+    expect_false(isTRUE(config$model$compare_engines))
     expect_equal(length(config$model$interaction_terms), 0L)
 })
 

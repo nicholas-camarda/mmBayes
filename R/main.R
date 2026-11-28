@@ -7,9 +7,7 @@ library(logger)
 #' @return A display label for the engine.
 #' @keywords internal
 engine_display_label <- function(engine) {
-    if (identical(engine, "ensemble")) {
-        "Stan GLM + BART ensemble"
-    } else if (identical(engine, "bart")) {
+    if (identical(engine, "bart")) {
         "BART"
     } else {
         "Stan GLM"
@@ -278,11 +276,10 @@ run_tournament_simulation <- function(config = NULL) {
     config <- config %||% load_project_config()
     output_dir <- config$output$path %||% default_runtime_output_root()
     engine <- config$model$engine %||% "stan_glm"
-    ensemble_primary <- ensemble_enabled(config)
-    compare_engines <- isTRUE(config$model$compare_engines %||% TRUE) && !isTRUE(ensemble_primary)
+    compare_engines <- isTRUE(config$model$compare_engines %||% FALSE)
     allow_unavailable_comparison <- isTRUE(config$model$allow_unavailable_comparison %||% FALSE)
     bart_config <- config$model$bart %||% list()
-    draws_budget <- if (!isTRUE(ensemble_primary) && identical(engine, "bart")) {
+    draws_budget <- if (identical(engine, "bart")) {
         as.integer(bart_config$n_post %||% 1000L)
     } else {
         as.integer(config$model$n_draws %||% 1000L)
@@ -296,7 +293,7 @@ run_tournament_simulation <- function(config = NULL) {
 
     logger::log_info("Pipeline started")
     logger::log_info(
-        "Pipeline configuration: engine={engine}, ensemble_enabled={ensemble_primary}, compare_engines={compare_engines}, draws={draws_budget}, backtest={isTRUE(config$model$backtest)}, model_cache={use_model_cache}"
+        "Pipeline configuration: engine={engine}, compare_engines={compare_engines}, draws={draws_budget}, backtest={isTRUE(config$model$backtest)}, model_cache={use_model_cache}"
     )
     logger::log_info("Runtime output directory: {output_dir}")
     logger::log_info("Run log path: {run_log_path}")
@@ -312,48 +309,19 @@ run_tournament_simulation <- function(config = NULL) {
     logger::log_info(
         "Matchup predictors: {length(matchup_predictors)} columns; interaction_terms={if (is.null(interaction_terms)) 'none' else paste(interaction_terms, collapse = ', ')}"
     )
-    model_results <- if (isTRUE(ensemble_primary)) {
-        fit_ensemble_tournament_model(
-            data = data,
-            predictor_columns = matchup_predictors,
-            bart_config = bart_config,
-            random_seed = config$model$random_seed,
-            draws = draws_budget,
-            cache_dir = model_cache_dir,
-            use_cache = use_model_cache,
-            interaction_terms = interaction_terms,
-            prior_type = config$model$prior_type %||% "normal",
-            ensemble_config = config$model$ensemble
-        )
-    } else {
-        fit_tournament_model(
-            historical_matchups = data$historical_matchups,
-            predictor_columns = matchup_predictors,
-            engine = engine,
-            bart_config = bart_config,
-            random_seed = config$model$random_seed,
-            cache_dir = model_cache_dir,
-            use_cache = use_model_cache,
-            interaction_terms = interaction_terms,
-            prior_type = config$model$prior_type %||% "normal"
-        )
-    }
+    model_results <- fit_tournament_model(
+        historical_matchups = data$historical_matchups,
+        predictor_columns = matchup_predictors,
+        engine = engine,
+        bart_config = bart_config,
+        random_seed = config$model$random_seed,
+        cache_dir = model_cache_dir,
+        use_cache = use_model_cache,
+        interaction_terms = interaction_terms,
+        prior_type = config$model$prior_type %||% "normal"
+    )
+
     logger::log_info("Tournament model ready: primary_engine={model_results$engine %||% engine}")
-    if (identical(model_results$engine %||% NULL, "ensemble")) {
-        combiner <- model_results$combiner %||% list()
-        logger::log_info(
-            "Ensemble combiner ready: stan_glm_weight={round(safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5), 3)}, bart_weight={round(1 - safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5), 3)}"
-        )
-        validation_summary <- model_results$validation$comparison$summary %||% NULL
-        if (!is.null(validation_summary) && nrow(validation_summary) > 0L) {
-            learned_summary <- dplyr::filter(validation_summary, model == "learned_ensemble")
-            if (nrow(learned_summary) > 0L) {
-                logger::log_info(
-                    "Ensemble validation summary: mean_bracket_score={round(learned_summary$mean_bracket_score[[1]], 2)}, mean_correct_picks={round(learned_summary$mean_correct_picks[[1]], 2)}, log_loss={round(learned_summary$mean_log_loss[[1]], 3)}, brier={round(learned_summary$mean_brier[[1]], 3)}"
-                )
-            }
-        }
-    }
     logger::log_info("Fitting total-points model")
     total_points_model <- fit_total_points_model(
         historical_total_points = build_total_points_training_rows(data$historical_actual_results),
@@ -366,23 +334,19 @@ run_tournament_simulation <- function(config = NULL) {
     logger::log_info("Total-points model ready: engine={total_points_model$engine %||% engine}")
     logger::log_info("Running backtest")
     backtest_results <- if (isTRUE(config$model$backtest)) {
-        if (isTRUE(ensemble_primary)) {
-            model_results$validation$backtest
-        } else {
-            run_rolling_backtest(
-                historical_teams = data$historical_teams,
-                historical_actual_results = data$historical_actual_results,
-                predictor_columns = matchup_predictors,
-                engine = engine,
-                bart_config = bart_config,
-                random_seed = config$model$random_seed,
-                draws = draws_budget,
-                cache_dir = model_cache_dir,
-                use_cache = use_model_cache,
-                interaction_terms = interaction_terms,
-                prior_type = config$model$prior_type %||% "normal"
-            )
-        }
+        run_rolling_backtest(
+            historical_teams = data$historical_teams,
+            historical_actual_results = data$historical_actual_results,
+            predictor_columns = matchup_predictors,
+            engine = engine,
+            bart_config = bart_config,
+            random_seed = config$model$random_seed,
+            draws = draws_budget,
+            cache_dir = model_cache_dir,
+            use_cache = use_model_cache,
+            interaction_terms = interaction_terms,
+            prior_type = config$model$prior_type %||% "normal"
+        )
     } else {
         NULL
     }

@@ -159,3 +159,51 @@ summarise_history_grid <- function(grid_results) {
         dplyr::ungroup() %>%
         dplyr::arrange(model, mean_log_loss)
 }
+
+#' Full feature set evaluated against the production model
+#'
+#' The production winner model uses only `barthag_logit_diff` (#12). Model
+#' selection keeps comparing it with the full difference-feature set and its
+#' round interactions so the choice is re-checked as data accumulate.
+#'
+#' @return A list with `predictors` and `interaction_terms`.
+#' @keywords internal
+selection_full_feature_set <- function() {
+    list(
+        predictors = c(
+            "seed_diff", "barthag_logit_diff", "AdjOE_diff", "AdjDE_diff", "WAB_diff",
+            "TOR_diff", "TORD_diff", "ORB_diff", "DRB_diff", "3P%_diff", "3P%D_diff", "Adj T._diff"
+        ),
+        interaction_terms = c("barthag_logit_diff:round", "seed_diff:round")
+    )
+}
+
+#' Score the bracket a model would have filled in for a past tournament
+#'
+#' Simulates the deterministic posterior-mean bracket for a completed season
+#' and scores it against the actual results (1-2-4-8-16-32 points).
+#'
+#' @param holdout_teams The season's tournament field.
+#' @param holdout_results The season's actual results joined to team features.
+#' @param model_results A fitted model bundle.
+#' @param model_label Label for the output row.
+#' @param holdout_year The season.
+#' @param draws Posterior draws to use.
+#'
+#' @return A one-row tibble with bracket score and correct picks.
+#' @keywords internal
+score_holdout_bracket <- function(holdout_teams, holdout_results, model_results, model_label, holdout_year, draws) {
+    simulated_bracket <- simulate_full_bracket(
+        all_teams = holdout_teams,
+        model_results = model_results,
+        draws = draws,
+        log_matchups = FALSE,
+        log_stage_progress = FALSE
+    )
+    predicted_matchups <- flatten_matchup_results(simulated_bracket) %>%
+        dplyr::mutate(Year = as.character(holdout_year))
+    actual_lookup <- holdout_results %>%
+        dplyr::select(Year, region, round, game_index, winner)
+    score_bracket_against_results(predicted_matchups, actual_lookup)$summary %>%
+        dplyr::mutate(model = model_label, year = as.character(holdout_year))
+}

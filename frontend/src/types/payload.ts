@@ -323,14 +323,6 @@ export interface BacktestPayload {
   backtest_years?: string;
 }
 
-export interface EnsembleDiagnosticsPayload {
-  weight_stan_glm?: number;
-  weight_bart?: number;
-  gate_passed?: boolean;
-  validation_summary?: Record<string, unknown>[];
-  gate_conditions?: Record<string, unknown>[];
-}
-
 export interface ModelOverviewPayload {
   engine?: string;
   engine_label?: string;
@@ -338,7 +330,7 @@ export interface ModelOverviewPayload {
   predictor_columns?: string[];
   prior_type?: string;
   interaction_terms?: string[];
-  configured_history_window?: number;
+  configured_history_window?: number | string;
   effective_historical_years?: number;
 }
 
@@ -386,7 +378,6 @@ export interface TechnicalPayload extends PayloadBase {
   live_performance?: LivePerformancePayload;
   backtest?: BacktestPayload;
   model_overview?: ModelOverviewPayload;
-  ensemble_diagnostics?: EnsembleDiagnosticsPayload;
   championship_totals?: ChampionshipTotalsPayload;
   play_in_resolution?: Record<string, unknown>[];
 }

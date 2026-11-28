@@ -8,16 +8,15 @@
 # games. Candidates:
 #   seed     - seed difference only
 #   barthag  - Barthag logit difference only
-#   full     - the production Stan GLM formula (all difference predictors and
-#              their round interactions), fit by maximum likelihood
+#   full     - all difference predictors and their round interactions, fit
+#              by maximum likelihood
 # plus the fixed log5 baseline (Barthag logit difference with slope 1).
 #
 # Stage 2: the Bayesian candidates, trained on every earlier season with equal
 # weight (stage 1 shows window and weighting do not matter materially):
 #   stan_barthag - Stan GLM on the Barthag logit difference only
-#   stan_full    - the production Stan GLM formula
-#   bart         - BART on all predictors
-#   equal_blend  - logit-scale average of stan_full and bart
+#   stan_full    - Stan GLM on the full feature set and round interactions
+#   bart         - BART on the full feature set
 # Each is scored on held-out games and on the bracket it would have filled in
 # (1-2-4-8-16-32 points, 192 maximum).
 #
@@ -50,7 +49,7 @@ holdout_years <- setdiff(2016:2026, 2020)
 formulas <- list(
     seed = actual_outcome ~ 0 + seed_diff,
     barthag = actual_outcome ~ 0 + barthag_logit_diff,
-    full = build_model_formula(config$model$required_predictors, interaction_terms = config$model$interaction_terms)
+    full = build_model_formula(selection_full_feature_set()$predictors, interaction_terms = selection_full_feature_set()$interaction_terms)
 )
 
 grid <- evaluate_logistic_history_grid(matchups, holdout_years, formulas, windows = c(8, 12, Inf), half_lives = c(Inf, 3, 5, 8))
@@ -116,22 +115,16 @@ stage2 <- purrr::map(as.character(holdout_years), function(holdout_year) {
     holdout_results <- actual_reference %>% dplyr::filter(Year == holdout_year)
     holdout_rows <- actual_results_to_matchup_rows(holdout_results %>% dplyr::filter(round != "First Four"))
 
+    full_set <- selection_full_feature_set()
     models <- list(
         stan_barthag = fit_candidate(train_matchups, "stan_glm", "barthag_logit_diff", NULL),
-        stan_full = fit_candidate(train_matchups, "stan_glm", config$model$required_predictors, config$model$interaction_terms),
-        bart = fit_candidate(train_matchups, "bart", config$model$required_predictors, NULL)
-    )
-    models$equal_blend <- list(
-        engine = "ensemble",
-        components = list(stan_glm = models$stan_full, bart = models$bart),
-        combiner = list(weight_stan_glm = 0.5),
-        predictor_columns = config$model$required_predictors,
-        prediction_seed = config$model$random_seed
+        stan_full = fit_candidate(train_matchups, "stan_glm", full_set$predictors, full_set$interaction_terms),
+        bart = fit_candidate(train_matchups, "bart", full_set$predictors, NULL)
     )
 
     rows <- purrr::imap_dfr(models, function(model, name) {
         p <- colMeans(predict_matchup_rows(holdout_rows, model, draws = draws))
-        bracket <- score_ensemble_validation_bracket(holdout_teams, holdout_results, model, name, holdout_year, draws)
+        bracket <- score_holdout_bracket(holdout_teams, holdout_results, model, name, holdout_year, draws)
         holdout_metrics(p, holdout_rows$actual_outcome) %>%
             dplyr::mutate(model = name, holdout_year = holdout_year, training_seasons = length(train_years), .before = 1) %>%
             dplyr::mutate(

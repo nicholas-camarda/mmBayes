@@ -8,44 +8,25 @@ default:
     game_results_path: "~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/mmbayes/data/tournament_game_results.xlsx"
     espn_raw_dir: "~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/mmbayes/data/raw/espn"
   model:
-    history_window: 8
+    # All completed seasons since 2008 (#12: window and recency weighting did
+    # not change held-out accuracy).
+    history_window: all
     backtest: true
     engine: "stan_glm"
-    compare_engines: true
+    # Alternatives are compared by scripts/evaluate_model_selection.R.
+    compare_engines: false
     allow_unavailable_comparison: false
-    ensemble:
-      enabled: true
-      component_engines:
-        - "stan_glm"
-        - "bart"
-      combiner: "logit_weight"
-      primary_acceptance_target: "bracket_score"
-      log_loss_guardrail_delta: 0.005
-      brier_guardrail_delta: 0.005
     bart:
       n_trees: 200
       n_burn: 500
       n_post: 1000
       k: 2
       power: 2
+    # Production winner model (#12): Barthag logit difference only. Adding the
+    # other twelve features, BART, or blends did not improve held-out log loss.
     required_predictors:
-      - round
-      - same_conf
-      - seed_diff
       - barthag_logit_diff
-      - AdjOE_diff
-      - AdjDE_diff
-      - WAB_diff
-      - TOR_diff
-      - TORD_diff
-      - ORB_diff
-      - DRB_diff
-      - 3P%_diff
-      - 3P%D_diff
-      - Adj T._diff
-    interaction_terms:
-      - "barthag_logit_diff:round"
-      - "seed_diff:round"
+    interaction_terms: []
     prior_type: "normal"
     random_seed: 42
     n_draws: 1000

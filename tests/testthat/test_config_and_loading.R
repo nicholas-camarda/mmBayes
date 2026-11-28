@@ -21,29 +21,31 @@ test_that("config loader merges matchup-model defaults with yaml values", {
     expect_equal(config$model$history_window, 5)
     expect_equal(config$output$prefix, "custom_prefix")
     expect_true(length(config$model$required_predictors) > 0)
-    expect_true(isTRUE(config$model$ensemble$enabled))
-    expect_equal(config$model$ensemble$combiner, "logit_weight")
 })
 
-test_that("ensemble configuration validation rejects unsupported primary settings", {
-    file <- tempfile(fileext = ".yml")
-    writeLines(
-        c(
-            "default:",
-            "  model:",
-            "    ensemble:",
-            "      enabled: true",
-            "      component_engines:",
-            "        - stan_glm",
-            "      combiner: logit_weight"
-        ),
-        file
-    )
+test_that("production winner model is Barthag-only over all seasons", {
+    config <- default_project_config()
+    expect_identical(as.character(unlist(config$model$required_predictors)), "barthag_logit_diff")
+    expect_length(unlist(config$model$interaction_terms), 0L)
+    expect_identical(config$model$engine, "stan_glm")
+    expect_null(config$model$ensemble)
 
-    expect_error(
-        load_project_config(file),
-        "component_engines"
-    )
+    repo_config <- load_project_config(test_path("..", "..", "config.yml"))
+    expect_identical(as.character(unlist(repo_config$model$required_predictors)), "barthag_logit_diff")
+    expect_identical(history_window_label(repo_config$model$history_window), "all")
+})
+
+test_that("history window accepts a season count or all", {
+    expect_equal(resolve_history_window(8), 8L)
+    expect_equal(resolve_history_window("all"), Inf)
+    expect_error(resolve_history_window(0), "positive whole number")
+    expect_error(resolve_history_window("most"), "positive whole number")
+    expect_identical(select_historical_years(
+        tibble::tibble(Year = c("2008", "2019", "2021", "2026")),
+        tibble::tibble(Year = c("2008", "2019", "2021")),
+        bracket_year = "2026",
+        history_window = "all"
+    ), c("2008", "2019", "2021"))
 })
 
 test_that("default predictor contracts exclude outcome, score, betting, and leakage fields", {
@@ -83,7 +85,7 @@ test_that("load_tournament_data returns matchup history and current teams", {
 
     expect_equal(loaded$bracket_year, "2025")
     expect_true(all(c("historical_matchups", "historical_teams", "historical_games", "current_teams", "historical_actual_results", "current_play_in_results", "current_completed_results") %in% names(loaded)))
-    expect_equal(loaded$configured_history_window, 3L)
+    expect_equal(loaded$configured_history_window, "3")
     expect_equal(loaded$effective_historical_years, 3L)
     expect_equal(loaded$history_summary$historical_years[[1]], "2022, 2023, 2024")
     expect_gt(nrow(loaded$historical_matchups), 0)

@@ -19,28 +19,7 @@ function stageApp() {
     "utf8",
   );
   const technicalPayload = JSON.parse(technical);
-  technicalPayload.ensemble_diagnostics = technicalPayload.ensemble_diagnostics ?? {
-    weight_stan_glm: 0.62,
-    weight_bart: 0.38,
-    gate_passed: true,
-    validation_summary: [
-      {
-        model: "learned_ensemble",
-        mean_bracket_score: 85.4,
-        mean_correct_picks: 42.1,
-        mean_log_loss: 0.451,
-        mean_brier: 0.192,
-      },
-    ],
-    gate_conditions: [
-      {
-        condition: "Calibration guardrail",
-        passed: true,
-        observed: 0.041,
-        threshold: 0.05,
-      },
-    ],
-  };
+
   technicalPayload.championship_totals = technicalPayload.championship_totals ?? {
     candidate_summaries: [
       {
@@ -171,7 +150,7 @@ test.describe("static frontend dashboards", () => {
     expect(errors).toEqual([]);
   });
 
-  test("technical React app covers compare, calibration, backtest, and ensemble diagnostics", async ({
+  test("technical React app covers compare, calibration, and backtest", async ({
     page,
   }) => {
     const errors = collectBrowserErrors(page);
@@ -187,7 +166,6 @@ test.describe("static frontend dashboards", () => {
     await expect(page.getByTestId("live-performance-panel")).toBeVisible();
     await expect(page.getByTestId("backtest-panel")).toBeVisible();
     await expect(page.getByTestId("calibration-chart")).toBeVisible();
-    await expect(page.getByTestId("ensemble-diagnostics")).toBeVisible();
     await page
       .locator("details.collapsible-panel summary", { hasText: "Championship tiebreaker comparison" })
       .click();

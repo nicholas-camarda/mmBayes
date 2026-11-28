@@ -1,6 +1,6 @@
 #' Fit small Stan GLM and BART components on fixture data
 #'
-#' @return A list with `stan`, `bart`, `ensemble` model bundles and the loaded
+#' @return A list with `stan` and `bart` model bundles and the loaded
 #'   fixture data.
 #' @keywords internal
 fit_symmetry_fixture_models <- function() {
@@ -21,30 +21,23 @@ fit_symmetry_fixture_models <- function() {
     bart_config <- list(n_trees = 20L, n_burn = 5L, n_post = 40L, k = 2, power = 2)
     stan <- fit_tournament_model(
         historical_matchups = loaded$historical_matchups,
-        predictor_columns = config$model$required_predictors,
+        predictor_columns = selection_full_feature_set()$predictors,
         engine = "stan_glm",
-        interaction_terms = config$model$interaction_terms,
+        interaction_terms = selection_full_feature_set()$interaction_terms,
         random_seed = 7,
         include_diagnostics = FALSE,
         use_cache = FALSE
     )
     invisible(capture.output(bart <- fit_tournament_model(
         historical_matchups = loaded$historical_matchups,
-        predictor_columns = config$model$required_predictors,
+        predictor_columns = selection_full_feature_set()$predictors,
         engine = "bart",
         bart_config = bart_config,
         random_seed = 7,
         include_diagnostics = FALSE,
         use_cache = FALSE
     )))
-    ensemble <- list(
-        engine = "ensemble",
-        components = list(stan_glm = stan, bart = bart),
-        combiner = list(weight_stan_glm = 0.4),
-        predictor_columns = config$model$required_predictors,
-        prediction_seed = 7L
-    )
-    list(stan = stan, bart = bart, ensemble = ensemble, loaded = loaded)
+    list(stan = stan, bart = bart, loaded = loaded)
 }
 
 test_that("historical training data has one row per game", {
@@ -113,23 +106,7 @@ test_that("winner-model scaling does not centre difference predictors", {
     expect_equal(centred$seed_diff$center, 4)
 })
 
-test_that("ensemble combiner has no intercept and fits only the weight", {
-    set.seed(3)
-    n <- 200
-    stan_p <- stats::runif(n, 0.05, 0.95)
-    bart_p <- stats::plogis(stats::qlogis(stan_p) + stats::rnorm(n, 0, 0.5))
-    outcome <- stats::rbinom(n, 1, bart_p)
-    combiner <- fit_constrained_ensemble_combiner(tibble::tibble(actual_outcome = outcome, stan_glm = stan_p, bart = bart_p, holdout_year = "2024"))
-    expect_false("intercept" %in% names(combiner))
-    expect_true(combiner$weight_stan_glm >= 0 && combiner$weight_stan_glm <= 1)
-    expect_equal(combiner$weight_stan_glm + combiner$weight_bart, 1)
-
-    p <- combine_ensemble_probabilities(c(0.7, 0.2), c(0.6, 0.35), weight_stan_glm = 0.3)
-    q <- combine_ensemble_probabilities(c(0.3, 0.8), c(0.4, 0.65), weight_stan_glm = 0.3)
-    expect_equal(p + q, c(1, 1))
-})
-
-test_that("Stan GLM, BART and ensemble predictions are order-invariant draw by draw", {
+test_that("Stan GLM and BART predictions are order-invariant draw by draw", {
     if (!requireNamespace("BART", quietly = TRUE)) {
         skip("BART not installed")
     }
@@ -137,10 +114,10 @@ test_that("Stan GLM, BART and ensemble predictions are order-invariant draw by d
     rows <- models$loaded$historical_matchups[1:8, , drop = FALSE]
     swapped <- swap_matchup_orientation(rows)
 
-    for (name in c("stan", "bart", "ensemble")) {
+    for (name in c("stan", "bart")) {
         model <- models[[name]]
-        forward <- with_ensemble_prediction_seed(11L, predict_matchup_rows(rows, model, draws = 20))
-        reverse <- with_ensemble_prediction_seed(11L, predict_matchup_rows(swapped, model, draws = 20))
+        forward <- withr::with_seed(11L, predict_matchup_rows(rows, model, draws = 20))
+        reverse <- withr::with_seed(11L, predict_matchup_rows(swapped, model, draws = 20))
         expect_equal(forward + reverse, matrix(1, nrow(forward), ncol(forward)), tolerance = 1e-8, info = name)
     }
 })

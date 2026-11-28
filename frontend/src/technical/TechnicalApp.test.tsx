@@ -7,28 +7,6 @@ import type { TechnicalPayload } from "../types/payload";
 const fixture = technicalFixture as unknown as TechnicalPayload;
 const fullFixture: TechnicalPayload = {
   ...fixture,
-  ensemble_diagnostics: {
-    weight_stan_glm: 0.62,
-    weight_bart: 0.38,
-    gate_passed: true,
-    validation_summary: [
-      {
-        model: "learned_ensemble",
-        mean_bracket_score: 85.4,
-        mean_correct_picks: 42.1,
-        mean_log_loss: 0.451,
-        mean_brier: 0.192,
-      },
-    ],
-    gate_conditions: [
-      {
-        condition: "Calibration guardrail",
-        passed: true,
-        observed: 0.041,
-        threshold: 0.05,
-      },
-    ],
-  },
   championship_totals: {
     candidate_summaries: [
       {
@@ -62,14 +40,7 @@ describe("TechnicalApp", () => {
     expect(screen.getByTestId("backtest-panel")).toBeInTheDocument();
     expect(screen.getByTestId("calibration-chart")).toBeInTheDocument();
     expect(screen.getByTestId("ranked-decisions-table")).toBeInTheDocument();
-    expect(screen.getByTestId("ensemble-diagnostics")).toBeInTheDocument();
     expect(screen.getByTestId("championship-totals")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Ensemble diagnostics/i })).toBeInTheDocument();
-    expect(
-      screen.getByText(/Learned ensemble validation: bracket score 85.4/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText("0.041")).toBeInTheDocument();
-    expect(screen.getByText("0.050")).toBeInTheDocument();
     expect(screen.queryByText("NaN")).not.toBeInTheDocument();
   });
 
@@ -99,7 +70,6 @@ describe("TechnicalApp", () => {
       candidate_differences: undefined,
       backtest: undefined,
       model_overview: undefined,
-      ensemble_diagnostics: undefined,
       championship_totals: undefined,
     };
     render(<TechnicalApp payload={minimal} />);

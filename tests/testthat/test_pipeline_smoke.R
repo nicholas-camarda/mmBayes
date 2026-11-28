@@ -11,7 +11,6 @@ test_that("run_tournament_simulation writes outputs and backtest summaries", {
     config$data$game_results_path <- fixture_paths$results_path
     config$model$history_window <- 3L
     config$model$n_draws <- 25L
-    config$model$ensemble$enabled <- FALSE
     config$runtime$root <- runtime_root
     config$output$path <- output_dir
     config <- normalize_project_paths(config)

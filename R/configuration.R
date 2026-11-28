@@ -193,12 +193,11 @@ default_project_config <- function() {
             espn_raw_dir = file.path(cloud_data_root, "raw", "espn")
         ),
         model = list(
-            history_window = 8L,
+            history_window = "all",
             backtest = TRUE,
             engine = "stan_glm",
-            compare_engines = TRUE,
+            compare_engines = FALSE,
             allow_unavailable_comparison = FALSE,
-            ensemble = default_ensemble_config(),
             bart = list(
                 n_trees = 200L,
                 n_burn = 500L,
@@ -206,22 +205,7 @@ default_project_config <- function() {
                 k = 2,
                 power = 2
             ),
-            required_predictors = c(
-                "round",
-                "same_conf",
-                "seed_diff",
-                "barthag_logit_diff",
-                "AdjOE_diff",
-                "AdjDE_diff",
-                "WAB_diff",
-                "TOR_diff",
-                "TORD_diff",
-                "ORB_diff",
-                "DRB_diff",
-                "3P%_diff",
-                "3P%D_diff",
-                "Adj T._diff"
-            ),
+            required_predictors = "barthag_logit_diff",
             interaction_terms = character(0),
             prior_type = "normal",
             random_seed = 42,
@@ -308,9 +292,7 @@ load_project_config <- function(path = "config.yml") {
         parsed
     }
 
-    loaded_config <- normalize_project_paths(merge_config_lists(config, parsed_default))
-    validate_ensemble_config(loaded_config)
-    loaded_config
+    normalize_project_paths(merge_config_lists(config, parsed_default))
 }
 
 #' Initialize logging for the current run

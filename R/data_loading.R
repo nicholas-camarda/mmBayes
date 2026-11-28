@@ -296,7 +296,7 @@ select_historical_years <- function(team_data, game_results, bracket_year, histo
         stop_with_message("No completed historical tournament years are available for model training")
     }
 
-    utils::tail(eligible, history_window)
+    utils::tail(eligible, resolve_history_window(history_window))
 }
 
 #' Summarize the effective historical training window
@@ -315,10 +315,10 @@ summarize_history_window <- function(team_data, game_results, bracket_year, hist
     available_years <- intersect(team_years, result_years)
     skipped_years <- intersect(available_years, "2020")
     available_historical_years <- sort(setdiff(available_years, c(as.character(bracket_year), skipped_years)))
-    selected_years <- selected_years %||% utils::tail(available_historical_years, history_window)
+    selected_years <- selected_years %||% utils::tail(available_historical_years, resolve_history_window(history_window))
 
     tibble::tibble(
-        configured_history_window = as.integer(history_window),
+        configured_history_window = history_window_label(history_window),
         effective_historical_years = length(selected_years),
         historical_years = paste(selected_years, collapse = ", "),
         available_historical_years = paste(available_historical_years, collapse = ", "),

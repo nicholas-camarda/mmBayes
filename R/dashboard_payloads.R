@@ -191,32 +191,6 @@ serialize_model_overview_payload <- function(model_overview) {
     ))
 }
 
-#' Serialize ensemble diagnostics for the technical dashboard payload
-#'
-#' @param model_overview A normalized or bundled model overview object.
-#'
-#' @return A compact list for JSON serialization, or NULL when not an ensemble.
-#' @keywords internal
-serialize_ensemble_diagnostics_payload <- function(model_overview) {
-    overview <- normalize_model_overview(model_overview)
-    if (length(overview) == 0 || !identical(overview$engine %||% NULL, "ensemble")) {
-        return(NULL)
-    }
-
-    validation <- overview$ensemble_validation %||% list()
-    validation_summary <- validation$summary %||% tibble::tibble()
-    gate_conditions <- validation$gate_conditions %||% tibble::tibble()
-    combiner <- overview$ensemble_combiner %||% list()
-
-    compact_payload(list(
-        weight_stan_glm = combiner$weight_stan_glm %||% NULL,
-        weight_bart = combiner$weight_bart %||% NULL,
-        gate_passed = validation$gate_passed %||% NULL,
-        validation_summary = if (nrow(validation_summary) > 0) as.data.frame(validation_summary) else NULL,
-        gate_conditions = if (nrow(gate_conditions) > 0) as.data.frame(gate_conditions) else NULL
-    ))
-}
-
 #' Serialize technical decision tables from the decision sheet
 #'
 #' @param decision_sheet Decision sheet from [build_decision_sheet()].
@@ -704,7 +678,6 @@ build_technical_dashboard_payload <- function(bracket_year,
         ),
         backtest = serialize_backtest_payload(quality_backtest, quality_source_label),
         model_overview = serialize_model_overview_payload(model_overview),
-        ensemble_diagnostics = serialize_ensemble_diagnostics_payload(model_overview),
         championship_totals = serialize_championship_totals_payload(total_points_predictions),
         play_in_resolution = if (is.data.frame(play_in_resolution) && nrow(play_in_resolution) > 0) {
             as.data.frame(play_in_resolution)

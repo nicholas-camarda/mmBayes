@@ -7,7 +7,6 @@ import { TechnicalActionSummary } from "../components/technical/TechnicalActionS
 import { CollapsiblePanel } from "../components/technical/CollapsiblePanel";
 import { CompareWorkspace } from "../components/technical/CompareWorkspace";
 import { BacktestPanel } from "../components/technical/BacktestPanel";
-import { EnsembleDiagnosticsPanel } from "../components/technical/EnsembleDiagnosticsPanel";
 import { ModelOverviewPanel } from "../components/technical/ModelOverviewPanel";
 import { ChampionshipTotalsPanel } from "../components/technical/ChampionshipTotalsPanel";
 import { LivePerformancePanel } from "../components/technical/LivePerformancePanel";
@@ -18,7 +17,7 @@ export function TechnicalApp({ payload }: { payload: TechnicalPayload }) {
       <DashboardHero
         eyebrow={`${payload.bracket_year} mmBayes technical dashboard`}
         title="Technical Bracket Dashboard"
-        lede="Start in Compare to decide which games deserve attention, then open backtest and ensemble diagnostics when you want the evidence behind the recommendation."
+        lede="Start in Compare to decide which games deserve attention, then open the backtest when you want the evidence behind the recommendation."
         metadata={payload.build_metadata}
       />
 
@@ -75,8 +74,6 @@ export function TechnicalApp({ payload }: { payload: TechnicalPayload }) {
       </CollapsiblePanel>
 
       <BacktestPanel backtest={payload.backtest} />
-
-      <EnsembleDiagnosticsPanel diagnostics={payload.ensemble_diagnostics} />
 
       <CollapsiblePanel title="Model overview" defaultOpen={false}>
         <ModelOverviewPanel overview={payload.model_overview} />

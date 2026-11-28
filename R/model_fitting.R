@@ -1148,11 +1148,6 @@ swap_matchup_orientation <- function(matchup_rows) {
 #' @return A draw-by-game matrix of posterior expected win probabilities.
 #' @keywords internal
 predict_matchup_rows <- function(matchup_rows, model_results, draws = 1000) {
-    engine <- model_results$engine %||% "stan_glm"
-    if (identical(engine, "ensemble")) {
-        return(predict_ensemble_matchup_rows(matchup_rows, model_results, draws = draws))
-    }
-
     n_games <- nrow(matchup_rows)
     both_sides <- dplyr::bind_rows(matchup_rows, swap_matchup_orientation(matchup_rows))
     raw <- predict_component_matchup_rows(both_sides, model_results, draws = draws)

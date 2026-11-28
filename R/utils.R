@@ -933,6 +933,35 @@ expected_completed_round_counts <- function(year = NULL) {
     counts
 }
 
+#' Resolve the configured history window
+#'
+#' @param history_window A positive whole number of most recent completed
+#'   seasons, or `"all"` for every completed season with data.
+#'
+#' @return A positive integer, or `Inf` for all seasons.
+#' @keywords internal
+resolve_history_window <- function(history_window) {
+    if (identical(tolower(as.character(history_window)), "all") || identical(history_window, Inf)) {
+        return(Inf)
+    }
+    value <- suppressWarnings(as.integer(history_window))
+    if (length(value) != 1L || is.na(value) || value < 1L) {
+        stop_with_message(sprintf("history_window must be a positive whole number or \"all\", not %s", paste(history_window, collapse = ", ")))
+    }
+    value
+}
+
+#' Label for a resolved history window
+#'
+#' @param history_window A configured history window.
+#'
+#' @return `"all"` or the number of seasons as text.
+#' @keywords internal
+history_window_label <- function(history_window) {
+    resolved <- resolve_history_window(history_window)
+    if (is.infinite(resolved)) "all" else as.character(resolved)
+}
+
 #' Number of teams in the NCAA men's tournament field
 #'
 #' The field had 65 teams (one play-in game) through 2010 and 68 teams (four
@@ -2668,15 +2697,6 @@ generate_bracket_candidates <- function(all_teams, model_results, draws = 1000, 
     logger::log_info(
         "Candidate simulation settings: engine={engine_label}, draws={draws}, random_seed={random_seed}, worker_source={worker_source}, chunks={chunk_count}, chunk_target_size={chunk_target_size}"
     )
-    if (identical(engine_label, "ensemble")) {
-        combiner <- model_results$combiner %||% list()
-        stan_weight <- safe_numeric(combiner$weight_stan_glm %||% 0.5, default = 0.5)
-        bart_weight <- 1 - stan_weight
-        logger::log_info(
-            "Candidate simulations use ensemble predictions: stan_glm_weight={round(stan_weight, 3)}, bart_weight={round(bart_weight, 3)}"
-        )
-    }
-
     for (chunk_index in seq_along(task_chunks)) {
         task_indices <- task_chunks[[chunk_index]]
         chunk_start <- Sys.time()
@@ -3335,17 +3355,7 @@ save_results <- function(results, output_config) {
     saveRDS(results, rds_path)
 
     sink(model_summary_path)
-    if (identical(results$model$engine %||% NULL, "ensemble")) {
-        cat("Primary model: Stan GLM + BART ensemble\n\n")
-        cat("Combiner:\n")
-        print(results$model$combiner)
-        cat("\nStan GLM component:\n")
-        print(summary(results$model$components$stan_glm$model))
-        cat("\nBART component:\n")
-        print(results$model$components$bart$bart_config %||% results$model$components$bart)
-    } else {
-        print(summary(results$model$model))
-    }
+    print(summary(results$model$model))
     sink()
 
     if (!is.null(results$backtest)) {
