@@ -1018,3 +1018,41 @@ test_that("dashboard warning tracks unresolved versus completed First Four slots
     expect_false(any(payload_resolved$divergence_map$round == "First Four"))
     expect_true(any(payload_resolved$matchup_context$round == "First Four"))
 })
+
+test_that("Final Four semifinals follow the year's pairing, not a fixed one", {
+    expect_identical(final_four_pairing(2026), list(c("West", "Midwest"), c("East", "South")))
+    expect_identical(final_four_pairing(2019), list(c("East", "West"), c("Midwest", "South")))
+    expect_error(final_four_pairing(2099), "No Final Four pairing for 2099")
+
+    team <- function(name, region) tibble::tibble(Year = "2026", Team = name, Region = region, Seed = 1L)
+    champions <- list(
+        East = team("E", "East"), West = team("W", "West"),
+        South = team("S", "South"), Midwest = team("M", "Midwest")
+    )
+    fake_model <- list(engine = "fixed")
+    testthat::local_mocked_bindings(
+        simulate_matchup = function(teamA, teamB, round_name, matchup_number, model_results, draws = 1000, deterministic = TRUE, log_matchup = TRUE, posterior_draw_index = NULL) {
+            team_a <- teamA$Team[1]
+            team_b <- teamB$Team[1]
+            tibble::tibble(teamA = team_a, teamB = team_b, round = round_name, matchup_number = matchup_number, winner = team_a)
+        }
+    )
+    result <- simulate_final_four(champions, fake_model, draws = 10, log_matchups = FALSE)
+    expect_identical(c(result$semifinals[[1]]$teamA, result$semifinals[[1]]$teamB), c("W", "M"))
+    expect_identical(c(result$semifinals[[2]]$teamA, result$semifinals[[2]]$teamB), c("E", "S"))
+    expect_identical(c(result$championship$teamA, result$championship$teamB), c("W", "E"))
+})
+
+test_that("quality gate rejects Final Four games that contradict the pairing table", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2024)
+    expect_equal(nrow(find_final_four_pairing_issues(team_data, results_data)), 0L)
+
+    swapped <- results_data
+    ff <- which(swapped$round == "Final Four")
+    tmp <- swapped$teamB[ff[1]]
+    swapped$teamB[ff[1]] <- swapped$teamB[ff[2]]
+    swapped$teamB[ff[2]] <- tmp
+    issues <- find_final_four_pairing_issues(team_data, swapped)
+    expect_equal(nrow(issues), 2L)
+})

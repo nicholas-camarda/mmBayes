@@ -61,6 +61,34 @@ find_unresolved_result_teams <- function(team_features, game_results) {
         dplyr::arrange(Year, Team, source_column)
 }
 
+#' Find Final Four games whose regions differ from the pairing table
+#'
+#' @param team_features A team feature table (for each team's region).
+#' @param game_results A game-results table.
+#'
+#' @return A tibble of offending Final Four games with the observed and
+#'   expected region pairs.
+#' @keywords internal
+find_final_four_pairing_issues <- function(team_features, game_results) {
+    regions <- team_features %>%
+        dplyr::distinct(Year = as.character(Year), team_key = normalize_team_key(Team), Region)
+    pairings <- final_four_pairings() %>%
+        tidyr::pivot_longer(-Year, names_to = "slot", values_to = "Region") %>%
+        dplyr::mutate(game_index = ifelse(grepl("^game1", slot), 1L, 2L)) %>%
+        dplyr::group_by(Year, game_index) %>%
+        dplyr::summarise(expected_pair = paste(sort(Region), collapse = "-"), .groups = "drop")
+
+    game_results %>%
+        dplyr::filter(round == "Final Four") %>%
+        dplyr::mutate(Year = as.character(Year), a = normalize_team_key(teamA), b = normalize_team_key(teamB)) %>%
+        dplyr::left_join(regions %>% dplyr::rename(a = team_key, region_a = Region), by = c("Year", "a")) %>%
+        dplyr::left_join(regions %>% dplyr::rename(b = team_key, region_b = Region), by = c("Year", "b")) %>%
+        dplyr::mutate(observed_pair = purrr::map2_chr(region_a, region_b, ~ paste(sort(c(.x, .y)), collapse = "-"))) %>%
+        dplyr::left_join(pairings, by = c("Year", "game_index")) %>%
+        dplyr::filter(is.na(expected_pair) | observed_pair != expected_pair) %>%
+        dplyr::select(Year, game_index, teamA, teamB, observed_pair, expected_pair)
+}
+
 #' Find team-feature rows whose ratings were not cut off at Selection Sunday
 #'
 #' Every team-feature row must record a `ratings_cutoff` equal to that year's
@@ -228,8 +256,10 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
 
     unresolved_teams <- find_unresolved_result_teams(team_features, game_results)
     ratings_cutoff_issues <- find_ratings_cutoff_issues(team_features)
+    final_four_pairing_issues <- find_final_four_pairing_issues(team_features, game_results)
     passed <- all(games_per_year$ok) &&
         nrow(ratings_cutoff_issues) == 0 &&
+        nrow(final_four_pairing_issues) == 0 &&
         nrow(round_count_issues) == 0 &&
         nrow(current_year_round_scope_issues) == 0 &&
         nrow(current_year_round_count_issues) == 0 &&
@@ -259,6 +289,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         invalid_score_rows = nrow(invalid_score_rows),
         unresolved_team_rows = nrow(unresolved_teams),
         ratings_cutoff_issue_rows = nrow(ratings_cutoff_issues),
+        final_four_pairing_issue_rows = nrow(final_four_pairing_issues),
         passed = passed
     )
 
@@ -280,6 +311,7 @@ evaluate_canonical_data_quality <- function(team_features, game_results) {
         invalid_score_rows = invalid_score_rows,
         unresolved_teams = unresolved_teams,
         ratings_cutoff_issues = ratings_cutoff_issues,
+        final_four_pairing_issues = final_four_pairing_issues,
         passed = isTRUE(passed)
     )
 }
@@ -544,6 +576,12 @@ assert_canonical_data_quality <- function(team_features, game_results) {
                 paste(cutoff_text, collapse = "; ")
             )
         )
+    }
+    if (nrow(report$final_four_pairing_issues) > 0) {
+        pairing_text <- report$final_four_pairing_issues %>%
+            dplyr::mutate(text = sprintf("%s semifinal %s: %s vs %s is %s, table says %s", Year, game_index, teamA, teamB, observed_pair, dplyr::coalesce(expected_pair, "missing"))) %>%
+            dplyr::pull(text)
+        issues <- c(issues, paste("Final Four games do not match final_four_pairings():", paste(pairing_text, collapse = "; ")))
     }
     bad_game_years <- report$games_per_year %>%
         dplyr::filter(!ok)

@@ -408,6 +408,57 @@ simulate_region_bayesian <- function(region_teams, model_results, draws = 1000, 
 #'
 #' @return A list containing semifinal, championship, and champion results.
 #' @export
+#' Final Four semifinal pairings by tournament year
+#'
+#' The NCAA sets which regional champions meet in each semifinal every year.
+#' Rows list the regions of semifinal 1 and semifinal 2 in the order the
+#' canonical results store them (`game_index`). Add the next year's pairing,
+#' announced on Selection Sunday, together with its Selection Sunday date.
+#'
+#' @return A tibble with `Year`, `game1_a`, `game1_b`, `game2_a`, `game2_b`.
+#' @keywords internal
+final_four_pairings <- function() {
+    tibble::tribble(
+        ~Year, ~game1_a, ~game1_b, ~game2_a, ~game2_b,
+        "2008", "East", "Midwest", "South", "West",
+        "2009", "East", "South", "Midwest", "West",
+        "2010", "East", "South", "Midwest", "West",
+        "2011", "East", "West", "Southeast", "Southwest",
+        "2012", "East", "Midwest", "South", "West",
+        "2013", "East", "South", "Midwest", "West",
+        "2014", "East", "South", "Midwest", "West",
+        "2015", "East", "South", "Midwest", "West",
+        "2016", "East", "Midwest", "South", "West",
+        "2017", "East", "West", "Midwest", "South",
+        "2018", "East", "Midwest", "South", "West",
+        "2019", "East", "West", "Midwest", "South",
+        "2021", "East", "West", "Midwest", "South",
+        "2022", "East", "West", "Midwest", "South",
+        "2023", "East", "South", "Midwest", "West",
+        "2024", "East", "West", "Midwest", "South",
+        "2025", "East", "Midwest", "South", "West",
+        "2026", "West", "Midwest", "East", "South"
+    )
+}
+
+#' Final Four semifinal pairing for one year
+#'
+#' @param year Tournament year.
+#'
+#' @return A list of two character vectors, the regions meeting in semifinal 1
+#'   and semifinal 2.
+#' @keywords internal
+final_four_pairing <- function(year) {
+    row <- final_four_pairings() %>% dplyr::filter(Year == as.character(year))
+    if (nrow(row) != 1L) {
+        stop_with_message(sprintf(
+            "No Final Four pairing for %s; add it to final_four_pairings() in R/simulation_functions.R (announced on Selection Sunday)",
+            year
+        ))
+    }
+    list(c(row$game1_a, row$game1_b), c(row$game2_a, row$game2_b))
+}
+
 simulate_final_four <- function(region_champions, model_results, draws = 1000, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL, posterior_draw_index = NULL) {
     if (is.null(log_stage_progress)) {
         log_stage_progress <- !isTRUE(log_matchups)
@@ -415,9 +466,11 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
     if (isTRUE(log_stage_progress)) {
         logger::log_info("Simulating Final Four and championship")
     }
+    year <- region_champions[[1]]$Year[[1]]
+    pairing <- final_four_pairing(year)
     semifinal1 <- simulate_matchup(
-        region_champions$South,
-        region_champions$West,
+        region_champions[[pairing[[1]][[1]]]],
+        region_champions[[pairing[[1]][[2]]]],
         "Final Four",
         1,
         model_results,
@@ -427,8 +480,8 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
         posterior_draw_index = posterior_draw_index
     )
     semifinal2 <- simulate_matchup(
-        region_champions$East,
-        region_champions$Midwest,
+        region_champions[[pairing[[2]][[1]]]],
+        region_champions[[pairing[[2]][[2]]]],
         "Final Four",
         2,
         model_results,
@@ -438,15 +491,15 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
         posterior_draw_index = posterior_draw_index
     )
 
-    championship_team_a <- if (semifinal1$winner[1] == region_champions$South$Team[1]) {
-        region_champions$South
+    championship_team_a <- if (semifinal1$winner[1] == region_champions[[pairing[[1]][[1]]]]$Team[1]) {
+        region_champions[[pairing[[1]][[1]]]]
     } else {
-        region_champions$West
+        region_champions[[pairing[[1]][[2]]]]
     }
-    championship_team_b <- if (semifinal2$winner[1] == region_champions$East$Team[1]) {
-        region_champions$East
+    championship_team_b <- if (semifinal2$winner[1] == region_champions[[pairing[[2]][[1]]]]$Team[1]) {
+        region_champions[[pairing[[2]][[1]]]]
     } else {
-        region_champions$Midwest
+        region_champions[[pairing[[2]][[2]]]]
     }
 
     championship <- simulate_matchup(
@@ -491,7 +544,7 @@ simulate_final_four <- function(region_champions, model_results, draws = 1000, d
 #' @return A list containing regional results and Final Four results.
 #' @export
 simulate_full_bracket <- function(all_teams, model_results, draws = 1000, actual_play_in_results = NULL, deterministic = TRUE, log_matchups = TRUE, log_stage_progress = NULL, posterior_draw_index = NULL) {
-    regions <- c("East", "West", "South", "Midwest")
+    regions <- unlist(final_four_pairing(all_teams$Year[[1]]))
     region_counts <- table(all_teams$Region)
     if (is.null(log_stage_progress)) {
         log_stage_progress <- !isTRUE(log_matchups)

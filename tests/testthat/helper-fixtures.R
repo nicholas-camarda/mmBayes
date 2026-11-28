@@ -249,11 +249,16 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
             }
         )
 
-        semifinal1_winner <- pick_fixture_winner(regional$South$champion, regional$West$champion, year, "Final Four", "National", 1)
-        semifinal2_winner <- pick_fixture_winner(regional$East$champion, regional$Midwest$champion, year, "Final Four", "National", 2)
+        pairing <- final_four_pairing(year)
+        semi1_a <- regional[[pairing[[1]][[1]]]]$champion
+        semi1_b <- regional[[pairing[[1]][[2]]]]$champion
+        semi2_a <- regional[[pairing[[2]][[1]]]]$champion
+        semi2_b <- regional[[pairing[[2]][[2]]]]$champion
+        semifinal1_winner <- pick_fixture_winner(semi1_a, semi1_b, year, "Final Four", "National", 1)
+        semifinal2_winner <- pick_fixture_winner(semi2_a, semi2_b, year, "Final Four", "National", 2)
         champion <- pick_fixture_winner(semifinal1_winner, semifinal2_winner, year, "Championship", "National", 1)
-        semifinal1_scores <- make_fixture_matchup_scores(regional$South$champion, regional$West$champion, semifinal1_winner, "Final Four", 1)
-        semifinal2_scores <- make_fixture_matchup_scores(regional$East$champion, regional$Midwest$champion, semifinal2_winner, "Final Four", 2)
+        semifinal1_scores <- make_fixture_matchup_scores(semi1_a, semi1_b, semifinal1_winner, "Final Four", 1)
+        semifinal2_scores <- make_fixture_matchup_scores(semi2_a, semi2_b, semifinal2_winner, "Final Four", 2)
         championship_scores <- make_fixture_matchup_scores(semifinal1_winner, semifinal2_winner, champion, "Championship", 1)
 
         dplyr::bind_rows(
@@ -263,10 +268,10 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
                 region = "National",
                 round = "Final Four",
                 game_index = 1L,
-                teamA = regional$South$champion$Team[1],
-                teamB = regional$West$champion$Team[1],
-                teamA_seed = regional$South$champion$Seed[1],
-                teamB_seed = regional$West$champion$Seed[1],
+                teamA = semi1_a$Team[1],
+                teamB = semi1_b$Team[1],
+                teamA_seed = semi1_a$Seed[1],
+                teamB_seed = semi1_b$Seed[1],
                 teamA_score = semifinal1_scores$teamA_score,
                 teamB_score = semifinal1_scores$teamB_score,
                 total_points = semifinal1_scores$total_points,
@@ -277,10 +282,10 @@ make_fixture_game_results <- function(team_features, history_years = 2022:2024) 
                 region = "National",
                 round = "Final Four",
                 game_index = 2L,
-                teamA = regional$East$champion$Team[1],
-                teamB = regional$Midwest$champion$Team[1],
-                teamA_seed = regional$East$champion$Seed[1],
-                teamB_seed = regional$Midwest$champion$Seed[1],
+                teamA = semi2_a$Team[1],
+                teamB = semi2_b$Team[1],
+                teamA_seed = semi2_a$Seed[1],
+                teamB_seed = semi2_b$Seed[1],
                 teamA_score = semifinal2_scores$teamA_score,
                 teamB_score = semifinal2_scores$teamB_score,
                 total_points = semifinal2_scores$total_points,
