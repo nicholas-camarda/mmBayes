@@ -6,6 +6,7 @@ default:
   data:
     team_features_path: "~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/mmbayes/data/pre_tournament_team_features.xlsx"
     game_results_path: "~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/mmbayes/data/tournament_game_results.xlsx"
+    espn_raw_dir: "~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/mmbayes/data/raw/espn"
   model:
     history_window: 8
     backtest: true

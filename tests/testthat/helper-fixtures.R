@@ -403,7 +403,6 @@ make_fixture_bart_ratings <- function(team_features) {
         dplyr::select(
             Year,
             Team,
-            Seed,
             Conf,
             ratings_cutoff,
             Barthag,
