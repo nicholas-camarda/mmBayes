@@ -37,8 +37,8 @@ At a high level, the workflow is:
 1. scrape season-level team data and tournament results
 2. normalize team names and validate the tournament field
 3. build historical matchup-level training rows
-4. fit Stan GLM and BART component models for game winners
-5. learn the constrained logit-scale ensemble combiner from rolling held-out predictions
+4. fit the Bayesian logistic winner model (Barthag difference; see [Winner Model](#winner-model))
+5. run the rolling backtest of that model on completed tournaments
 6. fit a Bayesian Gaussian model for total points
 7. draw posterior predictions for each matchup in the current bracket
 8. simulate the bracket forward round by round
@@ -229,29 +229,17 @@ y_i =
 \end{cases}
 $$
 
-### Symmetry by row reversal
+### One row per game, either side first
 
-`build_explicit_matchup_history()` duplicates every historical game with team order reversed.
+Each historical game is one training row, so each game enters the likelihood once. Which team is listed first is fixed by a hash of the game's identity (year, region, round, slot): reproducible, independent of the global random seed, and unrelated to seed or bracket position. About half the games are listed with the eventual loser first.
 
-If the original row is:
-
-- `teamA = Duke`
-- `teamB = Houston`
-- `actual_outcome = 1`
-
-then the reversed row becomes:
-
-- `teamA = Houston`
-- `teamB = Duke`
-- `actual_outcome = 0`
-
-and every signed difference flips sign:
+Predictions are made order-invariant (see [Posterior Prediction for Winners](#posterior-prediction-for-winners)): a game gets the same answer whichever team is listed first,
 
 $$
-\text{featureDiff}_{B,A} = -\text{featureDiff}_{A,B}
+p(\text{A beats B}) = 1 - p(\text{B beats A}).
 $$
 
-This makes the training design approximately symmetric with respect to team labeling.
+*How it could fail.* If training listed the better seed first in every row, a model with an intercept could learn "the first-listed team wins more often", which is a statement about row order, not about the teams. The hashed orientation and the no-intercept formula remove that path.
 
 ## Matchup Feature Engineering
 
@@ -322,84 +310,33 @@ So a negative value here often means "team A is better seeded."
 
 ## Scaling
 
-Continuous matchup-difference predictors are standardized by `prepare_model_data()` using training-data-only means and standard deviations:
+Continuous matchup-difference predictors are divided by their training-set root-mean-square, without centering:
 
 $$
-z_{ij} = \frac{x_{ij} - \mu_j}{s_j}
+z_{ij} = \frac{x_{ij}}{\sqrt{\frac{1}{n}\sum_{i} x_{ij}^2}}
 $$
 
-where:
-
-- `x_{ij}` is predictor `j` for game `i`
-- `\mu_j` is the training-set mean for predictor `j`
-- `s_j` is the training-set standard deviation for predictor `j`
-
-Important details:
-
-- the scaling reference is built only from the training data
-- the same scaling reference is reused at prediction time
-- `round` and `same_conf` are not standardized
-
-This means the logistic model coefficients for continuous predictors are interpretable per one training-set standard deviation increase in the corresponding team-A minus team-B difference.
+A difference feature has a natural zero (two equal teams), and leaving it uncentered keeps a swapped game exactly the negation of the original after scaling. The scaling reference comes from the training data only and is reused at prediction time. `round` and `same_conf` are not scaled. A coefficient is the change in log-odds per one root-mean-square of the team-A minus team-B difference.
 
 ## Winner Model
 
-### Model engine
+### Model choice
 
-`mmBayes` uses an ensemble winner model for the primary bracket picker. The component engines are:
+The production winner model is a Bayesian logistic regression on one predictor, the difference in the two teams' Barthag on the logit scale, fit with `rstanarm::stan_glm(..., family = binomial(link = "logit"))` on every completed season since 2008 with equal weight (`config.yml`: `required_predictors: [barthag_logit_diff]`, `history_window: all`).
 
-- `stan_glm`: Bayesian logistic regression via `rstanarm::stan_glm()`.
-- `bart`: Bayesian additive regression trees via `BART::pbart()`.
+It was chosen by forward-in-time evaluation (`scripts/evaluate_model_selection.R`): for each holdout tournament, every candidate is refit on earlier seasons only and scored on that tournament's main-bracket games, and the model with the lowest mean held-out log loss is preferred, with the simplest model taken when candidates are within noise. Candidates include the same model on seed only, log5 on Barthag, a Stan GLM on twelve difference features with round interactions, and BART on the same twelve features. Held-out log loss is the selection metric because it rewards honest probabilities; mean bracket score over ten tournaments varies by roughly 8-12 points (of 192) from luck alone. The script's outputs record the current comparison; issue #12 records the 2026 decision.
 
-Both engines produce a **draw-by-game matrix** of posterior win probabilities. The primary ensemble combines aligned component draw matrices on the logit scale:
+### Likelihood
 
-$$
-p_{\text{ensemble}, i}
-= \text{logit}^{-1}\left(
-\delta + w \cdot \text{logit}(p_{\text{Stan}, i})
-+ (1-w) \cdot \text{logit}(p_{\text{BART}, i})
-\right)
-$$
-
-with `0 <= w <= 1`. The fitted production combiner is learned from rolling held-out historical predictions. The proof gate requires the learned ensemble to beat Stan GLM, BART, and equal-weight averaging on mean bracket score; tie or beat the best component on mean correct picks; and stay within the configured log-loss and Brier guardrails.
-
-Everything downstream (bracket simulation, candidate generation, decision-sheet uncertainty tiers) consumes the ensemble draw matrix in the same way it previously consumed a single component draw matrix.
-
-When using `bart`, the draw budget is controlled by `config$model$bart$n_post` (the number of post-burn-in draws stored by BART).
-
-### Stan GLM component likelihood
-
-The Stan GLM component in `fit_tournament_model()` is Bayesian logistic regression fit with `rstanarm::stan_glm(..., family = binomial(link = "logit"))`.
-
-For game `i`, the full model is:
+For game `i`:
 
 $$
-y_i \sim \text{Bernoulli}(p_i)
+y_i \sim \text{Bernoulli}(p_i), \qquad \text{logit}(p_i) = \beta \cdot z(\text{barthagLogitDiff}_i)
 $$
 
-$$
-\text{logit}(p_i) = \eta_i
-$$
+There is no intercept: two equal teams get probability 0.5, and the prediction depends only on the signed difference, so it is order-invariant by construction.
 
-$$
-\begin{aligned}
-\eta_i &= \alpha \\
-&\quad + \gamma_{\text{round}}(r_i) \\
-&\quad + \beta_1 \cdot \text{sameConf}_i \\
-&\quad + \beta_2 \cdot z(\text{seedDiff}_i) \\
-&\quad + \beta_3 \cdot z(\text{barthagLogitDiff}_i) \\
-&\quad + \beta_4 \cdot z(\text{AdjOEDiff}_i) \\
-&\quad + \beta_5 \cdot z(\text{AdjDEDiff}_i) \\
-&\quad + \beta_6 \cdot z(\text{WABDiff}_i) \\
-&\quad + \beta_7 \cdot z(\text{TORDiff}_i) \\
-&\quad + \beta_8 \cdot z(\text{TORDDiff}_i) \\
-&\quad + \beta_9 \cdot z(\text{ORBDiff}_i) \\
-&\quad + \beta_{10} \cdot z(\text{DRBDiff}_i) \\
-&\quad + \beta_{11} \cdot z(\text{ThreePointPctDiff}_i) \\
-&\quad + \beta_{12} \cdot z(\text{ThreePointPctDefDiff}_i) \\
-&\quad + \beta_{13} \cdot z(\text{AdjTempoDiff}_i)
-\end{aligned}
-$$
+*How to read it.* `barthagLogitDiff` is the difference in each team's log-odds of beating an average team on a neutral floor. If the posterior mean of the rescaled slope corresponds to 0.9 on the raw logit difference, then a team whose Barthag implies 3:1 odds against an average team (logit 1.1) facing one at 1:1 (logit 0) is favoured with probability $\text{logit}^{-1}(0.9 \times 1.1) \approx 0.73$. A slope below 1 means tournament games are less predictable than the regular-season ratings imply, which is the usual finding.
 
 ### What `logit` means
 
@@ -428,8 +365,6 @@ The inverse logit maps the linear predictor back to probability:
 $$
 p_i = \frac{1}{1 + e^{-\eta_i}}
 $$
-
-The BART component uses `BART::pbart()` to learn a nonlinear Bernoulli probability surface instead of an explicit logit-linear formula, but the downstream exported summaries (`mean`, intervals, SD, candidate scoring) are computed from the ensemble draw-by-game probability matrix interface.
 
 ### Priors
 
@@ -491,38 +426,9 @@ So:
 
 Because the prior standard deviation is `1.5`, the model allows meaningful effects but still shrinks implausibly large coefficients back toward zero unless the data support them.
 
-### Interaction terms (Stan GLM only)
+### Optional terms
 
-Setting `interaction_terms` in the model configuration adds interaction terms to the `stan_glm` formula. These are appended verbatim to the right-hand side of the `stan_glm` formula in the same syntax as base R formulas.
-
-Example: to let the effect of overall quality differential vary by round, add:
-
-```yaml
-model:
-  interaction_terms:
-    - "barthag_logit_diff:round"
-    - "seed_diff:round"
-```
-
-These two interactions capture that the predictive value of team-quality and seeding differences is not constant across rounds.  In early-round matchups (Round of 64, Round of 32), large seed differentials are common but a wider fraction of upsets occur because weaker teams are simply underestimated.  In later rounds the field is leveled and the same quality gap carries different meaning.
-
-The interaction terms receive the same `prior_type` prior as the other fixed effects.
-
-This repo's BART implementation does not accept explicit `interaction_terms`. BART component fits use the same base predictors as the Stan GLM component, while BART learns interaction structure implicitly through tree splits.
-
-### Round handling
-
-`round` is fit as a factor using the ordered levels returned by `round_levels()`:
-
-- `First Four`
-- `Round of 64`
-- `Round of 32`
-- `Sweet 16`
-- `Elite 8`
-- `Final Four`
-- `Championship`
-
-In practice this means the model includes round offsets rather than treating round as a numeric variable. The exact coefficient parameterization is handled by R's factor encoding inside `stan_glm`.
+The formula builder accepts more difference predictors (`required_predictors`) and interaction terms (`interaction_terms`, appended verbatim, for example `barthag_logit_diff:round`). The formula never includes an intercept or main effects for `round` or `same_conf`: those take the same value whichever team is listed first, so on their own they can only favour the first-listed team. `round` can enter through interactions with difference predictors. The production model uses none of these; the model-selection script evaluates them.
 
 ## Posterior Prediction for Winners
 
@@ -546,9 +452,14 @@ If one draw says `0.68`, another says `0.74`, and another says `0.71`, the outpu
 
 ### What is drawn
 
-For a new matchup row, `predict_matchup_rows()` calls:
+For new matchup rows, `predict_matchup_rows()` predicts each game from both sides in one call to `rstanarm::posterior_epred()` (so both sides use the same posterior draws) and returns, draw by draw,
 
-- `rstanarm::posterior_epred()`
+$$
+p = \text{logit}^{-1}\left(\frac{\text{logit}\, p_{AB} - \text{logit}\, p_{BA}}{2}
+ight),
+$$
+
+which equals $1 - p$ for the swapped game exactly. For the production model this changes nothing (its formula is already odd in the features); it guarantees order invariance for any candidate model, including BART, whose trees are not symmetric.
 
 This returns posterior draws of the expected win probability for team A:
 
@@ -766,9 +677,7 @@ The frequency is path support under the simulation procedure, not a guarantee th
 
 ### Effective historical seasons
 
-The configured `history_window` is the requested number of completed historical tournaments. The runtime also records `effective_historical_years`, `historical_years`, and skipped years in the saved result bundle and dashboard model overview. The current 2026 canonical data state requests eight completed seasons, skips 2020, and effectively uses seven seasons: 2018, 2019, and 2021-2025.
-
-Historical games are expanded into forward and reversed ordered matchup rows. For example, 468 actual historical games become 936 ordered matchup rows. This supports predictive team-swap behavior, but coefficient summaries should be read as predictive diagnostics, not independent scientific effects from 936 independent games.
+The configured `history_window` is the number of most recent completed tournaments to train on, or `all` for every completed tournament in the canonical workbooks (2020 had none). The runtime records `effective_historical_years`, `historical_years` and skipped years in the saved result bundle and the dashboard model overview.
 
 ## How Bracket Probability Is Scored
 
