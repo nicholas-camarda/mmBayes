@@ -4,8 +4,8 @@ default:
     root: "~/Workspaces/mmbayes/runtime"
     exports_root: "~/Workspaces/mmbayes/runtime/exports"
   data:
-    team_features_path: "~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/pre_tournament_team_features.xlsx"
-    game_results_path: "~/Library/CloudStorage/OneDrive-Personal/SideProjects/mmBayes/data/tournament_game_results.xlsx"
+    team_features_path: "~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/mmbayes/data/pre_tournament_team_features.xlsx"
+    game_results_path: "~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/mmbayes/data/tournament_game_results.xlsx"
   model:
     history_window: 8
     backtest: true

@@ -30,7 +30,10 @@ default_code_root <- function() {
 #' @return A normalized path under OneDrive for shared data and outputs.
 #' @keywords internal
 default_cloud_root <- function() {
-    path.expand(file.path("~", "Library", "CloudStorage", "OneDrive-Personal", "SideProjects", project_slug()))
+    path.expand(file.path(
+        "~", "Library", "CloudStorage", "OneDrive-Personal",
+        "Project Vault", "Personal Projects", "mmbayes"
+    ))
 }
 
 #' Return the default OneDrive project root
