@@ -144,3 +144,23 @@ test_that("Stan GLM, BART and ensemble predictions are order-invariant draw by d
         expect_equal(forward + reverse, matrix(1, nrow(forward), ncol(forward)), tolerance = 1e-8, info = name)
     }
 })
+
+test_that("total-points formula keeps its intercept and round effects", {
+    formula <- build_total_points_formula(default_total_points_predictors())
+    labels <- attr(stats::terms(formula), "term.labels")
+    expect_identical(attr(stats::terms(formula), "intercept"), 1L)
+    expect_true(all(c("round", "same_conf", "barthag_logit_sum") %in% labels))
+})
+
+test_that("total-points model predicts totals on the scale of real games", {
+    team_data <- make_fixture_team_features(current_year = 2025, history_years = 2022:2024)
+    results_data <- make_fixture_game_results(team_data, history_years = 2022:2024)
+    reference <- build_actual_game_reference(normalize_team_features(team_data), normalize_game_results(results_data))
+    rows <- build_total_points_training_rows(reference)
+
+    old_options <- options(mmBayes.stan_chains = 1L, mmBayes.stan_iter = 200L, mmBayes.stan_refresh = 0L)
+    on.exit(options(old_options), add = TRUE)
+    model <- fit_total_points_model(rows, engine = "stan_glm", random_seed = 3, include_diagnostics = FALSE, use_cache = FALSE)
+    predicted <- colMeans(predict_total_points_rows(rows[1:10, , drop = FALSE], model, draws = 50))
+    expect_lt(abs(mean(predicted) - mean(rows$total_points)), 0.25 * mean(rows$total_points))
+})

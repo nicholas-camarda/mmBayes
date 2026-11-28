@@ -322,6 +322,21 @@ build_model_formula <- function(predictor_columns, outcome_column = "actual_outc
     stats::as.formula(base_formula)
 }
 
+#' Build the total-points model formula
+#'
+#' Unlike the winner model, total points is not order-dependent and needs an
+#' intercept (the typical total) and main effects for `round` and
+#' `same_conf`.
+#'
+#' @param predictor_columns Predictor columns to include.
+#'
+#' @return A model formula with `total_points` as the outcome.
+#' @keywords internal
+build_total_points_formula <- function(predictor_columns) {
+    terms <- unique(c("round", setdiff(predictor_columns, "round")))
+    stats::as.formula(paste("total_points ~", paste(sprintf("`%s`", terms), collapse = " + ")))
+}
+
 #' Configure priors for the matchup model
 #'
 #' @param prior_type Prior type to use for fixed effects.  `"normal"` (default)
@@ -868,7 +883,7 @@ fit_total_points_model <- function(historical_total_points,
     set.seed(random_seed)
 
     prepared <- prepare_total_points_model_data(historical_total_points, predictor_columns, require_outcome = TRUE)
-    formula_input <- build_model_formula(predictor_columns, outcome_column = "total_points")
+    formula_input <- build_total_points_formula(predictor_columns)
     chains <- getOption("mmBayes.stan_chains", 4L)
     iter <- getOption("mmBayes.stan_iter", 2000L)
     refresh <- getOption("mmBayes.stan_refresh", 0L)
