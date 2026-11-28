@@ -478,7 +478,14 @@ fit_ensemble_combiner_validation <- function(historical_teams,
     )
     gate_passed <- all(gate_conditions$passed)
     if (!isTRUE(gate_passed)) {
-        stop_with_message("Ensemble validation gate failed; production ensemble model will not be fit")
+        format_rows <- function(tbl) paste(utils::capture.output(print(as.data.frame(tbl), digits = 4, row.names = FALSE)), collapse = "\n")
+        logger::log_error("Ensemble validation summary (mean over holdout years):\n{format_rows(summary_tbl)}")
+        logger::log_error("Ensemble validation per-year metrics:\n{format_rows(yearly_metrics)}")
+        failed <- gate_conditions %>% dplyr::filter(!passed)
+        stop_with_message(sprintf(
+            "Ensemble validation gate failed; production ensemble model will not be fit. Failed: %s",
+            paste(sprintf("%s (observed %.4f vs threshold %.4f)", failed$condition, failed$observed, failed$threshold), collapse = "; ")
+        ))
     }
 
     result <- list(
