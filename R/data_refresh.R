@@ -30,6 +30,7 @@ empty_team_feature_table <- function() {
         Seed = integer(),
         Region = character(),
         Conf = character(),
+        ratings_cutoff = character(),
         Barthag = numeric(),
         AdjOE = numeric(),
         AdjDE = numeric(),
@@ -214,6 +215,10 @@ assess_historical_year_cache <- function(existing_team_features, existing_game_r
             issues <- c(issues, roster_issue)
         }
 
+        if (nrow(find_ratings_cutoff_issues(year_team_features)) > 0) {
+            issues <- c(issues, "ratings not cut off at Selection Sunday")
+        }
+
         missing_feature_rows <- year_team_features %>%
             dplyr::filter(dplyr::if_any(dplyr::all_of(pre_tournament_feature_columns()), is.na))
         if (nrow(missing_feature_rows) > 0) {
@@ -265,7 +270,7 @@ assess_historical_year_cache <- function(existing_team_features, existing_game_r
 #' @param bracket_year Current bracket year.
 #' @param pre_team_counts Pre-refresh team-feature year counts.
 #' @param pre_result_counts Pre-refresh result year counts.
-#' @param bart_counts Bart rating year counts.
+#' @param ratings_counts Team-rating year counts.
 #' @param roster_counts Conference-assignment year counts.
 #' @param feature_counts Post-build team-feature year counts.
 #' @param result_counts Post-build result year counts.
@@ -276,7 +281,7 @@ build_refresh_forensics <- function(intended_years,
                                     bracket_year,
                                     pre_team_counts,
                                     pre_result_counts,
-                                    bart_counts,
+                                    ratings_counts,
                                     roster_counts,
                                     feature_counts,
                                     result_counts) {
@@ -284,7 +289,7 @@ build_refresh_forensics <- function(intended_years,
         as.integer(intended_years),
         suppressWarnings(as.integer(pre_team_counts$Year)),
         suppressWarnings(as.integer(pre_result_counts$Year)),
-        suppressWarnings(as.integer(bart_counts$Year)),
+        suppressWarnings(as.integer(ratings_counts$Year)),
         suppressWarnings(as.integer(roster_counts$Year)),
         suppressWarnings(as.integer(feature_counts$Year)),
         suppressWarnings(as.integer(result_counts$Year))
@@ -301,7 +306,7 @@ build_refresh_forensics <- function(intended_years,
     year_table %>%
         dplyr::left_join(pre_team_counts, by = "Year") %>%
         dplyr::left_join(pre_result_counts, by = "Year") %>%
-        dplyr::left_join(bart_counts, by = "Year") %>%
+        dplyr::left_join(ratings_counts, by = "Year") %>%
         dplyr::left_join(roster_counts, by = "Year") %>%
         dplyr::left_join(feature_counts, by = "Year") %>%
         dplyr::left_join(result_counts, by = "Year") %>%
@@ -310,7 +315,7 @@ build_refresh_forensics <- function(intended_years,
                 c(
                     pre_team_feature_rows,
                     pre_result_rows,
-                    bart_rating_rows,
+                    rating_rows,
                     roster_rows,
                     team_feature_rows,
                     post_result_rows
@@ -320,7 +325,7 @@ build_refresh_forensics <- function(intended_years,
             intended_year = Year %in% as.character(intended_years),
             completed_year = Year %in% completed_years,
             first_missing_stage = dplyr::case_when(
-                intended_year & team_feature_rows == 0L & bart_rating_rows == 0L ~ "bart_ratings",
+                intended_year & team_feature_rows == 0L & rating_rows == 0L ~ "team_ratings",
                 completed_year & team_feature_rows == 0L & roster_rows == 0L ~ "historical_tournament_roster",
                 intended_year & !completed_year & team_feature_rows == 0L & roster_rows == 0L ~ "conference_assignments",
                 intended_year & team_feature_rows == 0L ~ "team_features",
@@ -688,20 +693,96 @@ scrape_conf_assignments <- function(year) {
         dplyr::select(Year, Team, Seed, Region, Conf)
 }
 
-#' Scrape Bart Torvik pre-tournament team features
+#' Selection Sunday dates by tournament year
 #'
-#' @param year The tournament year to scrape.
+#' The day the NCAA men's bracket is announced. Team ratings use only games
+#' played on or before this date. 2020 has no tournament. Add the next year's
+#' date here before running the Selection Sunday refresh.
 #'
-#' @return A year-wide team-level feature table for the requested year.
+#' @return A tibble with `Year` (character) and `selection_sunday` (Date).
 #' @keywords internal
-scrape_bart_data <- function(year) {
-    url <- paste0(
+selection_sunday_dates <- function() {
+    tibble::tribble(
+        ~Year, ~selection_sunday,
+        "2008", "2008-03-16",
+        "2009", "2009-03-15",
+        "2010", "2010-03-14",
+        "2011", "2011-03-13",
+        "2012", "2012-03-11",
+        "2013", "2013-03-17",
+        "2014", "2014-03-16",
+        "2015", "2015-03-15",
+        "2016", "2016-03-13",
+        "2017", "2017-03-12",
+        "2018", "2018-03-11",
+        "2019", "2019-03-17",
+        "2021", "2021-03-14",
+        "2022", "2022-03-13",
+        "2023", "2023-03-12",
+        "2024", "2024-03-17",
+        "2025", "2025-03-16",
+        "2026", "2026-03-15"
+    ) %>%
+        dplyr::mutate(selection_sunday = as.Date(selection_sunday))
+}
+
+#' Look up the ratings cutoff date for a tournament year
+#'
+#' Team ratings are restricted to games played on or before Selection Sunday,
+#' the day the bracket is released, so every season's features describe what
+#' was known when entries were made.
+#'
+#' @param year A tournament year.
+#'
+#' @return A single Date.
+#' @keywords internal
+ratings_cutoff_date <- function(year) {
+    year <- as.character(year)
+    dates <- selection_sunday_dates()
+    cutoff <- dates$selection_sunday[dates$Year == year]
+    if (length(cutoff) != 1L || is.na(cutoff)) {
+        stop_with_message(sprintf(
+            "No Selection Sunday date for %s; add it to selection_sunday_dates() in R/data_refresh.R before refreshing data",
+            year
+        ))
+    }
+    cutoff
+}
+
+#' Build the Bart Torvik ratings URL for a season window
+#'
+#' @param year The tournament year.
+#' @param cutoff_date Last date (inclusive) of games used in the ratings.
+#'
+#' @return A single URL string.
+#' @keywords internal
+build_bart_ratings_url <- function(year, cutoff_date = ratings_cutoff_date(year)) {
+    paste0(
         "https://barttorvik.com/?year=", year,
         "&sort=&hteam=&t2value=&conlimit=All",
-        "&state=All&begin=", year - 1, "1101",
-        "&end=", year, "0501",
+        "&state=All&begin=", as.integer(year) - 1L, "1101",
+        "&end=", format(as.Date(cutoff_date), "%Y%m%d"),
         "&top=0&revquad=0&quad=5&venue=All&type=All&mingames=0#"
     )
+}
+
+#' Scrape Bart Torvik pre-tournament team features (deprecated)
+#'
+#' Deprecated: Torvik's date-filtered pages sit behind a browser-verification
+#' check that this function auto-submits, and robots.txt asks for a 10-second
+#' crawl delay. The refresh now uses [compute_season_team_ratings()]. Kept only
+#' until Torvik grants automated access or the function is removed (#10).
+#'
+#' @param year The tournament year to scrape.
+#' @param cutoff_date Last date (inclusive) of games used in the ratings;
+#'   defaults to that year's Selection Sunday.
+#'
+#' @return A year-wide team-level feature table for the requested year, with a
+#'   `ratings_cutoff` column recording the cutoff used.
+#' @keywords internal
+scrape_bart_data <- function(year, cutoff_date = ratings_cutoff_date(year)) {
+    logger::log_warn("scrape_bart_data() is deprecated; use compute_season_team_ratings() (see issue #10)")
+    url <- build_bart_ratings_url(year, cutoff_date)
     logger::log_info("Scraping Bart data from {url}")
 
     page <- read_html_verified(url)
@@ -736,12 +817,15 @@ scrape_bart_data <- function(year) {
             !is.na(Barthag),
             !Team %in% c("Team", "")
         ) %>%
+        dplyr::mutate(ratings_cutoff = format(as.Date(cutoff_date), "%Y-%m-%d")) %>%
         dplyr::select(
             Year,
             Team,
             team_key,
             Seed,
             Conf,
+            G,
+            ratings_cutoff,
             Barthag,
             AdjOE,
             AdjDE,
@@ -858,14 +942,15 @@ validate_tournament_roster <- function(conf_assignments, require_seed = TRUE) {
 
 #' Build the canonical team feature dataset
 #'
-#' @param bart_data A pre-tournament feature table scraped from Bart Torvik.
+#' @param team_ratings Year-wide team ratings (one row per team per year), for
+#'   example from [compute_season_team_ratings()].
 #' @param conf_assignments A conference-assignment lookup table.
 #'
 #' @return A normalized pre-tournament team feature table.
 #' @keywords internal
-build_team_feature_dataset <- function(bart_data, conf_assignments) {
+build_team_feature_dataset <- function(team_ratings, conf_assignments) {
     roster <- validate_tournament_roster(conf_assignments, require_seed = FALSE)
-    ratings <- bart_data %>%
+    ratings <- team_ratings %>%
         dplyr::mutate(
             Year = as.character(Year),
             Team = canonicalize_team_name(Team),
@@ -881,7 +966,7 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
             dplyr::distinct(Year, Team)
         stop_with_message(
             sprintf(
-                "Bart ratings contain duplicate teams for the same year: %s",
+                "Team ratings contain duplicate teams for the same year: %s",
                 paste(sprintf("%s %s", duplicate_detail$Year, duplicate_detail$Team), collapse = "; ")
             )
         )
@@ -893,8 +978,8 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
                 dplyr::select(
                     Year,
                     team_key,
-                    Seed,
                     Conf,
+                    ratings_cutoff,
                     Barthag,
                     AdjOE,
                     AdjDE,
@@ -910,17 +995,16 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
             by = c("Year", "team_key")
         ) %>%
         dplyr::mutate(
-            Seed = dplyr::coalesce(Seed.x, Seed.y),
             Conf = dplyr::na_if(dplyr::coalesce(Conf.x, Conf.y), "")
         )
 
     unresolved_roster <- joined %>%
-        dplyr::filter(dplyr::if_any(c(Conf, Barthag, AdjOE, AdjDE, WAB, TOR, TORD, ORB, DRB, `3P%`, `3P%D`, `Adj T.`), is.na)) %>%
+        dplyr::filter(dplyr::if_any(c(Conf, ratings_cutoff, Barthag, AdjOE, AdjDE, WAB, TOR, TORD, ORB, DRB, `3P%`, `3P%D`, `Adj T.`), is.na)) %>%
         dplyr::distinct(Year, Team)
     if (nrow(unresolved_roster) > 0) {
         stop_with_message(
             sprintf(
-                "Year-wide Bart ratings did not cover every tournament team: %s",
+                "Year-wide team ratings did not cover every tournament team: %s",
                 paste(sprintf("%s %s", unresolved_roster$Year, unresolved_roster$Team), collapse = "; ")
             )
         )
@@ -945,6 +1029,7 @@ build_team_feature_dataset <- function(bart_data, conf_assignments) {
             Seed = Seed,
             Region,
             Conf,
+            ratings_cutoff,
             Barthag,
             AdjOE,
             AdjDE,
@@ -1990,11 +2075,15 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
         "Historical cache misses requiring refresh: {format_year_labels(historical_cache_decisions %>% dplyr::filter(cache_action == 'refresh', !is.na(completeness_issue)) %>% dplyr::transmute(label = sprintf('%s (%s)', Year, completeness_issue)) %>% dplyr::pull(label))}"
     )
 
-    bart_data <- purrr::map_dfr(scrape_years, function(year) {
-        logger::log_info("Refreshing Bart ratings for {year}")
-        scrape_bart_data(year)
+    team_ratings <- purrr::map_dfr(scrape_years, function(year) {
+        logger::log_info("Computing team ratings for {year} through Selection Sunday {ratings_cutoff_date(year)}")
+        compute_season_team_ratings(
+            year,
+            raw_dir = config$data$espn_raw_dir,
+            refresh = identical(as.integer(year), as.integer(bracket_year))
+        )
     })
-    bart_counts <- count_rows_by_year(bart_data, count_name = "bart_rating_rows")
+    ratings_counts <- count_rows_by_year(team_ratings, count_name = "rating_rows")
 
     historical_rosters <- purrr::map_dfr(scrape_years[scrape_years < bracket_year], function(year) {
         logger::log_info("Refreshing historical tournament roster for {year}")
@@ -2011,8 +2100,8 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
     tournament_rosters <- dplyr::bind_rows(historical_rosters, current_roster)
     roster_counts <- count_rows_by_year(tournament_rosters, count_name = "roster_rows")
 
-    logger::log_info("Joining tournament rosters to year-wide Bart ratings")
-    refreshed_team_features <- build_team_feature_dataset(bart_data, tournament_rosters)
+    logger::log_info("Joining tournament rosters to year-wide team ratings")
+    refreshed_team_features <- build_team_feature_dataset(team_ratings, tournament_rosters)
     reused_team_features <- existing_team_features %>%
         dplyr::filter(Year %in% reused_historical_years)
     team_features <- dplyr::bind_rows(reused_team_features, refreshed_team_features) %>%
@@ -2091,7 +2180,7 @@ update_tournament_data <- function(config = NULL, start_year = NULL, bracket_yea
         bracket_year = bracket_year,
         pre_team_counts = pre_team_counts,
         pre_result_counts = pre_result_counts,
-        bart_counts = bart_counts,
+        ratings_counts = ratings_counts,
         roster_counts = roster_counts,
         feature_counts = feature_counts,
         result_counts = result_counts

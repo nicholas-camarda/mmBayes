@@ -131,12 +131,14 @@ normalize_project_paths <- function(config) {
     config$data <- merge_config_lists(
         list(
             team_features_path = file.path(cloud_data_root, "pre_tournament_team_features.xlsx"),
-            game_results_path = file.path(cloud_data_root, "tournament_game_results.xlsx")
+            game_results_path = file.path(cloud_data_root, "tournament_game_results.xlsx"),
+            espn_raw_dir = file.path(cloud_data_root, "raw", "espn")
         ),
         config$data %||% list()
     )
     config$data$team_features_path <- path.expand(config$data$team_features_path)
     config$data$game_results_path <- path.expand(config$data$game_results_path)
+    config$data$espn_raw_dir <- path.expand(config$data$espn_raw_dir)
 
     default_model_cache_path <- file.path(default_runtime_output_root(), "model_cache")
     default_log_path <- file.path(default_runtime_output_root(), "logs", "tournament_simulation.log")
@@ -187,7 +189,8 @@ default_project_config <- function() {
         ),
         data = list(
             team_features_path = file.path(cloud_data_root, "pre_tournament_team_features.xlsx"),
-            game_results_path = file.path(cloud_data_root, "tournament_game_results.xlsx")
+            game_results_path = file.path(cloud_data_root, "tournament_game_results.xlsx"),
+            espn_raw_dir = file.path(cloud_data_root, "raw", "espn")
         ),
         model = list(
             history_window = 8L,

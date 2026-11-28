@@ -63,13 +63,13 @@ The canonical data refresh in `update_tournament_data()` pulls from these source
 
 | Canonical output | Function | Source | URL pattern | Purpose |
 | --- | --- | --- | --- | --- |
-| `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_bart_data()` | Bart Torvik season ratings | `https://barttorvik.com/?year={year}&...` | Pre-tournament team metrics and conference labels |
+| `data/pre_tournament_team_features.xlsx` under the configured synced project home | `compute_season_team_ratings()` | ESPN team box scores and schedules published by sportsdataverse (GitHub release files) | `https://github.com/sportsdataverse/sportsdataverse-data/releases/download/espn_mens_college_basketball_team_boxscores/team_box_{year}.csv` and `.../espn_mens_college_basketball_schedules/mbb_schedule_{year}.csv` | Team ratings through Selection Sunday and conference labels |
 | `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_historical_tournament_roster()` | Sports-Reference NCAA bracket page | `https://www.sports-reference.com/cbb/postseason/men/{year}-ncaa.html` | Completed historical tournament field, seeds, and regions |
 | `data/pre_tournament_team_features.xlsx` under the configured synced project home | `scrape_conf_assignments()` | Bart Torvik Tourney Time | `https://barttorvik.com/tourneytime.php?year={year}&sort=7&conlimit=All` | Current bracket-year tournament field, seeds, regions, conferences |
 | `data/tournament_game_results.xlsx` under the configured synced project home | `scrape_tournament_results()` | Sports-Reference NCAA bracket page | `https://www.sports-reference.com/cbb/postseason/men/{year}-ncaa.html` | Historical completed tournament game results and scores |
 | `data/tournament_game_results.xlsx` under the configured synced project home | `scrape_espn_tournament_results()` | ESPN scoreboard API | `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?...` | Current-year completed-game fallback when Sports-Reference is incomplete |
 
-Bart Torvik is the pre-tournament metrics source. Completed historical tournament-field construction comes from Sports-Reference, while the current bracket-year field still comes from Bart Torvik Tourney Time. Completed current-year tournament outcomes are allowed in the canonical results workbook for live monitoring, but they are not fed back into the current bracket fit or the pre-tournament matchup features. Only current-year First Four results affect bracket-path resolution.
+Team ratings are computed in this repo from game-level box scores (see [Team ratings](#team-ratings)); raw downloads are kept under `data/raw/espn/` in the synced project home with a SHA-256 manifest. `scrape_bart_data()` (Bart Torvik) is deprecated: Torvik's date-filtered pages now sit behind a browser-verification check. Completed historical tournament-field construction comes from Sports-Reference, while the current bracket-year field still comes from Bart Torvik Tourney Time. Completed current-year tournament outcomes are allowed in the canonical results workbook for live monitoring, but they are not fed back into the current bracket fit or the pre-tournament matchup features. Only current-year First Four results affect bracket-path resolution.
 
 ### What gets written to disk
 
@@ -140,7 +140,43 @@ The model is intentionally restricted to pre-tournament information. `strip_leak
 
 The goal is to model what could have been known before the bracket started.
 
+Every team rating uses only games played on or before that year's Selection Sunday (`selection_sunday_dates()` in `R/data_refresh.R`), and each team-feature row records the date it used in `ratings_cutoff`. The canonical data-quality gate rejects any row whose `ratings_cutoff` is missing or differs from Selection Sunday, so a workbook built with a later window cannot reach the model.
+
+Before November 2026 the ratings were requested with a May 1 end date, after the national championship, so teams that went deep in the tournament carried ratings inflated by those wins: exactly the outcomes the model is trying to predict. `scripts/validate_team_ratings.R` measures how much each feature moves between the Selection Sunday and May 1 windows for Final Four teams and first-round losers (`leak_summary.csv`).
+
 ## Team-Level Features
+
+### Team ratings
+
+`compute_team_ratings()` builds every team feature from Division I games on or before the cutoff date. Division I teams are those with at least 15 box-score rows in the season; games against other opponents are dropped.
+
+Possessions for one team in one game are estimated as
+
+$$
+\text{poss} = \text{FGA} - \text{OREB} + \text{TO} + 0.475 \times \text{FTA},
+$$
+
+and the game's possessions are the average of the two teams' estimates.
+
+**Adjusted efficiency.** For every team-game, points per 100 possessions is modelled as
+
+$$
+100 \times \frac{\text{points}_{ig}}{\text{poss}_g} = \mu + o_i + d_j + h \cdot \ell_{ig} + \varepsilon_{ig},
+$$
+
+where $o_i$ is team $i$'s offensive effect, $d_j$ is opponent $j$'s defensive effect (points it allows relative to average), $\ell_{ig}$ is +1 at home, -1 away and 0 at a neutral site, and $h$ is home-court advantage. The model is fit by least squares weighted by possessions, with the offensive and defensive effects each constrained to average zero. Then `AdjOE` $= \mu + o_i$ and `AdjDE` $= \mu + d_i$: the points per 100 possessions a team would score, or allow, against an average opponent on a neutral floor.
+
+*How to read it.* If team A scored 80 points in 70 possessions (114.3 per 100) against a defense that allows 4 points per 100 fewer than average, the game is evidence that A's offense is about 8 points better than average, not 14. Averaged over a season of opponents, `AdjOE` removes most of the effect of schedule strength. The estimate is weaker when a team has played few games against connected opponents (early season, isolated conferences); in that case its effects absorb more noise.
+
+**Barthag** $= \text{AdjOE}^{11.5} / (\text{AdjOE}^{11.5} + \text{AdjDE}^{11.5})$, the expected win probability against an average team on a neutral floor.
+
+**Adjusted tempo** (`Adj T.`) comes from the same kind of model with one row per game: possessions $= \mu_t + t_i + t_j$, and `Adj T.` $= \mu_t + t_i$, the expected possessions against an average-tempo opponent.
+
+**WAB** (wins above bubble) is, over the team's games, the sum of (win indicator) minus the probability that a bubble-level team would have won the same game at the same venue. The bubble team is the 45th-ranked team by Barthag. Its win probability uses the expected efficiencies of each side in that game and the same 11.5 exponent.
+
+**Four factors and shooting** are raw season rates over Division I games: `TOR` and `TORD` are turnovers committed and forced per 100 possessions; `ORB` is the share of a team's missed shots it rebounds; `DRB` is the share of its opponents' missed shots they rebound (lower is better); `3P%` and `3P%D` are three-point percentages for and against.
+
+*Agreement with Torvik.* `Rscript scripts/validate_team_ratings.R` computes these features through May 1 and compares them, for every tournament team, with the Torvik values scraped with the same window (`agreement_with_torvik_full_season.csv`: correlation, mean absolute difference and mean offset per feature). Expect near-identical four factors and shooting rates, high but not perfect agreement for the adjusted ratings, and small level offsets, because Torvik adds a preseason prior, recency weighting and blowout dampening that this version omits. Level offsets cancel in the matchup model, which uses differences between teams; a low correlation would mean the two ratings rank teams differently and needs investigating before use.
 
 ### Raw season features
 

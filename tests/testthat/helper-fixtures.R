@@ -52,6 +52,11 @@ make_fixture_team_features <- function(current_year = 2025, history_years = 2022
     play_in_rows <- purrr::map_dfr(c(history_years, current_year), build_play_in_rows)
 
     dplyr::bind_rows(rows, play_in_rows) %>%
+        dplyr::left_join(
+            selection_sunday_dates() %>%
+                dplyr::transmute(Year, ratings_cutoff = format(selection_sunday, "%Y-%m-%d")),
+            by = "Year"
+        ) %>%
         dplyr::arrange(Year, Region, Seed, Team)
 }
 
@@ -398,8 +403,8 @@ make_fixture_bart_ratings <- function(team_features) {
         dplyr::select(
             Year,
             Team,
-            Seed,
             Conf,
+            ratings_cutoff,
             Barthag,
             AdjOE,
             AdjDE,
