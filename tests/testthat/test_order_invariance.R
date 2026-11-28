@@ -164,3 +164,14 @@ test_that("total-points model predicts totals on the scale of real games", {
     predicted <- colMeans(predict_total_points_rows(rows[1:10, , drop = FALSE], model, draws = 50))
     expect_lt(abs(mean(predicted) - mean(rows$total_points)), 0.25 * mean(rows$total_points))
 })
+
+test_that("model cache keys change when the model specification changes", {
+    data <- tibble::tibble(Year = "2024", x = 1:3)
+    key_a <- build_model_fit_cache_key(data, "barthag_logit_diff", 1, FALSE, model_specification = "y ~ 0 + x")
+    key_b <- build_model_fit_cache_key(data, "barthag_logit_diff", 1, FALSE, model_specification = "y ~ x")
+    expect_false(identical(key_a, key_b))
+    expect_false(identical(
+        winner_model_specification("barthag_logit_diff"),
+        winner_model_specification(c("barthag_logit_diff", "seed_diff"))
+    ))
+})
