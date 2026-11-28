@@ -4,16 +4,12 @@ import type { BuildMetadata } from "../types/payload";
 export function BuildMetadataBanner({ metadata }: { metadata: BuildMetadata }) {
   const chips: { label: string; value: ReactNode }[] = [];
 
-  const updatedAt =
-    metadata.render_timestamp ??
-    metadata.rendered_at_label ??
-    metadata.rendered_at;
+  const updatedAt = metadata.render_timestamp ?? metadata.rendered_at_label ?? metadata.rendered_at;
   if (updatedAt) {
     chips.push({ label: "Updated", value: String(updatedAt) });
   }
 
-  const commit =
-    metadata.git_commit ?? metadata.commit_short ?? metadata.commit_full;
+  const commit = metadata.git_commit ?? metadata.commit_short ?? metadata.commit_full;
   if (commit) {
     chips.push({
       label: "Built from commit",

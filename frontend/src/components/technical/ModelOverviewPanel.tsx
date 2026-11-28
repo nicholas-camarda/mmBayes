@@ -31,9 +31,7 @@ export function ModelOverviewPanel({ overview }: { overview?: ModelOverviewPaylo
         <p className="section-note">Predictors: {overview.predictor_columns.join(", ")}</p>
       ) : null}
       {overview.interaction_terms && overview.interaction_terms.length > 0 ? (
-        <p className="section-note">
-          Interaction terms: {overview.interaction_terms.join(", ")}
-        </p>
+        <p className="section-note">Interaction terms: {overview.interaction_terms.join(", ")}</p>
       ) : null}
     </section>
   );

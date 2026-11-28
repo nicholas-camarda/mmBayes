@@ -217,9 +217,7 @@ export function EntryWorkspace({
   candidateSummaries,
   onOpenEvidence,
 }: EntryWorkspaceProps) {
-  const [activeCandidateId, setActiveCandidateId] = useState(
-    candidates[0]?.candidate_id ?? 1,
-  );
+  const [activeCandidateId, setActiveCandidateId] = useState(candidates[0]?.candidate_id ?? 1);
 
   if (decisionSheet.length === 0) {
     return <p className="missing-section">Candidate entry rows are not available for this run.</p>;

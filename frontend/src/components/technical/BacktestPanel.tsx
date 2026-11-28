@@ -51,7 +51,11 @@ export function BacktestPanel({ backtest }: { backtest?: BacktestPayload | null 
   const roundPerformance = backtest?.round_performance ?? [];
 
   return (
-    <section className="technical-panel" aria-label="Backtest diagnostics" data-testid="backtest-panel">
+    <section
+      className="technical-panel"
+      aria-label="Backtest diagnostics"
+      data-testid="backtest-panel"
+    >
       <div className="role-kicker role-kicker--evidence">Historical baseline</div>
       <h2>Backtest and calibration</h2>
       {backtest?.source_label ? (

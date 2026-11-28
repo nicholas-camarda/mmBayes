@@ -45,9 +45,8 @@ export function EnsembleDiagnosticsPanel({
       </div>
       {learned ? (
         <p className="section-note">
-          Learned ensemble validation: bracket score{" "}
-          {String(learned.mean_bracket_score ?? "n/a")}, correct picks{" "}
-          {String(learned.mean_correct_picks ?? "n/a")}, log loss{" "}
+          Learned ensemble validation: bracket score {String(learned.mean_bracket_score ?? "n/a")},
+          correct picks {String(learned.mean_correct_picks ?? "n/a")}, log loss{" "}
           {String(learned.mean_log_loss ?? "n/a")}, Brier {String(learned.mean_brier ?? "n/a")}.
         </p>
       ) : null}

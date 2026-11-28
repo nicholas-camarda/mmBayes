@@ -31,7 +31,11 @@ export function CompareWorkspace({
     candidateProfiles?.find((profile) => profile.candidate_id === candidateId) ?? null;
 
   return (
-    <section className="technical-panel" aria-label="Compare workspace" data-testid="compare-workspace">
+    <section
+      className="technical-panel"
+      aria-label="Compare workspace"
+      data-testid="compare-workspace"
+    >
       <div className="role-kicker role-kicker--act">Act now</div>
       <h2>Compare workspace</h2>
       <div
@@ -95,9 +99,7 @@ export function CompareWorkspace({
           <p className="section-note">
             Path-specific overview and the most fragile selected matchups on this candidate bracket.
           </p>
-          <CandidateProfilePanel
-            profile={profileFor(view === "candidate-1" ? 1 : 2)}
-          />
+          <CandidateProfilePanel profile={profileFor(view === "candidate-1" ? 1 : 2)} />
         </div>
       )}
     </section>

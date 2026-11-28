@@ -10,7 +10,9 @@
 
 .comparison-board__header {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr) minmax(220px, 1.1fr) minmax(180px, 0.9fr);
+  grid-template-columns:
+    minmax(140px, 1fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr) minmax(220px, 1.1fr)
+    minmax(180px, 0.9fr);
   gap: 12px;
   padding: 14px 16px;
   background: var(--panel-2);
@@ -23,7 +25,10 @@
 }
 
 .comparison-board__header--four {
-  grid-template-columns: minmax(140px, 1fr) minmax(240px, 1.2fr) minmax(160px, 0.8fr) minmax(180px, 0.9fr);
+  grid-template-columns: minmax(140px, 1fr) minmax(240px, 1.2fr) minmax(160px, 0.8fr) minmax(
+      180px,
+      0.9fr
+    );
 }
 
 .board-row {
@@ -40,11 +45,16 @@
 
 .board-row--ranked,
 .board-row--divergence {
-  grid-template-columns: minmax(140px, 1fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr) minmax(220px, 1.1fr) minmax(180px, 0.9fr);
+  grid-template-columns:
+    minmax(140px, 1fr) minmax(110px, 0.7fr) minmax(110px, 0.7fr) minmax(220px, 1.1fr)
+    minmax(180px, 0.9fr);
 }
 
 .board-row--upset {
-  grid-template-columns: minmax(140px, 1fr) minmax(240px, 1.2fr) minmax(160px, 0.8fr) minmax(180px, 0.9fr);
+  grid-template-columns: minmax(140px, 1fr) minmax(240px, 1.2fr) minmax(160px, 0.8fr) minmax(
+      180px,
+      0.9fr
+    );
 }
 
 .board-cell {

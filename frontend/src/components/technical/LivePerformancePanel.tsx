@@ -31,7 +31,11 @@ export function LivePerformancePanel({ livePerformance }: LivePerformancePanelPr
   const games = livePerformance.recent_games ?? [];
 
   return (
-    <section className="technical-panel" aria-label="Live tournament performance" data-testid="live-performance-panel">
+    <section
+      className="technical-panel"
+      aria-label="Live tournament performance"
+      data-testid="live-performance-panel"
+    >
       <div className="role-kicker role-kicker--reference">Monitoring</div>
       <h2>Live tournament performance</h2>
       {livePerformance.model_label ? (
