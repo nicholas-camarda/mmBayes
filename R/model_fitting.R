@@ -322,6 +322,25 @@ build_model_formula <- function(predictor_columns, outcome_column = "actual_outc
     stats::as.formula(base_formula)
 }
 
+#' Text describing how the winner model is specified, for cache keys
+#'
+#' Changes to the formula, scaling or prediction rules must invalidate cached
+#' fits even when the training data are unchanged.
+#'
+#' @param predictor_columns Predictor columns.
+#' @param interaction_terms Interaction terms.
+#'
+#' @return A single string.
+#' @keywords internal
+winner_model_specification <- function(predictor_columns, interaction_terms = NULL) {
+    paste(
+        paste(deparse(build_model_formula(predictor_columns, interaction_terms = interaction_terms)), collapse = " "),
+        "scaling=rms-uncentred",
+        "prediction=antisymmetrized",
+        sep = "; "
+    )
+}
+
 #' Build the total-points model formula
 #'
 #' Unlike the winner model, total points is not order-dependent and needs an
@@ -405,9 +424,11 @@ build_model_fit_cache_key <- function(historical_matchups,
                                       prior_type = "normal",
                                       engine = "stan_glm",
                                       engine_config = NULL,
-                                      encoding_metadata = NULL) {
+                                      encoding_metadata = NULL,
+                                      model_specification = NULL) {
     cache_signature <- list(
         model_label = model_label,
+        model_specification = model_specification,
         engine = engine,
         engine_config = engine_config,
         encoding_metadata = encoding_metadata,
@@ -502,7 +523,8 @@ fit_tournament_model <- function(historical_matchups,
             prior_type = prior_type,
             engine = engine,
             engine_config = NULL,
-            encoding_metadata = NULL
+            encoding_metadata = NULL,
+            model_specification = winner_model_specification(predictor_columns, interaction_terms)
         )
         cache_path <- build_model_fit_cache_path(cache_dir, cache_key, model_label = "matchup")
         if (file.exists(cache_path)) {
@@ -868,7 +890,8 @@ fit_total_points_model <- function(historical_total_points,
             model_label = "totals",
             engine = engine,
             engine_config = NULL,
-            encoding_metadata = NULL
+            encoding_metadata = NULL,
+            model_specification = paste(deparse(build_total_points_formula(predictor_columns)), collapse = " ")
         )
         cache_path <- build_model_fit_cache_path(cache_dir, cache_key, model_label = "totals")
         if (file.exists(cache_path)) {
